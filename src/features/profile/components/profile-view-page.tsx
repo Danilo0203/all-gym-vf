@@ -1,0 +1,159 @@
+'use client';
+
+import { useCurrentUser } from '../hooks/use-profile';
+import { ProfileForm } from './profile-form';
+import { PasswordForm } from './password-form';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Separator } from '@/components/ui/separator';
+import { IconMail, IconCalendar, IconShieldCheck } from '@tabler/icons-react';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
+
+export default function ProfileViewPage() {
+  const { data: user, isLoading, error } = useCurrentUser();
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-6 p-6">
+        <div className="flex items-center gap-6">
+          <Skeleton className="h-24 w-24 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+        </div>
+        <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
+
+  // Error state
+  if (error || !user) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8 text-center">
+        <div className="rounded-lg bg-destructive/10 p-6 text-destructive">
+          <p className="text-lg font-medium">Error al cargar el perfil</p>
+          <p className="text-sm">{error?.message || 'No se pudo obtener la información del usuario'}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Get initials for avatar fallback
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return 'U';
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  // Format role for display
+  const getRoleLabel = (role: string | null) => {
+    switch (role) {
+      case 'admin':
+        return 'Administrador';
+      case 'staff':
+        return 'Personal';
+      case 'authenticated':
+        return 'Usuario';
+      default:
+        return role || 'Usuario';
+    }
+  };
+
+  return (
+    <div className="flex flex-1 flex-col gap-6 overflow-auto p-4 md:p-6">
+      {/* Profile Header */}
+      <Card className="border-0 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
+        <CardContent className="p-6">
+          <div className="flex flex-col items-center gap-6 md:flex-row">
+            {/* Avatar */}
+            <Avatar className="h-24 w-24 border-4 border-background shadow-lg">
+              <AvatarImage src={user.avatar_url || ''} alt={user.full_name || 'Usuario'} />
+              <AvatarFallback className="bg-primary text-2xl font-bold text-primary-foreground">
+                {getInitials(user.full_name)}
+              </AvatarFallback>
+            </Avatar>
+
+            {/* User Info */}
+            <div className="flex flex-1 flex-col items-center gap-2 text-center md:items-start md:text-left">
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold">{user.full_name || 'Usuario'}</h1>
+                <Badge variant="secondary" className="font-normal">
+                  <IconShieldCheck className="mr-1 h-3 w-3" />
+                  {getRoleLabel(user.role)}
+                </Badge>
+              </div>
+              
+              <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <IconMail className="h-4 w-4" />
+                  {user.email}
+                </span>
+                <span className="flex items-center gap-1">
+                  <IconCalendar className="h-4 w-4" />
+                  Miembro desde {format(new Date(user.created_at), "MMMM 'de' yyyy", { locale: es })}
+                </span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Profile Forms */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Personal Information Form */}
+        <ProfileForm profile={user} />
+
+        {/* Password Change Form */}
+        <PasswordForm />
+      </div>
+
+      {/* Account Information (Read-only) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Información de la Cuenta</CardTitle>
+          <CardDescription>
+            Información de tu cuenta que no puede ser modificada directamente.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Email</p>
+              <p className="font-medium">{user.email}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">ID de Usuario</p>
+              <p className="font-mono text-sm">{user.id}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Fecha de Registro</p>
+              <p className="font-medium">
+                {format(new Date(user.created_at), "d 'de' MMMM 'de' yyyy", { locale: es })}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Última Actualización</p>
+              <p className="font-medium">
+                {user.updated_at
+                  ? format(new Date(user.updated_at), "d 'de' MMMM 'de' yyyy", { locale: es })
+                  : 'Sin actualizaciones'}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
