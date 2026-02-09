@@ -7,9 +7,12 @@ import { getColumns, Payment, MethodOption } from './columns';
 import { parseAsInteger, useQueryState } from 'nuqs';
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
-import { exportToCSV } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useMemo } from 'react';
+
+// 1. Importamos ExcelJS y FileSaver
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 interface PaymentTableProps {
   data: Payment[];
@@ -25,7 +28,6 @@ export function PaymentTable({
   const [pageSize] = useQueryState('perPage', parseAsInteger.withDefault(10));
   const pageCount = Math.ceil(totalItems / pageSize);
 
-  // Generate columns with method options (memoized)
   const columns = useMemo(() => getColumns(methodOptions), [methodOptions]);
 
   const { table } = useDataTable({
@@ -41,15 +43,45 @@ export function PaymentTable({
     }
   });
 
-  const handleExport = () => {
-    const exportData = data.map(p => ({
-      Fecha: format(new Date(p.payment_date), 'yyyy-MM-dd HH:mm'),
-      Cliente: p.user_name,
-      Plan: p.plan_name,
-      Metodo: p.method,
-      Monto: p.amount_paid
-    }));
-    exportToCSV(exportData, `pagos-${format(new Date(), 'yyyy-MM-dd')}.csv`);
+  // 2. Nueva lógica de exportación asíncrona
+  const handleExport = async () => {
+    try {
+      // Crear un nuevo libro de trabajo
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Pagos');
+
+      // Definir las columnas (header = título visible, key = clave interna)
+      worksheet.columns = [
+        { header: 'Fecha', key: 'fecha', width: 20 },
+        { header: 'Cliente', key: 'cliente', width: 30 },
+        { header: 'Plan', key: 'plan', width: 20 },
+        { header: 'Método', key: 'metodo', width: 15 },
+        { header: 'Monto', key: 'monto', width: 15 },
+      ];
+
+      // Mapear los datos y agregarlos como filas
+      const exportData = data.map(p => ({
+        fecha: format(new Date(p.payment_date), 'yyyy-MM-dd HH:mm'),
+        cliente: p.user_name,
+        plan: p.plan_name,
+        metodo: p.method,
+        monto: p.amount_paid // Asumiendo que es número, Excel lo tratará como tal
+      }));
+
+      worksheet.addRows(exportData);
+
+      // (Opcional) Dar formato de negrita a la primera fila (encabezados)
+      worksheet.getRow(1).font = { bold: true };
+
+      // Generar el buffer y descargar
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      saveAs(blob, `pagos-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+      
+    } catch (error) {
+      console.error("Error al exportar Excel:", error);
+    }
   };
 
   return (
@@ -59,10 +91,10 @@ export function PaymentTable({
           variant="outline" 
           size="sm" 
           onClick={handleExport}
-          className="ml-auto flex h-8 gap-2"
+          className="ml-auto flex h-8 gap-2 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800 border-green-200" 
         >
           <Download className="h-4 w-4" />
-          Exportar CSV
+          Exportar Excel
         </Button>
       </DataTableToolbar>
     </DataTable>
