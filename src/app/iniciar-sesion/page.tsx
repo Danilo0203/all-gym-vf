@@ -1,5 +1,5 @@
 import { IconBarbell } from "@tabler/icons-react";
-import { LoginForm } from "@/components/login-form";
+import { LoginForm } from "@/components/iniciar-sesion-form";
 
 export const metadata = {
   title: 'Iniciar Sesión - All Gym',

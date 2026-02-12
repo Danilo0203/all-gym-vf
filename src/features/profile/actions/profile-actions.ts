@@ -127,7 +127,7 @@ export async function updateProfile(data: UpdateProfileData): Promise<{ success:
       });
     }
 
-    revalidatePath('/dashboard/profile');
+    revalidatePath('/panel/perfil');
     return { success: true };
   } catch (error) {
     console.error('Error in updateProfile:', error);

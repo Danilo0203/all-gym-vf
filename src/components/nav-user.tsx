@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import {
   IconCircleCheck,
@@ -6,10 +6,13 @@ import {
   IconChevronsDown,
   IconCreditCard,
   IconLogout,
-  IconSparkles
-} from '@tabler/icons-react';
+  IconSparkles,
+} from "@tabler/icons-react";
+import { useRouter } from "next/navigation";
+import { createBrowserClient } from "@supabase/ssr";
 
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,25 +20,68 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu';
-import {
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar
-} from '@/components/ui/sidebar';
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
+import { useCurrentUser } from "@/features/profile/hooks/use-profile";
+import { toast } from "sonner";
 
-export function NavUser({
-  user
-}: {
-  user: {
-    name: string;
-    email: string;
-    avatar: string;
-  };
-}) {
+export function NavUser() {
   const { isMobile } = useSidebar();
+  const router = useRouter();
+  const { data: user, isLoading } = useCurrentUser();
+
+  const handleSignOut = async () => {
+    try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
+      );
+      await supabase.auth.signOut();
+      toast.success("Sesión cerrada correctamente");
+      router.push("/iniciar-sesion");
+    } catch (error) {
+      toast.error("Error al cerrar sesión");
+      console.error("Error signing out:", error);
+    }
+  };
+
+  // Get initials for avatar fallback
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return "U";
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton size="lg">
+            <Skeleton className="h-8 w-8 rounded-lg" />
+            <div className="grid flex-1 gap-1">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-3 w-32" />
+            </div>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    );
+  }
+
+  // No user state
+  if (!user) {
+    return null;
+  }
+
+  const userName = user.full_name || "Usuario";
+  const userEmail = user.email || "";
+  const userAvatar = user.avatar_url || "";
 
   return (
     <SidebarMenu>
@@ -43,64 +89,68 @@ export function NavUser({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
-              size='lg'
-              className='data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
+              size="lg"
+              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <Avatar className='h-8 w-8 rounded-lg'>
-                <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className='rounded-lg'>CN</AvatarFallback>
+              <Avatar className="h-8 w-8 rounded-lg">
+                <AvatarImage src={userAvatar} alt={userName} />
+                <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-medium">
+                  {getInitials(userName)}
+                </AvatarFallback>
               </Avatar>
-              <div className='grid flex-1 text-left text-sm leading-tight'>
-                <span className='truncate font-semibold'>{user.name}</span>
-                <span className='truncate text-xs'>{user.email}</span>
+              <div className="grid flex-1 text-left text-sm leading-tight">
+                <span className="truncate font-semibold">{userName}</span>
+                <span className="truncate text-xs text-muted-foreground">{userEmail}</span>
               </div>
-              <IconChevronsDown className='ml-auto size-4' />
+              <IconChevronsDown className="ml-auto size-4" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className='w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg'
-            side={isMobile ? 'bottom' : 'right'}
-            align='end'
+            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+            side={isMobile ? "bottom" : "right"}
+            align="end"
             sideOffset={4}
           >
-            <DropdownMenuLabel className='p-0 font-normal'>
-              <div className='flex items-center gap-2 px-1 py-1.5 text-left text-sm'>
-                <Avatar className='h-8 w-8 rounded-lg'>
-                  <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className='rounded-lg'>CN</AvatarFallback>
+            <DropdownMenuLabel className="p-0 font-normal">
+              <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+                <Avatar className="h-8 w-8 rounded-lg">
+                  <AvatarImage src={userAvatar} alt={userName} />
+                  <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-medium">
+                    {getInitials(userName)}
+                  </AvatarFallback>
                 </Avatar>
-                <div className='grid flex-1 text-left text-sm leading-tight'>
-                  <span className='truncate font-semibold'>{user.name}</span>
-                  <span className='truncate text-xs'>{user.email}</span>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">{userName}</span>
+                  <span className="truncate text-xs text-muted-foreground">{userEmail}</span>
                 </div>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem>
-                <IconSparkles className='mr-2 h-4 w-4' />
-                Upgrade to Pro
+                <IconSparkles className="mr-2 h-4 w-4" />
+                Mejorar a Pro
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <IconCircleCheck className='mr-2 h-4 w-4' />
-                Account
+              <DropdownMenuItem onClick={() => router.push("/panel/perfil")}>
+                <IconCircleCheck className="mr-2 h-4 w-4" />
+                Mi Perfil
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <IconCreditCard className='mr-2 h-4 w-4' />
-                Billing
+              <DropdownMenuItem onClick={() => router.push("/panel/pagos")}>
+                <IconCreditCard className="mr-2 h-4 w-4" />
+                Pagos
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <IconBell className='mr-2 h-4 w-4' />
-                Notifications
+              <DropdownMenuItem onClick={() => router.push("/panel/resumen")}>
+                <IconBell className="mr-2 h-4 w-4" />
+                Notificaciones
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <IconLogout className='mr-2 h-4 w-4' />
-              Log out
+            <DropdownMenuItem onClick={handleSignOut} className="text-red-600 focus:text-red-600">
+              <IconLogout className="mr-2 h-4 w-4" />
+              Cerrar Sesión
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -42,7 +42,7 @@ export function CustomerList({ customers }: CustomerListProps) {
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-1 p-2">
             {/* Botón para crear nuevo cliente (Siempre visible) */}
-            {/* <Link href="/dashboard/customers/new">
+            {/* <Link href="/panel/clientes/new">
                 <Button variant="outline" className="w-full justify-start gap-2 mb-2" size="sm">
                     <IconUserPlus className="h-4 w-4" />
                     Nuevo Cliente
@@ -62,7 +62,7 @@ export function CustomerList({ customers }: CustomerListProps) {
              return (
               <Link 
                 key={customer.id} 
-                href={`/dashboard/customers/${customer.id}/history`}
+                href={`/panel/clientes/${customer.id}/history`}
                 className={cn(
                   "flex items-center gap-3 p-3 rounded-lg transition-colors hover:bg-muted/50",
                   isActive && "bg-muted shadow-sm"

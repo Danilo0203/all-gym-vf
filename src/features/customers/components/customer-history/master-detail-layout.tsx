@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useRef } from 'react';
-import { CustomerList } from './customer-list';
-import { Customer } from '../customer-tables/columns';
-import { useSidebar } from '@/components/ui/sidebar';
-import { cn } from '@/lib/utils';
-import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
-import { Button } from '@/components/ui/button';
+import { useEffect, useState, useRef } from "react";
+import { CustomerList } from "./customer-list";
+import { Customer } from "../customer-tables/columns";
+import { useSidebar } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
+import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
+import { Button } from "@/components/ui/button";
 
 interface MasterDetailLayoutProps {
   children: React.ReactNode;
@@ -30,31 +30,34 @@ export function MasterDetailLayout({ children, customers }: MasterDetailLayoutPr
   return (
     <div className="flex h-full w-full overflow-hidden bg-background">
       {/* Sidebar List Panel */}
-      <div 
+      <div
         className={cn(
           "relative flex-shrink-0 transition-all duration-300 ease-in-out border-r bg-card",
-          isListCollapsed ? "w-0 overflow-hidden" : "w-[320px] lg:w-[380px]"
+          isListCollapsed ? "w-0 overflow-hidden" : "w-[320px] lg:w-[380px]",
         )}
       >
         <CustomerList customers={customers} />
       </div>
 
       {/* Main Content (Detail View) */}
-      <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative">
-        {/* Toggle Button for Layout Sidebar */}
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 z-10 transform translate-x-[-50%]">
-          <Button
-            variant="secondary"
-            size="icon"
-            className="h-8 w-8 rounded-full shadow-md border"
-            onClick={() => setIsListCollapsed(!isListCollapsed)}
-            style={{ marginLeft: isListCollapsed ? '24px' : '0px' }} // Adjustment to be visible when collapsed
-          >
-            {isListCollapsed ? <IconChevronRight className="h-4 w-4" /> : <IconChevronLeft className="h-4 w-4" />}
-          </Button>
-        </div>
-        
-        {children}
+      <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative">{children}</div>
+
+      {/* Toggle Button for Layout Sidebar - Moved outside to prevent clipping */}
+      <div
+        className={cn(
+          "absolute top-1/2 -translate-y-1/2 z-50 transition-[left] duration-300 ease-in-out",
+          isListCollapsed ? "left-0" : "left-[320px] lg:left-[380px]",
+        )}
+      >
+        <Button
+          variant="secondary"
+          size="icon"
+          className="h-8 w-8 rounded-full shadow-md border -translate-x-1/2"
+          onClick={() => setIsListCollapsed(!isListCollapsed)}
+          style={isListCollapsed ? { marginLeft: "24px" } : undefined}
+        >
+          {isListCollapsed ? <IconChevronRight className="h-4 w-4" /> : <IconChevronLeft className="h-4 w-4" />}
+        </Button>
       </div>
     </div>
   );

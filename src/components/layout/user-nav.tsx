@@ -26,7 +26,7 @@ export function UserNav() {
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!
     );
     await supabase.auth.signOut();
-    router.push('/login');
+    router.push('/iniciar-sesion');
   };
 
   // Loading state
@@ -79,11 +79,11 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => router.push('/dashboard/profile')}>
+          <DropdownMenuItem onClick={() => router.push('/panel/perfil')}>
             <IconUser className='mr-2 h-4 w-4' />
             Mi Perfil
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => router.push('/dashboard/profile')}>
+          <DropdownMenuItem onClick={() => router.push('/panel/perfil')}>
             <IconSettings className='mr-2 h-4 w-4' />
             Configuración
           </DropdownMenuItem>

@@ -8,7 +8,7 @@ import { PaymentMethodChart } from './payment-method-chart';
 import { RecentPaymentsTable } from './recent-payments-table';
 import { ExpiringSubscriptionsTable } from './expiring-subscriptions-table';
 import { InactiveCustomersTable } from './inactive-customers-table';
-import { DashboardClientContainer } from './dashboard-client-container';
+import { DashboardClientContainer } from './panel-client-container';
 import {
   getDashboardKPIs,
   getRevenueByMonth,
@@ -19,7 +19,7 @@ import {
   getExpiringSubscriptions,
   getInactiveCustomers,
   type DashboardDateRange
-} from '../actions/dashboard-actions';
+} from '../actions/panel-actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths, startOfYear, endOfYear, format } from 'date-fns';

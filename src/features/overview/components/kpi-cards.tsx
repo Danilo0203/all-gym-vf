@@ -19,7 +19,7 @@ import {
   IconCreditCard,
   IconPercentage
 } from '@tabler/icons-react';
-import type { DashboardKPIs } from '../actions/dashboard-actions';
+import type { DashboardKPIs } from '../actions/panel-actions';
 
 interface KPICardsProps {
   data: DashboardKPIs;

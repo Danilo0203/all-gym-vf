@@ -9,7 +9,7 @@ import {
   getExpiringSubscriptions,
   getInactiveCustomers,
   type DashboardDateRange
-} from '../actions/dashboard-actions';
+} from '../actions/panel-actions';
 
 export function useDashboardKPIs(dateRange: DashboardDateRange) {
   return useQuery({

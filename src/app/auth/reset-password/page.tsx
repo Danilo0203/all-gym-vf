@@ -57,7 +57,7 @@ export default function ResetPasswordPage() {
         toast.error(error.message);
       } else {
         toast.success('Contraseña actualizada correctamente');
-        router.push('/dashboard');
+        router.push('/panel');
         router.refresh();
       }
     } catch (error) {

@@ -24,7 +24,7 @@ import {
   useExpiringSubscriptions,
   useInactiveCustomers
 } from '../hooks/use-dashboard-queries';
-import { DashboardDateRange } from '../actions/dashboard-actions';
+import { DashboardDateRange } from '../actions/panel-actions';
 
 // ====================
 // SKELETONS (Copied/Adapted for reuse)

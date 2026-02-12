@@ -1,4 +1,4 @@
-import DashboardView from '@/features/overview/components/dashboard-view';
+import DashboardView from '@/features/overview/components/panel-view';
 
 export const metadata = {
   title: 'Dashboard: Estado del Negocio'

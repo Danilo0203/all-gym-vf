@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip, Label } from 'recharts';
 import { IconCash, IconCreditCard, IconArrowsExchange, IconHelp } from '@tabler/icons-react';
-import type { PaymentMethodDistribution } from '../actions/dashboard-actions';
+import type { PaymentMethodDistribution } from '../actions/panel-actions';
 
 // Configuración de colores (Mantenemos tu configuración que estaba bien)
 const PAYMENT_CONFIG: Record<string, { label: string; color: string; bgClass: string; textClass: string; icon: React.ElementType }> = {

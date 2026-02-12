@@ -1,6 +1,7 @@
-'use server';
+"use server";
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from "@/lib/supabase/server";
+import { getUserEmail } from "@/lib/supabase/admin";
 
 // Tipos para el historial del cliente
 export interface CustomerHistoryKPIs {
@@ -63,33 +64,39 @@ export interface CustomerProfile {
   phone: string;
   avatar_url: string | null;
   created_at: string;
+  is_active: boolean | null;
+  subscription_status: string | null;
+  subscription_end_date: string | null;
 }
 
 // Obtener perfil básico del cliente
 export async function getCustomerProfile(customerId: string): Promise<CustomerProfile | null> {
   const supabase = await createClient();
-  
+
   const { data, error } = await supabase
-    .from('customer_overview')
-    .select('id, full_name, email, phone, avatar_url')
-    .eq('id', customerId)
+    .from("customer_overview")
+    .select("id, full_name, phone, avatar_url, is_active, subscription_status, subscription_end_date")
+    .eq("id", customerId)
     .single();
 
   if (error || !data) {
-    console.error('Error fetching customer profile:', error);
+    console.error("Error fetching customer profile:", error);
     return null;
   }
 
+  // Obtener email desde auth.users
+  const email = await getUserEmail(customerId);
+
   // Obtener fecha de creación del perfil
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('created_at')
-    .eq('id', customerId)
-    .single();
+  const { data: profile } = await supabase.from("profiles").select("created_at").eq("id", customerId).single();
 
   return {
     ...data,
-    created_at: profile?.created_at || null
+    email: email || "",
+    created_at: profile?.created_at || null,
+    is_active: data.is_active,
+    subscription_status: data.subscription_status,
+    subscription_end_date: data.subscription_end_date,
   };
 }
 
@@ -100,50 +107,47 @@ export async function getCustomerKPIs(customerId: string): Promise<CustomerHisto
   // Total gastado - intentar desde payments, fallback a suscripciones
   let totalSpent = 0;
   const { data: paymentsData, error: paymentsError } = await supabase
-    .from('payments')
-    .select('amount_paid')
-    .eq('user_id', customerId);
+    .from("payments")
+    .select("amount_paid")
+    .eq("user_id", customerId);
 
   if (paymentsError) {
     // Fallback: calcular desde suscripciones
     const { data: subs } = await supabase
-      .from('subscriptions')
-      .select('discount_amount, plans!inner(price)')
-      .eq('user_id', customerId);
-    
-    totalSpent = subs?.reduce((sum, s) => {
-      const price = (s.plans as any)?.price || 0;
-      const discount = s.discount_amount || 0;
-      return sum + (price - discount);
-    }, 0) || 0;
+      .from("subscriptions")
+      .select("discount_amount, plans!inner(price)")
+      .eq("user_id", customerId);
+
+    totalSpent =
+      subs?.reduce((sum, s) => {
+        const price = (s.plans as any)?.price || 0;
+        const discount = s.discount_amount || 0;
+        return sum + (price - discount);
+      }, 0) || 0;
   } else {
     totalSpent = paymentsData?.reduce((sum, p) => sum + (p.amount_paid || 0), 0) || 0;
   }
 
   // Fecha de creación de cuenta
-  const { data: profileData } = await supabase
-    .from('profiles')
-    .select('created_at')
-    .eq('id', customerId)
-    .single();
+  const { data: profileData } = await supabase.from("profiles").select("created_at").eq("id", customerId).single();
 
   // Total de visitas - manejar si la tabla no existe
   let totalVisits = 0;
   const { count, error: accessError } = await supabase
-    .from('access_logs')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', customerId);
-  
+    .from("access_logs")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", customerId);
+
   if (!accessError) {
     totalVisits = count || 0;
   }
 
   // Peso inicial y actual
   const { data: assessments } = await supabase
-    .from('body_assessments')
-    .select('weight_kg, date')
-    .eq('user_id', customerId)
-    .order('date', { ascending: true });
+    .from("body_assessments")
+    .select("weight_kg, date")
+    .eq("user_id", customerId)
+    .order("date", { ascending: true });
 
   const initialWeight = assessments?.[0]?.weight_kg || null;
   const currentWeight = assessments?.[assessments.length - 1]?.weight_kg || null;
@@ -155,7 +159,7 @@ export async function getCustomerKPIs(customerId: string): Promise<CustomerHisto
     totalVisits,
     initialWeight,
     currentWeight,
-    weightChange
+    weightChange,
   };
 }
 
@@ -164,28 +168,28 @@ export async function getAccessHistory(customerId: string, limit = 50): Promise<
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from('access_logs')
-    .select('id, check_in_time, status')
-    .eq('user_id', customerId)
-    .order('check_in_time', { ascending: false })
+    .from("access_logs")
+    .select("id, check_in_time, status")
+    .eq("user_id", customerId)
+    .order("check_in_time", { ascending: false })
     .limit(limit);
 
   if (error) {
     // Silenciar si la tabla no existe
-    if (error.code !== '42P01') {
-      console.error('Error fetching access logs:', error.message);
+    if (error.code !== "42P01") {
+      console.error("Error fetching access logs:", error.message);
     }
     return [];
   }
 
-  return (data || []).map(log => {
+  return (data || []).map((log) => {
     const date = new Date(log.check_in_time);
-    const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const days = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
     return {
       id: log.id,
       check_in_time: log.check_in_time,
       day_of_week: days[date.getDay()],
-      status: log.status || 'authorized'
+      status: log.status || "authorized",
     };
   });
 }
@@ -196,8 +200,9 @@ export async function getPaymentHistory(customerId: string): Promise<PaymentEntr
 
   // Obtener de la tabla payments con las columnas correctas
   const { data, error } = await supabase
-    .from('payments')
-    .select(`
+    .from("payments")
+    .select(
+      `
       id,
       payment_date,
       amount_original,
@@ -214,21 +219,23 @@ export async function getPaymentHistory(customerId: string): Promise<PaymentEntr
           name
         )
       )
-    `)
-    .eq('user_id', customerId)
-    .order('payment_date', { ascending: false });
+    `,
+    )
+    .eq("user_id", customerId)
+    .order("payment_date", { ascending: false });
 
   // Si la tabla no existe o hay error, intentar construir desde suscripciones
   if (error) {
     // Silenciar el error si es porque la tabla no existe
-    if (error.code !== '42P01') {
-      console.error('Error fetching payment history:', error.message);
+    if (error.code !== "42P01") {
+      console.error("Error fetching payment history:", error.message);
     }
-    
+
     // Fallback: construir historial desde suscripciones
     const { data: subs } = await supabase
-      .from('subscriptions')
-      .select(`
+      .from("subscriptions")
+      .select(
+        `
         id,
         start_date,
         end_date,
@@ -239,45 +246,42 @@ export async function getPaymentHistory(customerId: string): Promise<PaymentEntr
           name,
           price
         )
-      `)
-      .eq('user_id', customerId)
-      .order('created_at', { ascending: false });
+      `,
+      )
+      .eq("user_id", customerId)
+      .order("created_at", { ascending: false });
 
     if (!subs) return [];
 
-    return subs.map(sub => ({
+    return subs.map((sub) => ({
       id: sub.id,
       payment_date: sub.created_at,
-      plan_name: (sub.plans as any)?.name || 'N/A',
+      plan_name: (sub.plans as any)?.name || "N/A",
       amount_original: (sub.plans as any)?.price || 0,
       amount_paid: ((sub.plans as any)?.price || 0) - (sub.discount_amount || 0),
       discount_applied: sub.discount_amount || 0,
-      payment_method: 'N/A',
+      payment_method: "N/A",
       subscription_status: sub.status,
       subscription_start: sub.start_date,
-      subscription_end: sub.end_date
+      subscription_end: sub.end_date,
     }));
   }
 
-  return (data || []).map(payment => {
-    const subscription = Array.isArray(payment.subscriptions) 
-      ? payment.subscriptions[0] 
-      : payment.subscriptions;
-    const plan = Array.isArray(subscription?.plans) 
-      ? subscription?.plans[0] 
-      : subscription?.plans;
-    
+  return (data || []).map((payment) => {
+    const subscription = Array.isArray(payment.subscriptions) ? payment.subscriptions[0] : payment.subscriptions;
+    const plan = Array.isArray(subscription?.plans) ? subscription?.plans[0] : subscription?.plans;
+
     return {
       id: payment.id,
       payment_date: payment.payment_date,
-      plan_name: plan?.name || 'N/A',
+      plan_name: plan?.name || "N/A",
       amount_original: payment.amount_original || 0,
       amount_paid: payment.amount_paid || 0,
       discount_applied: payment.discount_amount || 0,
-      payment_method: payment.method || 'cash',
-      subscription_status: subscription?.status || 'N/A',
-      subscription_start: subscription?.start_date || '',
-      subscription_end: subscription?.end_date || ''
+      payment_method: payment.method || "cash",
+      subscription_status: subscription?.status || "N/A",
+      subscription_start: subscription?.start_date || "",
+      subscription_end: subscription?.end_date || "",
     };
   });
 }
@@ -287,8 +291,9 @@ export async function getSubscriptionHistory(customerId: string): Promise<Subscr
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from('subscriptions')
-    .select(`
+    .from("subscriptions")
+    .select(
+      `
       id,
       start_date,
       end_date,
@@ -299,23 +304,24 @@ export async function getSubscriptionHistory(customerId: string): Promise<Subscr
         name,
         price
       )
-    `)
-    .eq('user_id', customerId)
-    .order('created_at', { ascending: false });
+    `,
+    )
+    .eq("user_id", customerId)
+    .order("created_at", { ascending: false });
 
   if (error) {
-    console.error('Error fetching subscription history:', error);
+    console.error("Error fetching subscription history:", error);
     return [];
   }
 
-  return (data || []).map(sub => ({
+  return (data || []).map((sub) => ({
     id: sub.id,
-    plan_name: (sub.plans as any)?.name || 'N/A',
+    plan_name: (sub.plans as any)?.name || "N/A",
     start_date: sub.start_date,
     end_date: sub.end_date,
     status: sub.status,
     price: (sub.plans as any)?.price || 0,
-    discount_amount: sub.discount_amount || 0
+    discount_amount: sub.discount_amount || 0,
   }));
 }
 
@@ -324,8 +330,9 @@ export async function getBodyAssessmentHistory(customerId: string): Promise<Body
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from('body_assessments')
-    .select(`
+    .from("body_assessments")
+    .select(
+      `
       id, 
       user_id, 
       date, 
@@ -338,16 +345,17 @@ export async function getBodyAssessmentHistory(customerId: string): Promise<Body
       waist,
       arm_right,
       notes
-    `)
-    .eq('user_id', customerId)
-    .order('date', { ascending: false });
+    `,
+    )
+    .eq("user_id", customerId)
+    .order("date", { ascending: false });
 
   if (error) {
-    console.error('Error fetching body assessments:', error);
+    console.error("Error fetching body assessments:", error);
     return [];
   }
 
-  return (data || []).map(assessment => ({
+  return (data || []).map((assessment) => ({
     id: assessment.id,
     assessment_date: assessment.date,
     weight_kg: assessment.weight_kg,
@@ -358,35 +366,35 @@ export async function getBodyAssessmentHistory(customerId: string): Promise<Body
     chest_cm: assessment.chest,
     arm_cm: assessment.arm_right,
     body_type: assessment.body_type,
-    notes: assessment.notes
+    notes: assessment.notes,
   }));
 }
 
 // Obtener datos para el calendario de calor (últimos 12 meses)
 export async function getAccessHeatmapData(customerId: string): Promise<Record<string, number>> {
   const supabase = await createClient();
-  
+
   const oneYearAgo = new Date();
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
   const { data, error } = await supabase
-    .from('access_logs')
-    .select('check_in_time')
-    .eq('user_id', customerId)
-    .gte('check_in_time', oneYearAgo.toISOString());
+    .from("access_logs")
+    .select("check_in_time")
+    .eq("user_id", customerId)
+    .gte("check_in_time", oneYearAgo.toISOString());
 
   if (error) {
     // Silenciar si la tabla no existe
-    if (error.code !== '42P01') {
-      console.error('Error fetching heatmap data:', error.message);
+    if (error.code !== "42P01") {
+      console.error("Error fetching heatmap data:", error.message);
     }
     return {};
   }
 
   // Agrupar por fecha (YYYY-MM-DD)
   const heatmap: Record<string, number> = {};
-  (data || []).forEach(log => {
-    const date = log.check_in_time.split('T')[0];
+  (data || []).forEach((log) => {
+    const date = log.check_in_time.split("T")[0];
     heatmap[date] = (heatmap[date] || 0) + 1;
   });
 

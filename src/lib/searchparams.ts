@@ -1,9 +1,4 @@
-import {
-  createSearchParamsCache,
-  createSerializer,
-  parseAsInteger,
-  parseAsString
-} from 'nuqs/server';
+import { createSearchParamsCache, createSerializer, parseAsInteger, parseAsString } from "nuqs/server";
 
 export const searchParams = {
   page: parseAsInteger.withDefault(1),
@@ -24,6 +19,7 @@ export const searchParams = {
   method: parseAsString, // Filtro de método de pago
   subscription_status: parseAsString, // Filtro de estado de suscripción en pagos
   payment_date: parseAsString, // Filtro de fecha
+  sort: parseAsString, // Sorting
   // advanced filter
   // filters: getFiltersStateParser().withDefault([]),
   // joinOperator: parseAsStringEnum(['and', 'or']).withDefault('and')

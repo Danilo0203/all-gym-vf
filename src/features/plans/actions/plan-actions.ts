@@ -72,7 +72,7 @@ export async function createPlan(data: CreatePlanData) {
     return { success: false, error: error.message };
   }
 
-  revalidatePath('/dashboard/plans');
+  revalidatePath('/panel/planes');
   return { success: true, data: newPlan };
 }
 
@@ -95,7 +95,7 @@ export async function updatePlan(id: number, data: UpdatePlanData) {
     return { success: false, error: error.message };
   }
 
-  revalidatePath('/dashboard/plans');
+  revalidatePath('/panel/planes');
   return { success: true };
 }
 
@@ -123,12 +123,12 @@ export async function deletePlan(id: number) {
             
         if (updateError) return { success: false, error: 'No se pudo eliminar ni desactivar el plan.' };
         
-        revalidatePath('/dashboard/plans');
+        revalidatePath('/panel/planes');
         return { success: true, message: 'Plan desactivado porque tiene clientes asociados.' };
     }
     return { success: false, error: error.message };
   }
 
-  revalidatePath('/dashboard/plans');
+  revalidatePath('/panel/planes');
   return { success: true };
 }

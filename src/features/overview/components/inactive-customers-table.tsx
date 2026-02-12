@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { IconBrandWhatsapp, IconUserOff, IconRefresh } from '@tabler/icons-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import type { InactiveCustomer } from '../actions/dashboard-actions';
+import type { InactiveCustomer } from '../actions/panel-actions';
 import Link from 'next/link';
 
 interface InactiveCustomersTableProps {
@@ -129,7 +129,7 @@ export function InactiveCustomersTable({ data }: InactiveCustomersTableProps) {
                       </Button>
                     </Link>
                   )}
-                  <Link href={`/dashboard/customers?search=${encodeURIComponent(customer.user_name)}`}>
+                  <Link href={`/panel/clientes?search=${encodeURIComponent(customer.user_name)}`}>
                     <Button 
                       size='sm' 
                       variant='ghost'

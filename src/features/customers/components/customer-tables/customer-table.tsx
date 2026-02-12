@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import { DataTable } from '@/components/ui/table/data-table';
-import { DataTableToolbar } from '@/components/ui/table/data-table-toolbar';
-import { useDataTable } from '@/hooks/use-data-table';
-import { parseAsInteger, useQueryState } from 'nuqs';
-import { getColumns, Customer, PlanOption } from './columns';
-import { useRouter } from 'next/navigation';
-import { useMemo } from 'react';
+import { DataTable } from "@/components/ui/table/data-table";
+import { DataTableToolbar } from "@/components/ui/table/data-table-toolbar";
+import { useDataTable } from "@/hooks/use-data-table";
+import { parseAsInteger, useQueryState } from "nuqs";
+import { getColumns, Customer, PlanOption } from "./columns";
+import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 
 interface CustomerTableProps {
   data: Customer[];
@@ -14,13 +14,9 @@ interface CustomerTableProps {
   planOptions?: PlanOption[];
 }
 
-export function CustomerTable({
-  data,
-  totalItems,
-  planOptions = []
-}: CustomerTableProps) {
+export function CustomerTable({ data, totalItems, planOptions = [] }: CustomerTableProps) {
   const router = useRouter();
-  const [pageSize] = useQueryState('perPage', parseAsInteger.withDefault(10));
+  const [pageSize] = useQueryState("perPage", parseAsInteger.withDefault(10));
 
   const pageCount = Math.ceil(totalItems / pageSize);
 
@@ -32,15 +28,19 @@ export function CustomerTable({
     columns,
     pageCount: pageCount,
     shallow: false,
-    debounceMs: 500
+    debounceMs: 500,
   });
 
   const handleRowClick = (customer: Customer) => {
-    router.push(`/dashboard/customers/${customer.id}/history`);
+    router.push(`/panel/clientes/${customer.id}/history`);
   };
 
   return (
-    <DataTable table={table} onRowClick={handleRowClick}>
+    <DataTable
+      table={table}
+      onRowClick={handleRowClick}
+      getRowClassName={(row) => (!row.is_active ? "opacity-50 grayscale" : "")}
+    >
       <DataTableToolbar table={table} />
     </DataTable>
   );

@@ -100,7 +100,7 @@ export function DashboardPeriodSelector({ onLoadingChange }: DashboardPeriodSele
     
     onLoadingChange?.(true);
     startTransition(() => {
-      router.push(`/dashboard/overview?${params.toString()}`);
+      router.push(`/panel/resumen?${params.toString()}`);
     });
   }, [router, searchParams, onLoadingChange]);
 
@@ -122,7 +122,7 @@ export function DashboardPeriodSelector({ onLoadingChange }: DashboardPeriodSele
         
         onLoadingChange?.(true);
         startTransition(() => {
-          router.push(`/dashboard/overview?${params.toString()}`);
+          router.push(`/panel/resumen?${params.toString()}`);
         });
         // setIsCustomOpen(false); // Removed to keep open
         setSelectionCount(0);
@@ -140,7 +140,7 @@ export function DashboardPeriodSelector({ onLoadingChange }: DashboardPeriodSele
           
           onLoadingChange?.(true);
           startTransition(() => {
-            router.push(`/dashboard/overview?${params.toString()}`);
+            router.push(`/panel/resumen?${params.toString()}`);
           });
           // setIsCustomOpen(false); // Removed to keep open
           setSelectionCount(0);

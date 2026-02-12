@@ -1,20 +1,17 @@
-'use client';
-import { AlertModal } from '@/components/modal/alert-modal';
-import { Button } from '@/components/ui/button';
-import { Customer } from './columns';
-import { IconEdit, IconTrash, IconLoader2, IconHistory } from '@tabler/icons-react';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '@/components/ui/tooltip';
-import { CustomerFormSheet, CustomerData } from '../customer-form-sheet';
-import { deleteCustomer } from '../../actions/customer-actions';
-import { toast } from 'sonner';
-import { useCustomer } from '../../hooks/use-customers';
+"use client";
+import { AlertModal } from "@/components/modal/alert-modal";
+import { Button } from "@/components/ui/button";
+import { Customer } from "./columns";
+import { IconEdit, IconTrash, IconLoader2, IconHistory } from "@tabler/icons-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { CustomerFormSheet, CustomerData } from "../customer-form-sheet";
+import { deleteCustomer } from "../../actions/customer-actions";
+import { toast } from "sonner";
+import { useCustomer } from "../../hooks/use-customers";
+import { Badge } from "@/components/ui/badge";
+import { SubscriptionStatusBadge } from "@/components/subscription-status-badge";
 
 interface CellActionProps {
   data: Customer;
@@ -30,25 +27,28 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
   const { data: customerDetails, isLoading: isLoadingDetails } = useCustomer(editOpen ? data.id : null);
 
   // Combinar datos locales de la tabla con datos detallados del servidor si existen
-  const customerToEdit = customerDetails ? {
-      ...customerDetails,
-      full_name: customerDetails.full_name || data.full_name,
-      email: customerDetails.email || data.email,
-      phone: customerDetails.phone || data.phone
-  } as CustomerData : null;
+  const customerToEdit = customerDetails
+    ? ({
+        ...customerDetails,
+        full_name: customerDetails.full_name || data.full_name,
+        email: customerDetails.email,
+        phone: customerDetails.phone || data.phone,
+        is_active: customerDetails.is_active ?? data.is_active,
+      } as CustomerData)
+    : null;
 
   const onConfirm = async () => {
     setLoading(true);
     try {
       const result = await deleteCustomer(data.id);
       if (result.success) {
-        toast.success('Cliente eliminado exitosamente');
+        toast.success("Cliente desactivado exitosamente");
         router.refresh();
       } else {
-        toast.error('Error al eliminar el cliente');
+        toast.error("Error al desactivar el cliente");
       }
     } catch (error) {
-      toast.error('Error al eliminar el cliente');
+      toast.error("Error al desactivar el cliente");
     } finally {
       setLoading(false);
       setOpen(false);
@@ -56,30 +56,71 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
   };
 
   return (
-    <>
+    <div onClick={(e) => e.stopPropagation()}>
       <AlertModal
         isOpen={open}
         onClose={() => setOpen(false)}
         onConfirm={onConfirm}
         loading={loading}
+        title="¿Desactivar cliente?"
+        description={
+          <div className="space-y-2 mt-2">
+            <p>
+              El cliente <span className="font-semibold text-foreground">{data.full_name}</span> pasará a estado
+              inactivo.
+            </p>
+            <div className="rounded-md bg-muted p-3 text-sm">
+              <div className="grid grid-cols-3 gap-2 items-center">
+                <span className="font-medium">Estado:</span>
+                <span className="col-span-2">
+                  <Badge variant={data.is_active ? "success" : "secondary"}>
+                    {data.is_active ? "Activo" : "Inactivo"}
+                  </Badge>
+                </span>
+
+                <span className="font-medium">Suscripción:</span>
+                <span className="col-span-2">
+                  <SubscriptionStatusBadge status={data.subscription_status} endDate={data.subscription_end_date} />
+                </span>
+
+                <span className="font-medium">Teléfono:</span>
+                <span className="col-span-2 text-muted-foreground">{data.phone || "N/A"}</span>
+
+                <span className="font-medium">Plan:</span>
+                <span className="col-span-2 text-muted-foreground">{data.plan_name || "Sin plan"}</span>
+
+                <span className="font-medium">Vencimiento:</span>
+                <span className="col-span-2 text-muted-foreground">
+                  {data.subscription_end_date
+                    ? new Date(data.subscription_end_date).toLocaleDateString("es-ES")
+                    : "N/A"}
+                </span>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground mt-2">
+              Podrás reactivarlo más tarde desde el historial o editando su perfil.
+            </p>
+          </div>
+        }
+        confirmText="Desactivar"
       />
-      
-      <CustomerFormSheet 
-        mode="edit" 
+
+      <CustomerFormSheet
+        mode="edit"
         customer={customerToEdit}
         open={editOpen}
         onOpenChange={setEditOpen}
         trigger={null}
       />
 
-      <div className='flex items-center gap-2'>
+      <div className="flex items-center gap-2">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant='ghost'
-                size='icon'
-                className='h-8 w-8 hover:bg-muted'
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 hover:bg-muted"
                 onClick={(e) => {
                   e.stopPropagation();
                   setEditOpen(true);
@@ -87,11 +128,11 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
                 disabled={editOpen && isLoadingDetails}
               >
                 {editOpen && isLoadingDetails ? (
-                  <IconLoader2 className='h-4 w-4 animate-spin text-blue-500' />
+                  <IconLoader2 className="h-4 w-4 animate-spin text-blue-500" />
                 ) : (
-                  <IconEdit className='h-4 w-4 text-blue-500' />
+                  <IconEdit className="h-4 w-4 text-blue-500" />
                 )}
-                <span className='sr-only'>Editar cliente</span>
+                <span className="sr-only">Editar cliente</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent>
@@ -109,7 +150,7 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
                 className='h-8 w-8 hover:bg-muted'
                 onClick={(e) => {
                   e.stopPropagation();
-                  router.push(`/dashboard/customers/${data.id}/history`);
+                  router.push(`/panel/clientes/${data.id}/history`);
                 }}
               >
                 <IconHistory className='h-4 w-4 text-orange-500' />
@@ -126,24 +167,24 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant='ghost'
-                size='icon'
-                className='h-8 w-8 hover:bg-destructive/10'
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 hover:bg-destructive/10"
                 onClick={(e) => {
                   e.stopPropagation();
                   setOpen(true);
                 }}
               >
-                <IconTrash className='h-4 w-4 text-destructive' />
-                <span className='sr-only'>Eliminar cliente</span>
+                <IconTrash className="h-4 w-4 text-destructive" />
+                <span className="sr-only">Desactivar cliente</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Eliminar cliente</p>
+              <p>Desactivar cliente</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
       </div>
-    </>
+    </div>
   );
 };

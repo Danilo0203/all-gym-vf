@@ -1,4 +1,4 @@
-import { NavItem } from '@/types';
+import { NavItem } from "@/types";
 
 /**
  * Navigation configuration with RBAC support
@@ -34,46 +34,56 @@ import { NavItem } from '@/types';
  */
 export const navItems: NavItem[] = [
   {
-    title: 'Dashboard',
-    url: '/dashboard/overview',
-    icon: 'dashboard',
+    title: "Tablero",
+    url: "/panel/resumen",
+    icon: "dashboard",
     isActive: false,
-    shortcut: ['d', 'd'],
-    items: []
+    shortcut: ["d", "d"],
+    items: [],
   },
   {
-    title: 'Clientes',
-    url: '/dashboard/customers',
-    icon: 'customers',
+    title: "Usuarios",
+    url: "/panel/usuarios",
+    icon: "teams",
     isActive: false,
-    items: []
+    access: { role: ["admin"] },
+    items: [],
   },
   {
-    title: 'Planes',
-    url: '/dashboard/plans',
-    icon: 'billing',
+    title: "Clientes",
+    url: "/panel/clientes",
+    icon: "customers",
     isActive: false,
-    items: []
+    items: [],
   },
   {
-    title: 'Pagos',
-    url: '/dashboard/payments',
-    icon: 'billing',
+    title: "Planes",
+    url: "/panel/planes",
+    icon: "billing",
     isActive: false,
-    items: []
+    access: { role: ["admin"] },
+    items: [],
   },
   {
-    title: 'Account',
-    url: '#', // Placeholder as there is no direct link for the parent
-    icon: 'account',
+    title: "Pagos",
+    url: "/panel/pagos",
+    icon: "billing",
+    isActive: false,
+    access: { role: ["admin"] },
+    items: [],
+  },
+  {
+    title: "Cuenta",
+    url: "#", // Placeholder as there is no direct link for the parent
+    icon: "account",
     isActive: true,
     items: [
       {
-        title: 'Profile',
-        url: '/dashboard/profile',
-        icon: 'profile',
-        shortcut: ['m', 'm']
-      }
-    ]
-  }
+        title: "Perfil",
+        url: "/panel/perfil",
+        icon: "profile",
+        shortcut: ["m", "m"],
+      },
+    ],
+  },
 ];

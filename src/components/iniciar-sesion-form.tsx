@@ -1,35 +1,20 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-  FieldSeparator,
-} from "@/components/ui/field";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { createBrowserClient } from '@supabase/ssr';
-import { toast } from 'sonner';
-import { IconLoader2 } from '@tabler/icons-react';
+import { createBrowserClient } from "@supabase/ssr";
+import { toast } from "sonner";
+import { IconLoader2 } from "@tabler/icons-react";
 
-export function LoginForm({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -39,7 +24,7 @@ export function LoginForm({
     try {
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
       );
 
       const { error, data } = await supabase.auth.signInWithPassword({
@@ -48,29 +33,23 @@ export function LoginForm({
       });
 
       if (error) {
-        toast.error(error.message === 'Invalid login credentials' 
-          ? 'Credenciales incorrectas' 
-          : error.message
-        );
+        toast.error(error.message === "Invalid login credentials" ? "Credenciales incorrectas" : error.message);
       } else if (data.user) {
         // Verificar Rol
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .single();
-
-        if (profile?.role === 'admin') {
-          toast.success('¡Bienvenido de nuevo!');
-          router.push('/dashboard');
+        const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
+        // Nombre
+        const {data: nombre} = await supabase.from("profiles").select("full_name").eq("id", data.user.id).single()
+        if (profile?.role === "admin" || profile?.role === "employee") {
+          toast.success(`¡Bienvenido de nuevo ${nombre?.full_name}!`);
+          router.push("/panel");
           router.refresh();
         } else {
           await supabase.auth.signOut();
-          toast.error('Acceso denegado. No tienes permisos de administrador.');
+          toast.error("Acceso denegado. No tienes permisos de administrador.");
         }
       }
     } catch (error) {
-      toast.error('Error al iniciar sesión');
+      toast.error("Error al iniciar sesión");
     } finally {
       setIsLoading(false);
     }
@@ -81,22 +60,22 @@ export function LoginForm({
     try {
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
       );
 
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider: "google",
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
       if (error) {
-        toast.error('Error con Google: ' + error.message);
+        toast.error("Error con Google: " + error.message);
         setIsLoading(false);
       }
     } catch (error) {
-      toast.error('Error al iniciar sesión con Google');
+      toast.error("Error al iniciar sesión con Google");
       setIsLoading(false);
     }
   };
@@ -106,17 +85,15 @@ export function LoginForm({
       <Card>
         <CardHeader className="text-center">
           <CardTitle className="text-xl">Bienvenido</CardTitle>
-          <CardDescription>
-            Ingresa tus credenciales para acceder al sistema
-          </CardDescription>
+          <CardDescription>Ingresa tus credenciales para acceder al sistema</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit}>
             <FieldGroup>
               <Field>
-                <Button 
-                  variant="outline" 
-                  type="button" 
+                <Button
+                  variant="outline"
+                  type="button"
                   onClick={handleGoogleLogin}
                   disabled={isLoading}
                   className="w-full"
@@ -155,10 +132,10 @@ export function LoginForm({
                     ¿Olvidaste tu contraseña?
                   </a>
                 </div>
-                <Input 
-                  id="password" 
-                  type="password" 
-                  required 
+                <Input
+                  id="password"
+                  type="password"
+                  required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
@@ -176,9 +153,14 @@ export function LoginForm({
       </Card>
       <FieldDescription className="px-6 text-center text-xs">
         Al continuar, aceptas nuestros{" "}
-        <a href="#" className="underline underline-offset-4 hover:text-primary">Términos de Servicio</a>{" "}
+        <a href="#" className="underline underline-offset-4 hover:text-primary">
+          Términos de Servicio
+        </a>{" "}
         y{" "}
-        <a href="#" className="underline underline-offset-4 hover:text-primary">Política de Privacidad</a>.
+        <a href="#" className="underline underline-offset-4 hover:text-primary">
+          Política de Privacidad
+        </a>
+        .
       </FieldDescription>
     </div>
   );
