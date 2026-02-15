@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
@@ -10,13 +10,11 @@ import {
   SheetClose,
   SheetContent,
   SheetDescription,
-  SheetFooter,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { FormInput } from "@/components/forms/form-input";
 import { FormInputGroup } from "@/components/forms/form-input-group";
 import { FormSelect } from "@/components/forms/form-select";
 import { FormTextarea } from "@/components/forms/form-textarea";
@@ -24,7 +22,6 @@ import {
   IconPlus,
   IconLoader2,
   IconCalendar,
-  IconEdit,
   IconMail,
   IconLock,
   IconUser,
@@ -34,7 +31,6 @@ import {
   IconDiscount,
 } from "@tabler/icons-react";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
 
 import { useCreateCustomer, useUpdateCustomer, useReactivateCustomer } from "../hooks/use-customers";
 import { usePlans } from "@/features/plans/hooks/use-plans";
@@ -44,6 +40,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { addDays, format, parse, isValid, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
+import { computeFitnessPlan } from "@/lib/fitness/excel-calculator";
+import type { CreateCustomerData } from "@/features/customers/actions/customer-actions";
 
 const customerFormSchema = z.object({
   // 1. Datos de Cuenta
@@ -54,7 +52,7 @@ const customerFormSchema = z.object({
   full_name: z.string().min(2, { message: "El nombre es obligatorio" }),
   birth_date: z.date({ message: "La fecha de nacimiento es obligatoria" }),
   gender: z.enum(["male", "female", "other"], { message: "Selecciona el género" }),
-  phone: z.string().min(8, { message: "El teléfono es obligatorio (mínimo 8 dígitos)" }),
+  phone: z.string().regex(/^\d{8}$/, { message: "El teléfono debe tener exactamente 8 dígitos" }),
 
   // 3. Datos de Inscripción
   plan_id: z.string({ message: "Selecciona un plan" }).min(1, { message: "Selecciona un plan" }),
@@ -73,21 +71,25 @@ const customerFormSchema = z.object({
   height_cm: z.coerce
     .number({ message: "La estatura es obligatoria" })
     .positive({ message: "La estatura debe ser mayor a 0" }),
+  diet_type: z.enum(["hipocalorica", "normocalorica", "hipercalorica"], { message: "Selecciona tipo de dieta" }),
+  activity_level: z.enum(["sedentario", "1_3_dias", "3_5_dias", "6_7_dias", "2_veces_dia"], {
+    message: "Selecciona nivel de actividad",
+  }),
+  body_fat_percentage: z.coerce.number().min(1, { message: "Ingresa % de grasa" }).max(100),
+  muscle_mass_kg: z.coerce.number().positive({ message: "Ingresa masa muscular" }),
+  chest: z.coerce.number().positive({ message: "Ingresa pecho" }),
+  waist: z.coerce.number().positive({ message: "Ingresa cintura" }),
+  hip: z.coerce.number().positive({ message: "Ingresa cadera" }),
+  arm_right: z.coerce.number().positive({ message: "Ingresa brazo derecho" }),
+  arm_left: z.coerce.number().positive({ message: "Ingresa brazo izquierdo" }),
+  leg_right: z.coerce.number().positive({ message: "Ingresa pierna derecha" }),
+  leg_left: z.coerce.number().positive({ message: "Ingresa pierna izquierda" }),
   injuries: z.string().optional().or(z.literal("")), // Opcional
+  notes: z.string().optional().or(z.literal("")),
   body_type: z.enum(["ectomorph", "mesomorph", "endomorph"], { message: "Selecciona el somatotipo" }),
 });
 
 type CustomerFormValues = z.infer<typeof customerFormSchema>;
-
-interface Plan {
-  id: number;
-  name: string;
-  price: number;
-  duration_days: number;
-}
-
-import { reactivateCustomer } from "@/features/customers/actions/customer-actions";
-import { toast } from "sonner";
 
 // Tipo para los datos del cliente que se pasan al sheet para editar
 export interface CustomerData {
@@ -112,6 +114,18 @@ export interface CustomerData {
   height_cm?: number | null;
   injuries?: string | null;
   body_type?: string | null;
+  diet_type?: string | null;
+  activity_level?: string | null;
+  body_fat_percentage?: number | null;
+  muscle_mass_kg?: number | null;
+  chest?: number | null;
+  waist?: number | null;
+  hip?: number | null;
+  arm_right?: number | null;
+  arm_left?: number | null;
+  leg_right?: number | null;
+  leg_left?: number | null;
+  notes?: string | null;
 }
 
 interface CustomerFormSheetProps {
@@ -123,16 +137,8 @@ interface CustomerFormSheetProps {
 }
 
 function DatePickerInput({ value, onChange }: { value?: Date; onChange: (date?: Date) => void }) {
-  const [inputValue, setInputValue] = useState("");
-
-  // Sincronizar input cuando el valor externo cambia (ej. selección en calendario)
-  useEffect(() => {
-    if (value && isValid(value)) {
-      setInputValue(format(value, "dd/MM/yyyy"));
-    } else {
-      setInputValue("");
-    }
-  }, [value]);
+  const [inputValue, setInputValue] = useState<string | undefined>(undefined);
+  const displayedValue = inputValue ?? (value && isValid(value) ? format(value, "dd/MM/yyyy") : "");
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -150,7 +156,13 @@ function DatePickerInput({ value, onChange }: { value?: Date; onChange: (date?: 
 
   return (
     <InputGroup>
-      <InputGroupInput value={inputValue} onChange={handleInputChange} placeholder="DD/MM/YYYY" maxLength={10} />
+      <InputGroupInput
+        value={displayedValue}
+        onChange={handleInputChange}
+        onBlur={() => setInputValue(undefined)}
+        placeholder="DD/MM/YYYY"
+        maxLength={10}
+      />
       <InputGroupAddon align="inline-end">
         <Popover modal={false}>
           <PopoverTrigger asChild>
@@ -164,6 +176,7 @@ function DatePickerInput({ value, onChange }: { value?: Date; onChange: (date?: 
               selected={value}
               onSelect={(date) => {
                 onChange(date);
+                setInputValue(undefined);
               }}
               autoFocus
               locale={es}
@@ -189,13 +202,12 @@ export function CustomerFormSheet({
   const [selectedPlanPrice, setSelectedPlanPrice] = useState<number>(0);
   const [userModifiedDates, setUserModifiedDates] = useState(false);
   const previousPlanId = useRef<string | null>(null);
-  const router = useRouter();
 
   // Hooks de React Query
-  const { data: plans = [], isLoading: loadingPlans } = usePlans(true);
+  const { data: plans = [] } = usePlans(true);
   const { mutateAsync: createCustomerMutation, isPending: isCreating } = useCreateCustomer();
   const { mutateAsync: updateCustomerMutation, isPending: isUpdating } = useUpdateCustomer();
-  const { mutateAsync: reactivateCustomerMutation, isPending: isReactivating } = useReactivateCustomer();
+  const { mutateAsync: reactivateCustomerMutation } = useReactivateCustomer();
 
   const isPending = isCreating || isUpdating;
 
@@ -212,11 +224,11 @@ export function CustomerFormSheet({
   const isEditing = mode === "edit" && customer !== null;
 
   // Helper para parsear fechas "YYYY-MM-DD" localmente sin conversión a UTC
-  const parseDatabaseDate = (dateString: string | null | undefined): Date | undefined => {
+  const parseDatabaseDate = (dateString: Date | string | null | undefined): Date | undefined => {
     if (!dateString) return undefined;
 
     // Si ya es un objeto Date
-    if ((dateString as any) instanceof Date) return dateString as any;
+    if (dateString instanceof Date) return dateString;
 
     // Intentar split manual YYYY-MM-DD
     if (typeof dateString === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
@@ -246,6 +258,20 @@ export function CustomerFormSheet({
         weight_kg: customer.weight_kg ?? 0,
         height_cm: customer.height_cm ?? 0,
         body_type: (customer.body_type as "ectomorph" | "mesomorph" | "endomorph") || "",
+        diet_type: (customer.diet_type as "hipocalorica" | "normocalorica" | "hipercalorica") || "normocalorica",
+        activity_level:
+          (customer.activity_level as "sedentario" | "1_3_dias" | "3_5_dias" | "6_7_dias" | "2_veces_dia") ||
+          "3_5_dias",
+        body_fat_percentage: customer.body_fat_percentage ?? 0,
+        muscle_mass_kg: customer.muscle_mass_kg ?? 0,
+        chest: customer.chest ?? 0,
+        waist: customer.waist ?? 0,
+        hip: customer.hip ?? 0,
+        arm_right: customer.arm_right ?? 0,
+        arm_left: customer.arm_left ?? 0,
+        leg_right: customer.leg_right ?? 0,
+        leg_left: customer.leg_left ?? 0,
+        notes: customer.notes || "",
         subscription_period: {
           from: parseDatabaseDate(customer.subscription_start_date) || new Date(),
           to: parseDatabaseDate(customer.subscription_end_date) || new Date(),
@@ -266,7 +292,19 @@ export function CustomerFormSheet({
       injuries: "",
       weight_kg: 0,
       height_cm: 0,
+      diet_type: "normocalorica",
+      activity_level: "3_5_dias",
+      body_fat_percentage: 0,
+      muscle_mass_kg: 0,
+      chest: 0,
+      waist: 0,
+      hip: 0,
+      arm_right: 0,
+      arm_left: 0,
+      leg_right: 0,
+      leg_left: 0,
       body_type: undefined as unknown as "ectomorph" | "mesomorph" | "endomorph",
+      notes: "",
       subscription_period: {
         from: new Date(),
         to: new Date(),
@@ -275,7 +313,7 @@ export function CustomerFormSheet({
   }, [isEditing, customer]);
 
   const form = useForm<CustomerFormValues>({
-    resolver: zodResolver(customerFormSchema) as any,
+    resolver: zodResolver(customerFormSchema) as Resolver<CustomerFormValues>,
     defaultValues: getDefaultValues(),
   });
 
@@ -308,6 +346,13 @@ export function CustomerFormSheet({
   // Observar cambios
   const watchedPlanId = form.watch("plan_id");
   const watchedDiscount = form.watch("discount_amount");
+  const watchedWeight = form.watch("weight_kg");
+  const watchedHeight = form.watch("height_cm");
+  const watchedBodyType = form.watch("body_type");
+  const watchedDietType = form.watch("diet_type");
+  const watchedActivityLevel = form.watch("activity_level");
+  const watchedBirthDate = form.watch("birth_date");
+  const watchedGender = form.watch("gender");
 
   // Cuando cambia el plan, actualizar fechas (solo si el usuario no las modificó manualmente)
   useEffect(() => {
@@ -338,7 +383,24 @@ export function CustomerFormSheet({
   }, [watchedPlanId, plans, form, userModifiedDates]);
 
   // Calcular Precio Final Automáticamente (con validación de descuento máximo)
-  const [discountError, setDiscountError] = useState(false);
+  const calculationPreview =
+    watchedWeight &&
+    watchedHeight &&
+    watchedBodyType &&
+    watchedDietType &&
+    watchedActivityLevel &&
+    watchedBirthDate &&
+    watchedGender
+      ? computeFitnessPlan({
+          birthDate: watchedBirthDate,
+          gender: watchedGender,
+          weightKg: watchedWeight,
+          heightCm: watchedHeight,
+          bodyType: watchedBodyType,
+          dietType: watchedDietType,
+          activityLevel: watchedActivityLevel,
+        })
+      : null;
 
   useEffect(() => {
     const discount = Number(watchedDiscount) || 0;
@@ -351,10 +413,8 @@ export function CustomerFormSheet({
         type: "manual",
         message: `El descuento no puede ser mayor al precio del plan (Q${selectedPlanPrice.toFixed(2)})`,
       });
-      setDiscountError(true);
     } else {
       form.clearErrors("discount_amount");
-      setDiscountError(false);
     }
   }, [selectedPlanPrice, watchedDiscount, form]);
 
@@ -371,7 +431,7 @@ export function CustomerFormSheet({
 
   async function onSubmit(values: CustomerFormValues) {
     try {
-      const payload = {
+      const payload: CreateCustomerData = {
         email: values.email,
         password: values.password || undefined,
         full_name: values.full_name,
@@ -389,14 +449,26 @@ export function CustomerFormSheet({
 
         weight_kg: values.weight_kg,
         height_cm: values.height_cm,
+        diet_type: values.diet_type,
+        activity_level: values.activity_level,
+        body_fat_percentage: values.body_fat_percentage,
+        muscle_mass_kg: values.muscle_mass_kg,
+        chest: values.chest,
+        waist: values.waist,
+        hip: values.hip,
+        arm_right: values.arm_right,
+        arm_left: values.arm_left,
+        leg_right: values.leg_right,
+        leg_left: values.leg_left,
         injuries: values.injuries || undefined,
+        notes: values.notes || undefined,
         body_type: values.body_type,
       };
 
       if (isEditing && customer?.id) {
-        await updateCustomerMutation({ id: customer.id, data: payload as any });
+        await updateCustomerMutation({ id: customer.id, data: payload });
       } else {
-        await createCustomerMutation(payload as any);
+        await createCustomerMutation(payload);
       }
 
       setOpen(false);
@@ -418,7 +490,7 @@ export function CustomerFormSheet({
     <Sheet open={open} onOpenChange={setOpen}>
       {trigger !== undefined ? (
         trigger && <SheetTrigger asChild>{trigger}</SheetTrigger>
-      ) : (
+      ) : ( 
         <SheetTrigger asChild>{defaultTrigger}</SheetTrigger>
       )}
       <SheetContent className="sm:max-w-xl w-full flex flex-col h-full p-0 gap-0">
@@ -445,7 +517,7 @@ export function CustomerFormSheet({
                   if (result.success) {
                     setOpen(false);
                   }
-                } catch (error) {
+                } catch {
                   // Error handled by hook
                 }
               }}
@@ -532,8 +604,12 @@ export function CustomerFormSheet({
                     control={form.control}
                     name="phone"
                     label="Teléfono"
-                    placeholder="555-0000"
+                    required
+                    placeholder="12345678"
                     type="tel"
+                    maxLength={8}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     icon={<IconPhone className="h-4 w-4" />}
                   />
                 </div>
@@ -797,7 +873,71 @@ export function CustomerFormSheet({
                       { label: "Endomorfo", value: "endomorph" },
                     ]}
                   />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormSelect
+                      control={form.control}
+                      name="diet_type"
+                      label="Tipo de dieta"
+                      required
+                      options={[
+                        { label: "Hipocalórica", value: "hipocalorica" },
+                        { label: "Normocalórica", value: "normocalorica" },
+                        { label: "Hipercalórica", value: "hipercalorica" },
+                      ]}
+                    />
+                    <FormSelect
+                      control={form.control}
+                      name="activity_level"
+                      label="Nivel de actividad"
+                      required
+                      options={[
+                        { label: "Poco o nada", value: "sedentario" },
+                        { label: "1 a 3 días/semana", value: "1_3_dias" },
+                        { label: "3 a 5 días/semana", value: "3_5_dias" },
+                        { label: "6 a 7 días/semana", value: "6_7_dias" },
+                        { label: "2 veces al día", value: "2_veces_dia" },
+                      ]}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormInputGroup
+                      control={form.control}
+                      name="body_fat_percentage"
+                      label="% Grasa"
+                      type="number"
+                      required
+                    />
+                    <FormInputGroup
+                      control={form.control}
+                      name="muscle_mass_kg"
+                      label="Masa Muscular (kg)"
+                      type="number"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormInputGroup control={form.control} name="chest" label="Pecho (cm)" type="number" required />
+                    <FormInputGroup control={form.control} name="waist" label="Cintura (cm)" type="number" required />
+                    <FormInputGroup control={form.control} name="hip" label="Cadera (cm)" type="number" required />
+                    <FormInputGroup control={form.control} name="arm_right" label="Brazo Der. (cm)" type="number" required />
+                    <FormInputGroup control={form.control} name="arm_left" label="Brazo Izq. (cm)" type="number" required />
+                    <FormInputGroup control={form.control} name="leg_right" label="Pierna Der. (cm)" type="number" required />
+                    <FormInputGroup control={form.control} name="leg_left" label="Pierna Izq. (cm)" type="number" required />
+                  </div>
                   <FormTextarea control={form.control} name="injuries" label="Observaciones / Lesiones" />
+                  <FormTextarea control={form.control} name="notes" label="Notas nutrición/rutina" />
+                  {calculationPreview && (
+                    <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                      <p className="font-medium mb-1">Vista previa cálculo</p>
+                      <p>Calorías: {calculationPreview.dailyCalories} kcal</p>
+                      <p>
+                        Macros (P/C/G): {calculationPreview.proteinGrams}/{calculationPreview.carbsGrams}/
+                        {calculationPreview.fatGrams} g
+                      </p>
+                      <p>Agua: {calculationPreview.waterLitersGoal} L</p>
+                      <p>Cardio: {calculationPreview.cardioMinutes} min</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </form>

@@ -4,9 +4,12 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createClientAdmin } from "@supabase/supabase-js";
 import { getUserEmail } from "@/lib/supabase/admin";
+import { computeFitnessPlan } from "@/lib/fitness/excel-calculator";
+import type { ActivityLevel, BodyType, DietType } from "@/lib/fitness/types";
+import { generateRoutineFromTemplates } from "@/lib/fitness/routine-generator";
+import { getUserAccessContext } from "@/lib/auth/authorization";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!;
 
 export interface CreateCustomerData {
   // Auth
@@ -27,19 +30,44 @@ export interface CreateCustomerData {
   start_date?: Date;
   end_date?: Date;
   // Body Assessment
-  weight_kg?: number;
-  height_cm?: number;
+  weight_kg: number;
+  height_cm: number;
+  diet_type: DietType;
+  activity_level: ActivityLevel;
+  body_fat_percentage?: number;
+  muscle_mass_kg?: number;
+  chest?: number;
+  waist?: number;
+  hip?: number;
+  arm_right?: number;
+  arm_left?: number;
+  leg_right?: number;
+  leg_left?: number;
   injuries?: string;
-  body_type?: string;
+  body_type: BodyType;
+  notes?: string;
 }
 
 export async function createCustomer(data: CreateCustomerData) {
   try {
+    const access = await getUserAccessContext();
+    if (!access.isAuthenticated) return { success: false, error: "No autenticado" };
+    if (!access.isAdmin) return { success: false, error: "No autorizado: Solo administradores" };
+
+    const supabase = await createClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      return { success: false, error: "Sesión inválida. Inicia sesión nuevamente." };
+    }
+
     const response = await fetch(`${SUPABASE_URL}/functions/v1/create-customer`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        Authorization: `Bearer ${session.access_token}`,
       },
       body: JSON.stringify({
         email: data.email,
@@ -54,10 +82,22 @@ export async function createCustomer(data: CreateCustomerData) {
         payment_method: data.payment_method || "cash",
         start_date: data.start_date ? data.start_date.toISOString().split("T")[0] : null,
         end_date: data.end_date ? data.end_date.toISOString().split("T")[0] : null,
-        weight_kg: data.weight_kg || null,
-        height_cm: data.height_cm || null,
+        weight_kg: data.weight_kg,
+        height_cm: data.height_cm,
+        diet_type: data.diet_type,
+        activity_level: data.activity_level,
+        body_fat_percentage: data.body_fat_percentage ?? null,
+        muscle_mass_kg: data.muscle_mass_kg ?? null,
+        chest: data.chest ?? null,
+        waist: data.waist ?? null,
+        hip: data.hip ?? null,
+        arm_right: data.arm_right ?? null,
+        arm_left: data.arm_left ?? null,
+        leg_right: data.leg_right ?? null,
+        leg_left: data.leg_left ?? null,
         injuries: data.injuries || null,
-        body_type: data.body_type || null,
+        body_type: data.body_type,
+        notes: data.notes || null,
       }),
     });
 
@@ -124,6 +164,14 @@ export async function getCustomerById(id: string) {
     .order("date", { ascending: false })
     .limit(1)
     .maybeSingle(); // Usar maybeSingle por si no hay registros
+
+  const { data: latestSnapshot } = await supabase
+    .from("training_nutrition_snapshots")
+    .select("*")
+    .eq("user_id", id)
+    .order("captured_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   // Si la vista no tiene plan_id pero tiene plan_name, necesitamos obtener el ID del plan
   let planId = customerView.plan_id;
@@ -248,6 +296,18 @@ export async function getCustomerById(id: string) {
     weight_kg: bodyAssessment?.weight_kg || null,
     height_cm: bodyAssessment?.height_cm || null,
     body_type: bodyAssessment?.body_type || null,
+    activity_level: bodyAssessment?.activity_level || latestSnapshot?.activity_level || null,
+    diet_type: bodyAssessment?.diet_type || latestSnapshot?.diet_type || null,
+    body_fat_percentage: bodyAssessment?.body_fat_percentage || null,
+    muscle_mass_kg: bodyAssessment?.muscle_mass_kg || null,
+    chest: bodyAssessment?.chest || null,
+    waist: bodyAssessment?.waist || null,
+    hip: bodyAssessment?.hip || null,
+    arm_right: bodyAssessment?.arm_right || null,
+    arm_left: bodyAssessment?.arm_left || null,
+    leg_right: bodyAssessment?.leg_right || null,
+    leg_left: bodyAssessment?.leg_left || null,
+    notes: bodyAssessment?.notes || null,
     body_assessment_id: bodyAssessment?.id || null,
   };
 }
@@ -264,6 +324,109 @@ function formatToLocalISO(date: Date | undefined | null): string | undefined | n
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+interface AssessmentMetrics {
+  weight_kg: number;
+  height_cm: number;
+  body_type: BodyType;
+  diet_type: DietType;
+  activity_level: ActivityLevel;
+  body_fat_percentage?: number;
+  muscle_mass_kg?: number;
+  chest?: number;
+  waist?: number;
+  hip?: number;
+  arm_right?: number;
+  arm_left?: number;
+  leg_right?: number;
+  leg_left?: number;
+  notes?: string;
+}
+
+async function createAssessmentAndSnapshot(params: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  userId: string;
+  birthDate: Date;
+  gender: "male" | "female" | "other";
+  sourceEvent: "signup" | "renewal";
+  subscriptionId?: string | null;
+  metrics: AssessmentMetrics;
+}) {
+  const { supabase, userId, birthDate, gender, sourceEvent, subscriptionId, metrics } = params;
+  const computed = computeFitnessPlan({
+    birthDate,
+    gender,
+    weightKg: metrics.weight_kg,
+    heightCm: metrics.height_cm,
+    bodyType: metrics.body_type,
+    dietType: metrics.diet_type,
+    activityLevel: metrics.activity_level,
+  });
+
+  const assessmentPayload = {
+    user_id: userId,
+    date: new Date().toISOString().split("T")[0],
+    weight_kg: metrics.weight_kg,
+    height_cm: metrics.height_cm,
+    body_type: metrics.body_type,
+    diet_type: metrics.diet_type,
+    activity_level: metrics.activity_level,
+    body_fat_percentage: metrics.body_fat_percentage ?? null,
+    muscle_mass_kg: metrics.muscle_mass_kg ?? null,
+    chest: metrics.chest ?? null,
+    waist: metrics.waist ?? null,
+    hip: metrics.hip ?? null,
+    arm_right: metrics.arm_right ?? null,
+    arm_left: metrics.arm_left ?? null,
+    leg_right: metrics.leg_right ?? null,
+    leg_left: metrics.leg_left ?? null,
+    notes: metrics.notes ?? null,
+    water_liters_goal: computed.waterLitersGoal,
+    daily_calories: computed.dailyCalories,
+    protein_grams: computed.proteinGrams,
+    carbs_grams: computed.carbsGrams,
+    fat_grams: computed.fatGrams,
+  };
+
+  const { error: assessmentError } = await supabase.from("body_assessments").insert(assessmentPayload);
+  if (assessmentError) throw assessmentError;
+
+  const snapshotPayload = {
+    user_id: userId,
+    source_event: sourceEvent,
+    subscription_id: subscriptionId ?? null,
+    gender,
+    age_years: computed.ageYears,
+    height_cm: metrics.height_cm,
+    weight_kg: metrics.weight_kg,
+    body_type: metrics.body_type,
+    diet_type: metrics.diet_type,
+    activity_level: metrics.activity_level,
+    body_fat_percentage: metrics.body_fat_percentage ?? null,
+    muscle_mass_kg: metrics.muscle_mass_kg ?? null,
+    chest_cm: metrics.chest ?? null,
+    waist_cm: metrics.waist ?? null,
+    arm_right_cm: metrics.arm_right ?? null,
+    arm_left_cm: metrics.arm_left ?? null,
+    hip_cm: metrics.hip ?? null,
+    leg_right_cm: metrics.leg_right ?? null,
+    leg_left_cm: metrics.leg_left ?? null,
+    notes: metrics.notes ?? null,
+    daily_calories: computed.dailyCalories,
+    protein_grams: computed.proteinGrams,
+    carbs_grams: computed.carbsGrams,
+    fat_grams: computed.fatGrams,
+    water_liters_goal: computed.waterLitersGoal,
+    cardio_minutes: computed.cardioMinutes,
+    routine_mode: computed.routineMode,
+    algorithm_version: computed.algorithmVersion,
+  };
+
+  const { error: snapshotError } = await supabase.from("training_nutrition_snapshots").insert(snapshotPayload);
+  if (snapshotError) throw snapshotError;
+
+  return computed;
 }
 
 export async function updateCustomer(id: string, data: Partial<CreateCustomerData>, accessToken?: string) {
@@ -322,7 +485,7 @@ export async function updateCustomer(id: string, data: Partial<CreateCustomerDat
     }
 
     // 1. Actualizar el perfil
-    const profileUpdate: any = {
+    const profileUpdate: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
 
@@ -405,7 +568,7 @@ export async function updateCustomer(id: string, data: Partial<CreateCustomerDat
               `Syncing payment data for subscription ${currentSubscription.id}: Original=${newOriginalAmount}, Discount=${newDiscount}, Final=${newFinalAmount}`,
             );
 
-            const paymentUpdateData: any = {
+            const paymentUpdateData: Record<string, unknown> = {
               amount_original: newOriginalAmount,
               discount_amount: newDiscount,
               amount_paid: newFinalAmount,
@@ -432,7 +595,13 @@ export async function updateCustomer(id: string, data: Partial<CreateCustomerDat
     }
 
     // 3. Body Assessment
-    if (data.weight_kg !== undefined || data.height_cm !== undefined || data.body_type !== undefined) {
+    if (
+      data.weight_kg !== undefined ||
+      data.height_cm !== undefined ||
+      data.body_type !== undefined ||
+      data.diet_type !== undefined ||
+      data.activity_level !== undefined
+    ) {
       console.log("Updating body assessment for customer", id, {
         weight_kg: data.weight_kg,
         height_cm: data.height_cm,
@@ -451,12 +620,24 @@ export async function updateCustomer(id: string, data: Partial<CreateCustomerDat
         console.error("Error fetching existing assessment:", fetchAssessError);
       }
 
-      const assessmentData: any = {
+      const assessmentData: Record<string, unknown> = {
         user_id: id,
       };
       if (data.weight_kg !== undefined) assessmentData.weight_kg = data.weight_kg;
       if (data.height_cm !== undefined) assessmentData.height_cm = data.height_cm;
       if (data.body_type !== undefined) assessmentData.body_type = data.body_type;
+      if (data.diet_type !== undefined) assessmentData.diet_type = data.diet_type;
+      if (data.activity_level !== undefined) assessmentData.activity_level = data.activity_level;
+      if (data.body_fat_percentage !== undefined) assessmentData.body_fat_percentage = data.body_fat_percentage;
+      if (data.muscle_mass_kg !== undefined) assessmentData.muscle_mass_kg = data.muscle_mass_kg;
+      if (data.chest !== undefined) assessmentData.chest = data.chest;
+      if (data.waist !== undefined) assessmentData.waist = data.waist;
+      if (data.hip !== undefined) assessmentData.hip = data.hip;
+      if (data.arm_right !== undefined) assessmentData.arm_right = data.arm_right;
+      if (data.arm_left !== undefined) assessmentData.arm_left = data.arm_left;
+      if (data.leg_right !== undefined) assessmentData.leg_right = data.leg_right;
+      if (data.leg_left !== undefined) assessmentData.leg_left = data.leg_left;
+      if (data.notes !== undefined) assessmentData.notes = data.notes;
 
       if (existingAssessment) {
         console.log("Updating existing assessment", existingAssessment.id);
@@ -495,10 +676,22 @@ export interface RenewSubscriptionData {
   amount_paid: number;
   payment_method: "cash" | "card" | "transfer";
   // Physical Assessment
-  weight_kg?: number;
-  height_cm?: number;
-  body_type?: string;
+  weight_kg: number;
+  height_cm: number;
+  body_type: BodyType;
+  diet_type: DietType;
+  activity_level: ActivityLevel;
+  body_fat_percentage?: number;
+  muscle_mass_kg?: number;
+  chest?: number;
+  waist?: number;
+  hip?: number;
+  arm_right?: number;
+  arm_left?: number;
+  leg_right?: number;
+  leg_left?: number;
   injuries?: string;
+  notes?: string;
 }
 
 export async function renewSubscription(customerId: string, data: RenewSubscriptionData) {
@@ -506,10 +699,24 @@ export async function renewSubscription(customerId: string, data: RenewSubscript
   console.log(`Renewing subscription for customer ${customerId}`, data);
 
   try {
+    const access = await getUserAccessContext();
+    if (!access.isAuthenticated) return { success: false, error: "No autenticado" };
+    if (!access.isAdmin) return { success: false, error: "No autorizado: Solo administradores" };
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("birth_date, gender")
+      .eq("id", customerId)
+      .single();
+
+    if (profileError || !profile?.birth_date || !profile?.gender) {
+      return { success: false, error: "No se pudo obtener perfil (nacimiento/género)." };
+    }
+
     // 1. Archivar TODAS las suscripciones activas anteriores
     const { error: archiveError } = await supabase
       .from("subscriptions")
-      .update({ status: "inactive" })
+      .update({ status: "expired" })
       .eq("user_id", customerId)
       .eq("status", "active");
 
@@ -553,22 +760,46 @@ export async function renewSubscription(customerId: string, data: RenewSubscript
       // No revertimos todo, pero logueamos el error grave
     }
 
-    // 4. Registrar FICHA FÍSICA (Siempre, para continuidad)
-    // Usamos los datos nuevos o buscamos los últimos si no se enviaron (aunque el modal debería enviarlos)
-    const assessmentData: any = {
-      user_id: customerId,
-      date: new Date().toISOString().split("T")[0], // FECHA DE HOY
-    };
+    const computed = await createAssessmentAndSnapshot({
+      supabase,
+      userId: customerId,
+      birthDate: new Date(profile.birth_date),
+      gender: profile.gender as "male" | "female" | "other",
+      sourceEvent: "renewal",
+      subscriptionId: newSubscription.id,
+      metrics: {
+        weight_kg: data.weight_kg,
+        height_cm: data.height_cm,
+        body_type: data.body_type,
+        diet_type: data.diet_type,
+        activity_level: data.activity_level,
+        body_fat_percentage: data.body_fat_percentage,
+        muscle_mass_kg: data.muscle_mass_kg,
+        chest: data.chest,
+        waist: data.waist,
+        hip: data.hip,
+        arm_right: data.arm_right,
+        arm_left: data.arm_left,
+        leg_right: data.leg_right,
+        leg_left: data.leg_left,
+        notes: data.notes || data.injuries,
+      },
+    });
 
-    if (data.weight_kg) assessmentData.weight_kg = data.weight_kg;
-    if (data.height_cm) assessmentData.height_cm = data.height_cm;
-    if (data.body_type) assessmentData.body_type = data.body_type;
-    if (data.injuries) assessmentData.injuries = data.injuries;
+    try {
+      await supabase.from("routines").update({ is_active: false }).eq("user_id", customerId).eq("is_active", true);
 
-    const { error: assessError } = await supabase.from("body_assessments").insert(assessmentData);
-
-    if (assessError) {
-      console.error("Error creating renewal assessment:", assessError);
+      await generateRoutineFromTemplates({
+        supabase,
+        userId: customerId,
+        createdBy: access.userId!,
+        bodyType: data.body_type,
+        routineMode: computed.routineMode,
+        startDate: formatToLocalISO(data.start_date) as string,
+        endDate: formatToLocalISO(data.end_date) as string,
+      });
+    } catch (routineError) {
+      console.error("Routine generation warning:", routineError);
     }
 
     revalidatePath("/panel/clientes");

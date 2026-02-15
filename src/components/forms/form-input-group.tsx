@@ -26,6 +26,9 @@ interface FormInputGroupProps<
   step?: string | number;
   min?: string | number;
   max?: string | number;
+  maxLength?: number;
+  pattern?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   icon?: React.ReactNode;
   iconPosition?: 'start' | 'end';
   addonText?: string;
@@ -46,6 +49,9 @@ function FormInputGroup<
   step,
   min,
   max,
+  maxLength,
+  pattern,
+  inputMode,
   disabled,
   className,
   icon,
@@ -87,6 +93,9 @@ function FormInputGroup<
                 step={step}
                 min={min}
                 max={max}
+                maxLength={maxLength}
+                pattern={pattern}
+                inputMode={inputMode}
                 disabled={disabled}
                 {...field}
                 value={
@@ -104,6 +113,9 @@ function FormInputGroup<
                       const num = parseFloat(value);
                       field.onChange(isNaN(num) ? 0 : num);
                     }
+                  } else if (type === "tel") {
+                    const numericOnly = e.target.value.replace(/\D/g, "");
+                    field.onChange(maxLength ? numericOnly.slice(0, maxLength) : numericOnly);
                   } else {
                     field.onChange(e.target.value);
                   }

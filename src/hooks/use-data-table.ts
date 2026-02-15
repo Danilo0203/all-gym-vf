@@ -146,12 +146,18 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       columns
         .map((column) => {
           if (column.id) return column.id;
-          if (typeof column.accessorKey === 'string') return column.accessorKey;
+          if ('accessorKey' in column && typeof column.accessorKey === 'string') return column.accessorKey;
           return undefined;
         })
         .filter(Boolean) as string[]
     );
   }, [columns]);
+
+  const getColumnKey = React.useCallback((column: (typeof columns)[number]) => {
+    if (column.id) return column.id;
+    if ('accessorKey' in column && typeof column.accessorKey === 'string') return column.accessorKey;
+    return undefined;
+  }, []);
 
   const [sorting, setSorting] = useQueryState(
     SORT_KEY,
@@ -184,17 +190,20 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     return filterableColumns.reduce<
       Record<string, Parser<string> | Parser<string[]>>
     >((acc, column) => {
+      const columnKey = getColumnKey(column);
+      if (!columnKey) return acc;
+
       if (column.meta?.options) {
-        acc[column.id ?? ''] = parseAsArrayOf(
+        acc[columnKey] = parseAsArrayOf(
           parseAsString,
           ARRAY_SEPARATOR
         ).withOptions(queryStateOptions);
       } else {
-        acc[column.id ?? ''] = parseAsString.withOptions(queryStateOptions);
+        acc[columnKey] = parseAsString.withOptions(queryStateOptions);
       }
       return acc;
     }, {});
-  }, [filterableColumns, queryStateOptions, enableAdvancedFilter]);
+  }, [filterableColumns, queryStateOptions, enableAdvancedFilter, getColumnKey]);
 
   const [filterValues, setFilterValues] = useQueryStates(filterParsers);
 
@@ -245,7 +254,9 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
         const filterUpdates = next.reduce<
           Record<string, string | string[] | null>
         >((acc, filter) => {
-          if (filterableColumns.find((column) => column.id === filter.id)) {
+          if (
+            filterableColumns.find((column) => getColumnKey(column) === filter.id)
+          ) {
             acc[filter.id] = filter.value as string | string[];
           }
           return acc;
@@ -261,7 +272,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
         return next;
       });
     },
-    [debouncedSetFilterValues, filterableColumns, enableAdvancedFilter]
+    [debouncedSetFilterValues, filterableColumns, enableAdvancedFilter, getColumnKey]
   );
 
   const table = useReactTable({

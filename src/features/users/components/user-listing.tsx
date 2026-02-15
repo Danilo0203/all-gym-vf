@@ -4,7 +4,9 @@ import { searchParamsCache } from "@/lib/searchparams";
 
 export default async function UserListing() {
   const sort = searchParamsCache.get("sort");
-  const { data: users, success, error } = await getUsers({ sort });
+  const role = searchParamsCache.get("role");
+  const full_name = searchParamsCache.get("full_name");
+  const { data: users, success, error } = await getUsers({ sort, role, full_name });
 
   if (!success || !users) {
     return (

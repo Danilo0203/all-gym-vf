@@ -3,6 +3,16 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUserEmail } from "@/lib/supabase/admin";
 
+type PlanSummary = { name?: string | null; price?: number | null };
+
+function getPlanSummary(planRef: unknown): PlanSummary | null {
+  if (!planRef) return null;
+  if (Array.isArray(planRef)) {
+    return (planRef[0] as PlanSummary | undefined) ?? null;
+  }
+  return planRef as PlanSummary;
+}
+
 // Tipos para el historial del cliente
 export interface CustomerHistoryKPIs {
   totalSpent: number;
@@ -43,6 +53,13 @@ export interface BodyAssessmentEntry {
   waist_cm: number | null;
   chest_cm: number | null;
   arm_cm: number | null;
+  activity_level: string | null;
+  diet_type: string | null;
+  daily_calories: number | null;
+  protein_grams: number | null;
+  carbs_grams: number | null;
+  fat_grams: number | null;
+  water_liters_goal: number | null;
   body_type: string | null;
   notes: string | null;
 }
@@ -63,6 +80,8 @@ export interface CustomerProfile {
   email: string;
   phone: string;
   avatar_url: string | null;
+  gender: string | null;
+  birth_date: string | null;
   created_at: string;
   is_active: boolean | null;
   subscription_status: string | null;
@@ -75,7 +94,7 @@ export async function getCustomerProfile(customerId: string): Promise<CustomerPr
 
   const { data, error } = await supabase
     .from("customer_overview")
-    .select("id, full_name, phone, avatar_url, is_active, subscription_status, subscription_end_date")
+    .select("id, full_name, phone, avatar_url, gender, birth_date, is_active, subscription_status, subscription_end_date")
     .eq("id", customerId)
     .single();
 
@@ -120,7 +139,8 @@ export async function getCustomerKPIs(customerId: string): Promise<CustomerHisto
 
     totalSpent =
       subs?.reduce((sum, s) => {
-        const price = (s.plans as any)?.price || 0;
+        const plan = getPlanSummary(s.plans);
+        const price = plan?.price || 0;
         const discount = s.discount_amount || 0;
         return sum + (price - discount);
       }, 0) || 0;
@@ -253,18 +273,22 @@ export async function getPaymentHistory(customerId: string): Promise<PaymentEntr
 
     if (!subs) return [];
 
-    return subs.map((sub) => ({
+    return subs.map((sub) => {
+      const plan = getPlanSummary(sub.plans);
+      const planPrice = plan?.price || 0;
+      return {
       id: sub.id,
       payment_date: sub.created_at,
-      plan_name: (sub.plans as any)?.name || "N/A",
-      amount_original: (sub.plans as any)?.price || 0,
-      amount_paid: ((sub.plans as any)?.price || 0) - (sub.discount_amount || 0),
+      plan_name: plan?.name || "N/A",
+      amount_original: planPrice,
+      amount_paid: planPrice - (sub.discount_amount || 0),
       discount_applied: sub.discount_amount || 0,
       payment_method: "N/A",
       subscription_status: sub.status,
       subscription_start: sub.start_date,
       subscription_end: sub.end_date,
-    }));
+      };
+    });
   }
 
   return (data || []).map((payment) => {
@@ -314,15 +338,18 @@ export async function getSubscriptionHistory(customerId: string): Promise<Subscr
     return [];
   }
 
-  return (data || []).map((sub) => ({
-    id: sub.id,
-    plan_name: (sub.plans as any)?.name || "N/A",
-    start_date: sub.start_date,
-    end_date: sub.end_date,
-    status: sub.status,
-    price: (sub.plans as any)?.price || 0,
-    discount_amount: sub.discount_amount || 0,
-  }));
+  return (data || []).map((sub) => {
+    const plan = getPlanSummary(sub.plans);
+    return {
+      id: sub.id,
+      plan_name: plan?.name || "N/A",
+      start_date: sub.start_date,
+      end_date: sub.end_date,
+      status: sub.status,
+      price: plan?.price || 0,
+      discount_amount: sub.discount_amount || 0,
+    };
+  });
 }
 
 // Obtener historial de evaluaciones físicas
@@ -344,6 +371,13 @@ export async function getBodyAssessmentHistory(customerId: string): Promise<Body
       chest,
       waist,
       arm_right,
+      activity_level,
+      diet_type,
+      daily_calories,
+      protein_grams,
+      carbs_grams,
+      fat_grams,
+      water_liters_goal,
       notes
     `,
     )
@@ -365,6 +399,13 @@ export async function getBodyAssessmentHistory(customerId: string): Promise<Body
     waist_cm: assessment.waist,
     chest_cm: assessment.chest,
     arm_cm: assessment.arm_right,
+    activity_level: assessment.activity_level,
+    diet_type: assessment.diet_type,
+    daily_calories: assessment.daily_calories,
+    protein_grams: assessment.protein_grams,
+    carbs_grams: assessment.carbs_grams,
+    fat_grams: assessment.fat_grams,
+    water_liters_goal: assessment.water_liters_goal,
     body_type: assessment.body_type,
     notes: assessment.notes,
   }));

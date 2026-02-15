@@ -19,6 +19,10 @@ import {
   IconFileCertificate,
   IconRun,
   IconActivity,
+  IconReceipt2,
+  IconChartLine,
+  IconEdit,
+  IconTrash,
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
@@ -36,6 +40,25 @@ import type {
 import { AccessHistoryTab, PaymentHistoryTab, SubscriptionHistoryTab, BodyAssessmentTab } from "./tabs";
 import { cn } from "@/lib/utils";
 import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { AlertModal } from "@/components/modal/alert-modal";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { CustomerFormSheet } from "@/features/customers/components/customer-form-sheet";
+import { RenewSubscriptionSheet } from "@/features/customers/components/renew-subscription-sheet";
+import { deleteCustomer } from "@/features/customers/actions/customer-actions";
+
+function toCustomerGender(value: string | null): "male" | "female" | "other" | null {
+  if (value === "male" || value === "female" || value === "other") return value;
+  return null;
+}
 
 interface CustomerHistoryClientProps {
   profile: CustomerProfile;
@@ -57,6 +80,11 @@ export function CustomerHistoryClient({
   heatmapData,
 }: CustomerHistoryClientProps) {
   const [activeSection, setActiveSection] = useState("overview");
+  const [editOpen, setEditOpen] = useState(false);
+  const [renewOpen, setRenewOpen] = useState(false);
+  const [deactivateOpen, setDeactivateOpen] = useState(false);
+  const [isDeactivating, setIsDeactivating] = useState(false);
+  const router = useRouter();
   const isScrollingRef = useRef(false);
 
   // ScrollSpy Implementation
@@ -111,13 +139,76 @@ export function CustomerHistoryClient({
     : "N/A";
 
   const lastAssessment = bodyAssessments.length > 0 ? bodyAssessments[0] : null;
+  const latestSubscription = subscriptionHistory[0];
   const lastAssessmentSafe = lastAssessment
     ? {
         weight_kg: lastAssessment.weight_kg ?? 0,
         height_cm: lastAssessment.height_cm ?? 0,
         body_type: lastAssessment.body_type ?? "mesomorph",
+        diet_type: lastAssessment.diet_type ?? "normocalorica",
+        activity_level: lastAssessment.activity_level ?? "3_5_dias",
+        body_fat_percentage: lastAssessment.body_fat_percentage ?? null,
+        muscle_mass: lastAssessment.muscle_mass ?? null,
+        chest_cm: lastAssessment.chest_cm ?? null,
+        waist_cm: lastAssessment.waist_cm ?? null,
+        notes: lastAssessment.notes ?? null,
       }
     : null;
+
+  const customerForEdit = {
+    id: profile.id,
+    is_active: profile.is_active,
+    email: profile.email,
+    full_name: profile.full_name,
+    phone: profile.phone,
+    birth_date: profile.birth_date,
+    gender: profile.gender,
+    emergency_contact: null,
+    emergency_phone: null,
+    plan_id: null,
+    subscription_start_date: latestSubscription?.start_date ?? null,
+    subscription_end_date: latestSubscription?.end_date ?? null,
+    discount_amount: latestSubscription?.discount_amount ?? 0,
+    final_price: latestSubscription ? latestSubscription.price - latestSubscription.discount_amount : 0,
+    payment_method: "cash",
+    weight_kg: lastAssessment?.weight_kg ?? null,
+    height_cm: lastAssessment?.height_cm ?? null,
+    injuries: lastAssessment?.notes ?? null,
+    body_type: lastAssessment?.body_type ?? null,
+    diet_type: lastAssessment?.diet_type ?? null,
+    activity_level: lastAssessment?.activity_level ?? null,
+    body_fat_percentage: lastAssessment?.body_fat_percentage ?? null,
+    muscle_mass_kg: lastAssessment?.muscle_mass ?? null,
+    chest: lastAssessment?.chest_cm ?? null,
+    waist: lastAssessment?.waist_cm ?? null,
+    hip: null,
+    arm_right: lastAssessment?.arm_cm ?? null,
+    arm_left: null,
+    leg_right: null,
+    leg_left: null,
+    notes: lastAssessment?.notes ?? null,
+  };
+
+  const handleDeactivateCustomer = async () => {
+    if (isDeactivating) return;
+
+    try {
+      setIsDeactivating(true);
+      const result = await deleteCustomer(profile.id);
+      if (!result.success) {
+        toast.error(result.error || "No se pudo desactivar el cliente");
+        return;
+      }
+      toast.success("Cliente desactivado correctamente");
+      router.refresh();
+      router.push("/panel/clientes");
+    } catch {
+      toast.error("Error inesperado al desactivar cliente");
+    } finally {
+      setIsDeactivating(false);
+      setDeactivateOpen(false);
+    }
+  };
 
   const scrollToSection = (id: string) => {
     // Buscar específicamente el viewport dentro de nuestro contenedor de historial
@@ -152,110 +243,242 @@ export function CustomerHistoryClient({
 
   return (
     <div className="flex flex-col h-full bg-background/50">
-      {/* Fixed Header Section */}
-      <div className="flex-shrink-0 border-b bg-background/95 backdrop-blur shadow-sm">
-        {/* Profile Header */}
-        <div className="flex items-center gap-4 p-4 pt-0 lg:p-6 pb-2">
-          <Link href="/panel/clientes" className="lg:hidden">
-            <Button variant="ghost" size="icon">
-              <IconArrowLeft className="h-5 w-5" />
-            </Button>
-          </Link>
-          <div className="flex items-center gap-4 flex-1 min-w-0">
-            <Avatar className="h-14 w-14 border-2 border-background shadow-sm">
-              <AvatarImage src={profile.avatar_url || ""} alt={profile.full_name} />
-              <AvatarFallback className="text-lg font-bold">{initials}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-2xl font-bold truncate mb-2">{profile.full_name}</h1>
-
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Cuenta:
-                  </span>
-                  <Badge variant={profile.is_active ? "success" : "secondary"} className="h-5 px-2">
+      <AlertModal
+        isOpen={deactivateOpen}
+        onClose={() => setDeactivateOpen(false)}
+        onConfirm={handleDeactivateCustomer}
+        loading={isDeactivating}
+        title="¿Desactivar cliente?"
+        description={
+          <div className="space-y-2 mt-2">
+            <p>
+              El cliente <span className="font-semibold text-foreground">{profile.full_name}</span> pasará a estado
+              inactivo.
+            </p>
+            <div className="rounded-md bg-muted p-3 text-sm">
+              <div className="grid grid-cols-3 gap-2 items-center">
+                <span className="font-medium">Estado:</span>
+                <span className="col-span-2">
+                  <Badge variant={profile.is_active ? "success" : "secondary"}>
                     {profile.is_active ? "Activo" : "Inactivo"}
                   </Badge>
+                </span>
+
+                <span className="font-medium">Suscripción:</span>
+                <span className="col-span-2">
+                  <SubscriptionStatusBadge status={profile.subscription_status} endDate={profile.subscription_end_date} />
+                </span>
+
+                <span className="font-medium">Teléfono:</span>
+                <span className="col-span-2 text-muted-foreground">{profile.phone || "N/A"}</span>
+
+                <span className="font-medium">Vencimiento:</span>
+                <span className="col-span-2 text-muted-foreground">
+                  {profile.subscription_end_date ? new Date(profile.subscription_end_date).toLocaleDateString("es-ES") : "N/A"}
+                </span>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground mt-2">
+              Podrás reactivarlo más tarde desde el historial o editando su perfil.
+            </p>
+          </div>
+        }
+        confirmText="Desactivar"
+      />
+
+      {/* Fixed Header Section */}
+      <div className="flex-shrink-0 border-b bg-gradient-to-b from-background via-background to-muted/20 backdrop-blur-xl z-10 shadow-sm">
+        {/* Profile Header */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 p-6 lg:p-8 pb-4">
+          <div className="flex items-center gap-6 flex-1 min-w-0">
+            <div className="relative group">
+              <Avatar className="h-20 w-20 border-4 border-background shadow-xl scale-100 group-hover:scale-105 transition-transform duration-300">
+                <AvatarImage src={profile.avatar_url || ""} alt={profile.full_name} />
+                <AvatarFallback className="text-2xl font-black bg-gradient-to-br from-primary to-primary/60 text-primary-foreground">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              {profile.is_active && (
+                <div
+                  className="absolute bottom-1 right-1 h-5 w-5 bg-green-500 border-2 border-background rounded-full shadow-lg"
+                  title="Cliente Activo"
+                />
+              )}
+            </div>
+
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-black tracking-tight truncate">{profile.full_name}</h1>
+                <Badge
+                  variant={profile.is_active ? "success" : "secondary"}
+                  className="h-6 px-3 font-bold uppercase tracking-tighter text-[10px]"
+                >
+                  {profile.is_active ? "Activo" : "Inactivo"}
+                </Badge>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
+                  <div className="p-1 rounded bg-muted">
+                    <IconReceipt2 className="h-3.5 w-3.5" />
+                  </div>
+                  <span>{profile.email}</span>
                 </div>
-
-                <div className="hidden sm:block w-px h-3 bg-border" />
-
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Plan:
-                  </span>
-                  <SubscriptionStatusBadge
-                    status={profile.subscription_status}
-                    endDate={profile.subscription_end_date}
-                    className="h-5 px-2"
-                  />
+                <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
+                  <div className="p-1 rounded bg-muted">
+                    <IconCreditCard className="h-3.5 w-3.5" />
+                  </div>
+                  <span>{profile.phone}</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 text-sm text-muted-foreground truncate">
-                <div className="flex items-center gap-1">
-                  <span>{profile.email}</span>
-                </div>
-                <span className="hidden sm:inline">•</span>
-                <span>{profile.phone}</span>
-                <span className="inline sm:hidden">•</span>
-                <span className="inline sm:hidden text-xs">Miembro {memberSinceFormatted}</span>
+              <div className="flex items-center gap-3 pt-1">
+                <SubscriptionStatusBadge
+                  status={profile.subscription_status}
+                  endDate={profile.subscription_end_date}
+                  className="h-6 px-3 rounded-full font-bold uppercase tracking-tighter text-[10px]"
+                />
+                <span className="text-xs text-muted-foreground font-bold uppercase tracking-widest opacity-60">
+                  Miembro {memberSinceFormatted}
+                </span>
               </div>
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-2">
-            <Badge variant="outline" className="text-sm px-3 py-1">
-              Miembro {memberSinceFormatted}
-            </Badge>
-            {/* Actions placeholder */}
-            <Button variant="ghost" size="icon" className="text-muted-foreground">
-              <IconActivity className="w-5 h-5" />
-            </Button>
+
+          <div className="flex items-center gap-3 self-end lg:self-center">
+            <Link href="/panel/clientes">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 font-bold uppercase tracking-tighter text-[10px] h-9 px-4 border-primary/10 hover:bg-primary/5"
+              >
+                <IconArrowLeft className="h-3.5 w-3.5" />
+                Regresar
+              </Button>
+            </Link>
+
+            <CustomerFormSheet
+              mode="edit"
+              customer={customerForEdit}
+              open={editOpen}
+              onOpenChange={setEditOpen}
+              trigger={null}
+            />
+            <RenewSubscriptionSheet
+              customerId={profile.id}
+              customerName={profile.full_name || "Cliente"}
+              customerGender={toCustomerGender(profile.gender)}
+              customerBirthDate={profile.birth_date}
+              lastAssessment={lastAssessmentSafe}
+              open={renewOpen}
+              onOpenChange={setRenewOpen}
+              trigger={null}
+            />
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="gap-2 font-bold uppercase tracking-tighter text-[10px] h-9 px-4 shadow-lg shadow-primary/20"
+                >
+                  <IconActivity className="w-3.5 h-3.5" />
+                  Acciones
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 p-2">
+                <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground font-bold">
+                  Gestión de Cliente
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="gap-2 py-2 cursor-pointer" onClick={() => setEditOpen(true)}>
+                  <IconEdit className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs font-medium">Editar Perfil</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2 py-2 cursor-pointer" onClick={() => setRenewOpen(true)}>
+                  <IconFileCertificate className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs font-medium">Nueva Membresía</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="gap-2 py-2 cursor-pointer text-red-500 hover:text-red-600 hover:bg-red-500/10 focus:text-red-600 focus:bg-red-500/10"
+                  onClick={() => setDeactivateOpen(true)}
+                  disabled={isDeactivating || !profile.is_active}
+                >
+                  <IconTrash className="h-4 w-4" />
+                  <span className="text-xs font-medium">
+                    {profile.is_active ? "Desactivar Cliente" : "Cliente Desactivado"}
+                  </span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
         {/* Navigation Tabs (Fixed below profile) */}
-        <div className="flex items-center gap-1 px-4 lg:px-6 pb-0 overflow-x-auto no-scrollbar">
-          <NavTab active={activeSection === "overview"} onClick={() => scrollToSection("overview")} label="Resumen" />
+        <div className="flex items-center gap-2 px-6 lg:px-8 pb-0 overflow-x-auto no-scrollbar scroll-smooth">
+          <NavTab
+            active={activeSection === "overview"}
+            onClick={() => scrollToSection("overview")}
+            label="Resumen"
+            icon={<IconChartLine className="h-4 w-4" />}
+          />
           <NavTab
             active={activeSection === "subscriptions"}
             onClick={() => scrollToSection("subscriptions")}
-            label="Suscripciones"
+            label="Membresías"
+            icon={<IconFileCertificate className="h-4 w-4" />}
           />
-          <NavTab active={activeSection === "payments"} onClick={() => scrollToSection("payments")} label="Pagos" />
+          <NavTab
+            active={activeSection === "payments"}
+            onClick={() => scrollToSection("payments")}
+            label="Finanzas"
+            icon={<IconCoin className="h-4 w-4" />}
+          />
           <NavTab
             active={activeSection === "access"}
             onClick={() => scrollToSection("access")}
-            label="Registros de Acceso"
+            label="Accesos"
+            icon={<IconRun className="h-4 w-4" />}
           />
-          <NavTab active={activeSection === "body"} onClick={() => scrollToSection("body")} label="Evolución Física" />
+          <NavTab
+            active={activeSection === "body"}
+            onClick={() => scrollToSection("body")}
+            label="Evolution"
+            icon={<IconScale className="h-4 w-4" />}
+          />
         </div>
       </div>
 
       {/* Scrollable Content Area */}
-      <ScrollArea className="flex-1 bg-background/50 h-full" id="customer-content-scroll">
-        <div className="p-4 lg:p-8 space-y-10">
+      <ScrollArea className="flex-1 overflow-hidden" id="customer-content-scroll">
+        <div className="p-6 lg:p-10 space-y-16 max-w-7xl mx-auto pb-20">
           {/* Overview Section (KPIs) */}
-          <section id="overview" className="scroll-mt-2 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <section id="overview" className="scroll-mt-32">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
               <KPICard
                 title="Total Gastado (LTV)"
                 value={`Q${kpis.totalSpent.toLocaleString("es-GT", { minimumFractionDigits: 2 })}`}
-                icon={<IconCoin className="h-5 w-5 text-emerald-500" />}
-                description="Valor de vida del cliente"
+                icon={<IconCoin className="h-6 w-6" />}
+                description="Valor acumulado histórico"
+                trend="Finanzas"
+                variant="emerald"
               />
               <KPICard
                 title="Total de Visitas"
                 value={kpis.totalVisits.toString()}
-                icon={<IconCalendarStats className="h-5 w-5 text-blue-500" />}
+                icon={<IconCalendarStats className="h-6 w-6" />}
                 description="Ingresos registrados"
+                trend="Actividad"
+                variant="blue"
               />
               <KPICard
                 title="Peso Actual"
-                value={kpis.currentWeight ? `${kpis.currentWeight} kg` : "N/A"}
-                icon={<IconScale className="h-5 w-5 text-purple-500" />}
+                value={kpis.currentWeight ? `${kpis.currentWeight} kg` : "N/D"}
+                icon={<IconScale className="h-6 w-6" />}
                 description={kpis.initialWeight ? `Inicial: ${kpis.initialWeight} kg` : "Sin registro inicial"}
+                trend="Salud"
+                variant="purple"
               />
               <KPICard
                 title="Cambio de Peso"
@@ -267,42 +490,49 @@ export function CustomerHistoryClient({
                 icon={
                   kpis.weightChange !== null && kpis.weightChange !== undefined ? (
                     kpis.weightChange > 0 ? (
-                      <IconTrendingUp className="h-5 w-5 text-red-500" />
+                      <IconTrendingUp className="h-6 w-6" />
                     ) : kpis.weightChange < 0 ? (
-                      <IconTrendingDown className="h-5 w-5 text-green-500" />
+                      <IconTrendingDown className="h-6 w-6" />
                     ) : (
-                      <IconMinus className="h-5 w-5 text-gray-500" />
+                      <IconMinus className="h-6 w-6" />
                     )
                   ) : (
-                    <IconBarbell className="h-5 w-5 text-gray-400" />
+                    <IconBarbell className="h-6 w-6" />
                   )
                 }
-                description="Desde primera medición"
+                description="Desde ingreso"
+                trend="Evolución"
+                variant={kpis.weightChange && kpis.weightChange > 0 ? "orange" : "emerald"}
               />
             </div>
           </section>
-          <section id="subscriptions" className="scroll-mt-4">
-            <SectionHeader icon={<IconFileCertificate />} title="Historial de Suscripciones" />
+
+          <section id="subscriptions" className="scroll-mt-32 space-y-6">
+            <SectionHeader icon={<IconFileCertificate />} title="Membresías y Planes" />
             <SubscriptionHistoryTab
               subscriptionHistory={subscriptionHistory}
               customerId={profile.id}
               customerName={profile.full_name || "Cliente"}
+              customerGender={toCustomerGender(profile.gender)}
+              customerBirthDate={profile.birth_date}
               lastAssessment={lastAssessmentSafe}
             />
           </section>
-          <section id="payments" className="scroll-mt-4">
-            <SectionHeader icon={<IconCreditCard />} title="Historial de Pagos" />
+
+          <section id="payments" className="scroll-mt-32 space-y-6">
+            <SectionHeader icon={<IconCreditCard />} title="Historial Financiero" />
             <PaymentHistoryTab paymentHistory={paymentHistory} />
           </section>
-          <section id="access" className="scroll-mt-4">
-            <SectionHeader icon={<IconRun />} title="Registros de Acceso" />
+
+          <section id="access" className="scroll-mt-32 space-y-6">
+            <SectionHeader icon={<IconRun />} title="Control de Asistencia" />
             <AccessHistoryTab accessHistory={accessHistory} heatmapData={heatmapData} />
           </section>
-          <section id="body" className="scroll-mt-4">
-            <SectionHeader icon={<IconActivity />} title="Evolución Física" />
+
+          <section id="body" className="scroll-mt-32 space-y-6">
+            <SectionHeader icon={<IconActivity />} title="Progreso Somatométrico" />
             <BodyAssessmentTab bodyAssessments={bodyAssessments} />
           </section>
-          <div className="h-20" /> {/* Extra space at bottom */}
         </div>
       </ScrollArea>
     </div>
@@ -313,50 +543,115 @@ export function CustomerHistoryClient({
 
 function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
-    <div className="flex items-center gap-2 mb-4">
-      <div className="p-2 bg-primary/10 rounded-lg text-primary">{icon}</div>
-      <h3 className="text-lg font-semibold">{title}</h3>
+    <div className="flex items-center gap-3">
+      <div className="p-2.5 bg-primary/10 rounded-xl text-primary shadow-sm shadow-primary/5">{icon}</div>
+      <h3 className="text-xl font-black tracking-tight">{title}</h3>
+      <div className="h-px bg-gradient-to-r from-primary/20 to-transparent flex-1 ml-4" />
     </div>
   );
 }
 
-function NavTab({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function NavTab({
+  active,
+  onClick,
+  label,
+  icon,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  icon: React.ReactNode;
+}) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        "px-4 py-3 text-sm font-medium border-b-2 transition-all whitespace-nowrap",
+        "px-4 py-4 text-[11px] font-bold uppercase tracking-widest border-b-2 transition-all whitespace-nowrap flex items-center gap-2 outline-none",
         active
           ? "border-primary text-primary"
           : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted",
       )}
     >
+      <span className={cn("transition-transform duration-300", active && "scale-110")}>{icon}</span>
       {label}
     </button>
   );
 }
 
-// Componente de tarjeta KPI
-function KPICard({
-  title,
-  value,
-  icon,
-  description,
-}: {
+interface KPICardProps {
   title: string;
   value: string;
   icon: React.ReactNode;
   description: string;
-}) {
+  trend?: string;
+  variant?: "primary" | "emerald" | "blue" | "purple" | "orange";
+}
+
+function KPICard({ title, value, icon, description, trend, variant = "primary" }: KPICardProps) {
+  const styles = {
+    primary: {
+      card: "border-primary/10 hover:border-primary/20",
+      icon: "bg-primary/10 text-primary group-hover:bg-primary/20",
+      trend: "bg-primary/10 text-primary border-primary/20",
+      line: "bg-primary",
+    },
+    emerald: {
+      card: "border-emerald-500/10 hover:border-emerald-500/20",
+      icon: "bg-emerald-500/10 text-emerald-600 group-hover:bg-emerald-500/20",
+      trend: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+      line: "bg-emerald-500",
+    },
+    blue: {
+      card: "border-blue-500/10 hover:border-blue-500/20",
+      icon: "bg-blue-500/10 text-blue-600 group-hover:bg-blue-500/20",
+      trend: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+      line: "bg-blue-500",
+    },
+    purple: {
+      card: "border-purple-500/10 hover:border-purple-500/20",
+      icon: "bg-purple-500/10 text-purple-600 group-hover:bg-purple-500/20",
+      trend: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+      line: "bg-purple-500",
+    },
+    orange: {
+      card: "border-orange-500/10 hover:border-orange-500/20",
+      icon: "bg-orange-500/10 text-orange-600 group-hover:bg-orange-500/20",
+      trend: "bg-orange-500/10 text-orange-600 border-orange-500/20",
+      line: "bg-orange-500",
+    },
+  };
+
+  const currentStyle = styles[variant];
+
   return (
-    <Card className="border-none shadow-sm bg-card/50 hover:bg-card transition-colors">
+    <Card
+      className={cn(
+        "shadow-sm bg-card transition-all duration-300 group overflow-hidden relative border hover:shadow-md",
+        currentStyle.card,
+      )}
+    >
+      <div className={cn("absolute top-0 left-0 w-1 h-full opacity-80", currentStyle.line)} />
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{title}</CardTitle>
-        {icon}
+        <div className="space-y-1.5">
+          <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">
+            {title}
+          </CardTitle>
+          {trend && (
+            <Badge
+              variant="outline"
+              className={cn("text-[8px] font-bold uppercase px-1.5 h-4 border", currentStyle.trend)}
+            >
+              {trend}
+            </Badge>
+          )}
+        </div>
+        <div className={cn("p-2 rounded-xl transition-all duration-300 group-hover:scale-110", currentStyle.icon)}>
+          {icon}
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        <p className="text-xs text-muted-foreground mt-1">{description}</p>
+        <div className="text-3xl font-black tracking-tight">{value}</div>
+        <p className="text-[11px] text-muted-foreground mt-2 font-medium">{description}</p>
       </CardContent>
     </Card>
   );

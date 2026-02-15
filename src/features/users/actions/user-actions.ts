@@ -36,6 +36,8 @@ import { ExtendedColumnSort } from "@/types/data-table";
  */
 export async function getUsers(params?: {
   sort?: ExtendedColumnSort<UserData>[] | null;
+  role?: string | string[] | null;
+  full_name?: string | null;
 }): Promise<{ success: boolean; data?: UserData[]; error?: string }> {
   try {
     const access = await getUserAccessContext();
@@ -44,7 +46,7 @@ export async function getUsers(params?: {
       return { success: false, error: "No autorizado: Solo administradores" };
     }
 
-    const { sort } = params || {};
+    const { sort, role, full_name } = params || {};
 
     // Use Admin Client to bypass RLS and ensure we get all users
     const adminClient = createAdminClient();
@@ -56,6 +58,19 @@ export async function getUsers(params?: {
 
     // 1. Get profiles with dynamic sorting
     let query = adminClient.from("profiles").select("id, full_name, role, created_at");
+
+    // Apply Filters
+    if (role) {
+      const roles = typeof role === "string" ? role.split(",") : Array.isArray(role) ? role : [role];
+      if (roles.length > 0) {
+        query = query.in("role", roles);
+      }
+    }
+
+    if (full_name) {
+      query = query.ilike("full_name", `%${full_name}%`);
+    }
+
     let hasAppliedSort = false;
 
     if (sort && sort.length > 0) {
