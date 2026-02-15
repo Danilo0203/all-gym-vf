@@ -10,6 +10,6 @@ export default async function Home() {
   if (user) {
     redirect("/panel/resumen");
   } else {
-    redirect("/inciar-sesion");
+    redirect("/iniciar-sesion");
   }
 }

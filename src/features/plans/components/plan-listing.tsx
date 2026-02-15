@@ -11,7 +11,7 @@ export default async function PlanListingPage() {
   const supabase = await createClient();
 
   // Query plans with filtering
-  let query = supabase.from("plans").select("*", { count: "exact" }).order("id", { ascending: true });
+  let query = supabase.from("plans").select("*", { count: "exact" });
 
   // Apply text filter
   if (name) {
