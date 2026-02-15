@@ -1,49 +1,21 @@
 "use client";
 
-import { useCurrentUser } from "../hooks/use-profile";
 import { ProfileForm } from "./profile-form";
 import { PasswordForm } from "./password-form";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { IconMail, IconCalendar, IconShieldCheck } from "@tabler/icons-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import type { ProfileData } from "../actions/profile-actions";
 
-export default function ProfileViewPage() {
-  const { data: user, isLoading, error } = useCurrentUser();
+interface ProfileViewPageProps {
+  user: ProfileData;
+}
 
-  // Loading state
-  if (isLoading) {
-    return (
-      <div className="flex flex-col gap-6 p-6">
-        <div className="flex items-center gap-6">
-          <Skeleton className="h-24 w-24 rounded-full" />
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-4 w-32" />
-          </div>
-        </div>
-        <Skeleton className="h-64 w-full" />
-        <Skeleton className="h-48 w-full" />
-      </div>
-    );
-  }
-
-  // Error state
-  if (error || !user) {
-    return (
-      <div className="flex flex-col items-center justify-center p-8 text-center">
-        <div className="rounded-lg bg-destructive/10 p-6 text-destructive">
-          <p className="text-lg font-medium">Error al cargar el perfil</p>
-          <p className="text-sm">{error?.message || "No se pudo obtener la información del usuario"}</p>
-        </div>
-      </div>
-    );
-  }
-
+export default function ProfileViewPage({ user }: ProfileViewPageProps) {
   // Get initials for avatar fallback
   const getInitials = (name: string | null | undefined) => {
     if (!name) return "U";

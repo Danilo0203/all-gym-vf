@@ -3,9 +3,7 @@ import { CustomerTable } from "./customer-tables/customer-table";
 import { Customer } from "./customer-tables/columns";
 import { searchParamsCache } from "@/lib/searchparams";
 
-type CustomerListingPageProps = {};
-
-export default async function CustomerListingPage({}: CustomerListingPageProps) {
+export default async function CustomerListingPage() {
   const page = searchParamsCache.get("page");
   const pageLimit = searchParamsCache.get("perPage");
   const fullName = searchParamsCache.get("full_name");
@@ -84,36 +82,27 @@ export default async function CustomerListingPage({}: CustomerListingPageProps) 
   const to = from + filters.limit - 1;
 
   // Sorting
-  if (sort) {
-    // sort format: "column.dir" (e.g., "full_name.desc")
-    // We need to split safely
-    // create a mockUrl to use searchParams if needed, or just split string
-    // The nuqs parser for 'sort' isn't explicitly shown in the provided snippet but assumed to be handled or passed as string.
-    // If `sort` is an object from `searchParamsCache`?  Let's check `lib/searchparams.ts` if needed.
-    // Assuming it returns standard string or object? The previous code didn't use it.
-    // Implementation uses `useQueryState` which likely serializes to string "col.dir" or similar.
-    // Let's assume standard "field.desc" format for now based on usual shadcn/tanstack patterns.
-
-    // NOTE: We need to ensure `sort` is a string. If it's an object/array, we need to handle it.
-    // `searchParamsCache` is typed. Let's assume string for single sort.
-
-    // If sort comes as an object/array (from nuqs parsers), we might need to adapt.
-    // For now, let's try to handle string splitting.
-
-    // However, check `searchParamsCache` definition in `src/lib/searchparams.ts` would be ideal.
-    // I'll proceed assuming it returns the raw value or I should have checked it.
-    // Wait, `customer-listing` uses `searchParamsCache.get("page")` etc.
-    // I need to know if `sort` is defined in `searchParamsCache`.
-
-    // Use a safe default for now or just check if it's string.
-    if (typeof sort === "string") {
-      const [column, order] = sort.split(".");
-      if (column && (order === "asc" || order === "desc")) {
-        query = query.order(column, { ascending: order === "asc" });
+  const allowedSortColumns = new Set([
+    "full_name",
+    "is_active",
+    "subscription_status",
+    "plan_name",
+    "subscription_start_date",
+    "subscription_end_date",
+    "phone",
+    "last_check_in",
+  ]);
+  let hasAppliedSort = false;
+  if (sort && sort.length > 0) {
+    sort.forEach((s) => {
+      if (allowedSortColumns.has(s.id)) {
+        query = query.order(s.id, { ascending: !s.desc, nullsFirst: false });
+        hasAppliedSort = true;
       }
-    }
-    // If it's not present, default sort:
-  } else {
+    });
+  }
+
+  if (!hasAppliedSort) {
     query = query.order("subscription_status", { ascending: true });
   }
 

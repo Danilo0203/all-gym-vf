@@ -2,16 +2,26 @@
 import { AlertModal } from "@/components/modal/alert-modal";
 import { Button } from "@/components/ui/button";
 import { Customer } from "./columns";
-import { IconEdit, IconTrash, IconLoader2, IconHistory } from "@tabler/icons-react";
+import { IconEdit, IconTrash, IconLoader2, IconFingerprint } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CustomerFormSheet, CustomerData } from "../customer-form-sheet";
-import { deleteCustomer } from "../../actions/customer-actions";
+import { deleteCustomer, enrollBiometricOnDevice } from "../../actions/customer-actions";
 import { toast } from "sonner";
 import { useCustomer } from "../../hooks/use-customers";
 import { Badge } from "@/components/ui/badge";
 import { SubscriptionStatusBadge } from "@/components/subscription-status-badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface CellActionProps {
   data: Customer;
@@ -21,6 +31,9 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false); // Modal de borrado
   const [editOpen, setEditOpen] = useState(false); // Sheet de edición
+  const [biometricOpen, setBiometricOpen] = useState(false);
+  const [deviceSn, setDeviceSn] = useState("CN4C232260011");
+  const [biometricLoading, setBiometricLoading] = useState(false);
   const router = useRouter();
 
   // Fetch automático cuando se abre el modal
@@ -52,6 +65,29 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
     } finally {
       setLoading(false);
       setOpen(false);
+    }
+  };
+
+  const onEnrollBiometric = async () => {
+    const sn = deviceSn.trim();
+    if (!sn) {
+      toast.error("Ingresa el serial del dispositivo");
+      return;
+    }
+    setBiometricLoading(true);
+    try {
+      const result = await enrollBiometricOnDevice(data.id, sn);
+      if (result.success) {
+        toast.success("¡Mira el dispositivo! Debería estar pidiendo el rostro ahora.");
+        setBiometricOpen(false);
+        setDeviceSn("");
+      } else {
+        toast.error(result.error || "Error al enviar comando");
+      }
+    } catch (error) {
+      toast.error("Error al enviar comando al dispositivo");
+    } finally {
+      setBiometricLoading(false);
     }
   };
 
@@ -113,6 +149,37 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
         trigger={null}
       />
 
+      <Dialog open={biometricOpen} onOpenChange={setBiometricOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Registrar rostro / biometría</DialogTitle>
+            <DialogDescription>
+              El dispositivo abrirá la cámara para registrar el rostro del cliente. Ingresa el serial del reloj (ej.
+              CN4C232260011) y asegúrate de que el cliente esté frente al dispositivo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 py-2">
+            <Label htmlFor="device-sn">Serial del dispositivo</Label>
+            <Input
+              id="device-sn"
+              placeholder="CN4C232260011"
+              value={deviceSn}
+              onChange={(e) => setDeviceSn(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && onEnrollBiometric()}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBiometricOpen(false)} disabled={biometricLoading}>
+              Cancelar
+            </Button>
+            <Button onClick={onEnrollBiometric} disabled={biometricLoading}>
+              {biometricLoading && <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Enviar al dispositivo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex items-center gap-2">
         <TooltipProvider>
           <Tooltip>
@@ -137,6 +204,28 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
             </TooltipTrigger>
             <TooltipContent>
               <p>Editar cliente</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 hover:bg-muted"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBiometricOpen(true);
+                }}
+              >
+                <IconFingerprint className="h-4 w-4 text-emerald-600" />
+                <span className="sr-only">Registrar rostro / biometría</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Registrar rostro / biometría</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

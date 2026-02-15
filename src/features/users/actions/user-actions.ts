@@ -1,7 +1,7 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getUserAccessContext } from "@/lib/auth/authorization";
 import { revalidatePath } from "next/cache";
 import { UserRole } from "@/types";
 
@@ -28,33 +28,51 @@ export interface UpdateUserData {
   password?: string;
 }
 
+import { ExtendedColumnSort } from "@/types/data-table";
+
 /**
  * Get all users from the profiles table
  * Note: specific columns are selected to avoid over-fetching
  */
-export async function getUsers(): Promise<{ success: boolean; data?: UserData[]; error?: string }> {
+export async function getUsers(params?: {
+  sort?: ExtendedColumnSort<UserData>[] | null;
+}): Promise<{ success: boolean; data?: UserData[]; error?: string }> {
   try {
-    const supabase = await createClient();
-
-    // Check if current user is admin or employee
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { success: false, error: "No autenticado" };
-
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-    if (profile?.role !== "admin" && profile?.role !== "employee") {
-      return { success: false, error: "No autorizado: Se requiere rol de administrador o empleado" };
+    const access = await getUserAccessContext();
+    if (!access.isAuthenticated) return { success: false, error: "No autenticado" };
+    if (!access.isAdmin) {
+      return { success: false, error: "No autorizado: Solo administradores" };
     }
+
+    const { sort } = params || {};
 
     // Use Admin Client to bypass RLS and ensure we get all users
     const adminClient = createAdminClient();
+    const sortColumnMap: Partial<Record<string, "full_name" | "role" | "created_at">> = {
+      full_name: "full_name",
+      role: "role",
+      created_at: "created_at",
+    };
 
-    // 1. Get profiles
-    const { data: profiles, error: profilesError } = await adminClient
-      .from("profiles")
-      .select("id, full_name, role, created_at")
-      .order("created_at", { ascending: false });
+    // 1. Get profiles with dynamic sorting
+    let query = adminClient.from("profiles").select("id, full_name, role, created_at");
+    let hasAppliedSort = false;
+
+    if (sort && sort.length > 0) {
+      sort.forEach((s) => {
+        const column = sortColumnMap[s.id];
+        if (column) {
+          query = query.order(column, { ascending: !s.desc, nullsFirst: false });
+          hasAppliedSort = true;
+        }
+      });
+    }
+
+    if (!hasAppliedSort) {
+      query = query.order("created_at", { ascending: false });
+    }
+
+    const { data: profiles, error: profilesError } = await query;
 
     if (profilesError) {
       console.error("Error fetching profiles:", profilesError);
@@ -93,13 +111,11 @@ export async function getUsers(): Promise<{ success: boolean; data?: UserData[];
  */
 export async function createUser(data: CreateUserData): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await createClient();
-
-    // Check permission (mock check for now, relies on middleware/RBAC)
-    const {
-      data: { user: currentUser },
-    } = await supabase.auth.getUser();
-    if (!currentUser) return { success: false, error: "No autenticado" };
+    const access = await getUserAccessContext();
+    if (!access.isAuthenticated) return { success: false, error: "No autenticado" };
+    if (!access.isAdmin) {
+      return { success: false, error: "No autorizado: Solo administradores" };
+    }
 
     const adminClient = createAdminClient();
 
@@ -153,10 +169,16 @@ export async function createUser(data: CreateUserData): Promise<{ success: boole
  */
 export async function updateUser(data: UpdateUserData): Promise<{ success: boolean; error?: string }> {
   try {
+    const access = await getUserAccessContext();
+    if (!access.isAuthenticated) return { success: false, error: "No autenticado" };
+    if (!access.isAdmin) {
+      return { success: false, error: "No autorizado: Solo administradores" };
+    }
+
     const adminClient = createAdminClient();
 
     // 1. Update Profile data
-    const updateData: any = {};
+    const updateData: Pick<UpdateUserData, "full_name" | "role"> = {};
     if (data.full_name) updateData.full_name = data.full_name;
     if (data.role) updateData.role = data.role;
 
@@ -199,6 +221,12 @@ export async function updateUser(data: UpdateUserData): Promise<{ success: boole
  */
 export async function deleteUser(userId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const access = await getUserAccessContext();
+    if (!access.isAuthenticated) return { success: false, error: "No autenticado" };
+    if (!access.isAdmin) {
+      return { success: false, error: "No autorizado: Solo administradores" };
+    }
+
     const adminClient = createAdminClient();
 
     // Delete from Auth (Cascade should delete from profiles typically, but strictly speaking depends on FK)

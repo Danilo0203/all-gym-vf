@@ -42,26 +42,10 @@ export const navItems: NavItem[] = [
     items: [],
   },
   {
-    title: "Usuarios",
-    url: "/panel/usuarios",
-    icon: "teams",
-    isActive: false,
-    access: { role: ["admin"] },
-    items: [],
-  },
-  {
     title: "Clientes",
     url: "/panel/clientes",
     icon: "customers",
     isActive: false,
-    items: [],
-  },
-  {
-    title: "Planes",
-    url: "/panel/planes",
-    icon: "billing",
-    isActive: false,
-    access: { role: ["admin"] },
     items: [],
   },
   {
@@ -71,6 +55,25 @@ export const navItems: NavItem[] = [
     isActive: false,
     access: { role: ["admin"] },
     items: [],
+  },
+  {
+    title: "Administración",
+    url: "#", // Placeholder as there is no direct link for the parent
+    icon: "settings",
+    isActive: true,
+    access: { role: ["admin"] },
+    items: [
+      {
+        title: "Usuarios",
+        url: "/panel/usuarios",
+        icon: "teams",
+      },
+      {
+        title: "Planes",
+        url: "/panel/planes",
+        icon: "billing",
+      },
+    ],
   },
   {
     title: "Cuenta",

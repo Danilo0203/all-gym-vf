@@ -633,3 +633,66 @@ export async function reactivateCustomer(id: string) {
     return { success: false, error: "Error inesperado al reactivar" };
   }
 }
+
+/**
+ * Envía el comando ENROLL_USER al dispositivo SpeedFace H5L.
+ * Backup=50 = Rostro (Face), Backup=51 = Palma. Sin Backup abre el menú para elegir.
+ * Usa el cliente admin para el insert en device_commands (evita fallos por RLS).
+ */
+export async function enrollBiometricOnDevice(
+  customerId: string,
+  deviceSn: string,
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    // 0. Solo admins pueden enviar comandos al dispositivo
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: "Debes iniciar sesión." };
+    }
+    const { data: callerProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    if (callerProfile?.role !== "admin") {
+      return { success: false, error: "Solo un administrador puede registrar biometría." };
+    }
+
+    // 1. Obtener el ID biométrico del perfil (con admin para evitar RLS en profiles)
+    const adminClient = createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data: profile, error: profileError } = await adminClient
+      .from("profiles")
+      .select("biometric_id, full_name")
+      .eq("id", customerId)
+      .single();
+
+    if (profileError || !profile) {
+      return { success: false, error: "No se encontró el cliente." };
+    }
+
+    if (!profile.biometric_id) {
+      return { success: false, error: "El cliente no tiene un ID Numérico (biometric_id) asignado." };
+    }
+
+    // 2. Insertar el comando en la cola (admin bypassa RLS en device_commands)
+    // SpeedFace H5L: Backup=50 = Rostro (Face), Backup=51 = Palma. Sin Backup abre menú para elegir.
+    const command = `ENROLL_USER PIN=${profile.biometric_id} Backup=50`;
+    const { error: insertError } = await adminClient.from("device_commands").insert({
+      device_id: deviceSn,
+      command: command,
+      executed: false,
+    });
+
+    if (insertError) {
+      console.error("Error al enviar comando de biometría:", insertError);
+      return { success: false, error: "Error al guardar el comando en la base de datos." };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Exception in enrollBiometricOnDevice:", error);
+    return { success: false, error: "Error inesperado al procesar la solicitud." };
+  }
+}

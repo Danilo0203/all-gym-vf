@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { getUserAccessContext } from '@/lib/auth/authorization';
 import { revalidatePath } from 'next/cache';
 
 export interface Plan {
@@ -16,7 +17,23 @@ export interface Plan {
 export type CreatePlanData = Omit<Plan, 'id' | 'created_at'>;
 export type UpdatePlanData = Partial<CreatePlanData>;
 
+async function ensureAdmin() {
+  const access = await getUserAccessContext();
+  if (!access.isAuthenticated) {
+    return { success: false, error: 'No autenticado' } as const;
+  }
+  if (!access.isAdmin) {
+    return { success: false, error: 'No autorizado: Solo administradores' } as const;
+  }
+  return null;
+}
+
 export async function getPlans(includeInactive = false) {
+  const authError = await ensureAdmin();
+  if (authError) {
+    throw new Error(authError.error);
+  }
+
   const supabase = await createClient();
   let query = supabase.from('plans').select('*').order('id', { ascending: true });
 
@@ -35,6 +52,11 @@ export async function getPlans(includeInactive = false) {
 }
 
 export async function getPlanById(id: number) {
+  const authError = await ensureAdmin();
+  if (authError) {
+    return null;
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('plans')
@@ -51,6 +73,9 @@ export async function getPlanById(id: number) {
 }
 
 export async function createPlan(data: CreatePlanData) {
+  const authError = await ensureAdmin();
+  if (authError) return authError;
+
   const supabase = await createClient();
   
   const { data: newPlan, error } = await supabase
@@ -77,6 +102,9 @@ export async function createPlan(data: CreatePlanData) {
 }
 
 export async function updatePlan(id: number, data: UpdatePlanData) {
+  const authError = await ensureAdmin();
+  if (authError) return authError;
+
   const supabase = await createClient();
   
   const { error } = await supabase
@@ -100,6 +128,9 @@ export async function updatePlan(id: number, data: UpdatePlanData) {
 }
 
 export async function deletePlan(id: number) {
+  const authError = await ensureAdmin();
+  if (authError) return authError;
+
   const supabase = await createClient();
   
   // Realmente no borramos, solo desactivamos para preservar integridad referencial

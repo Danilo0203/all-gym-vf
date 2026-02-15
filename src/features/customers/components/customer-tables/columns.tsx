@@ -22,6 +22,7 @@ export type Customer = {
   plan_name: string | null;
   last_check_in: string | null;
   is_active: boolean | null;
+  email: string | null;
 };
 
 export interface PlanOption {

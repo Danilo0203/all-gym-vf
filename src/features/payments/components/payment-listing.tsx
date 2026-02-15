@@ -1,51 +1,52 @@
-'use client';
+import { getPayments } from "@/features/payments/actions/get-payments";
+import { PaymentTable } from "./payment-tables/payment-table";
+import { MethodOption } from "./payment-tables/columns";
+import { searchParamsCache } from "@/lib/searchparams";
 
-import { useQueryState, parseAsInteger, parseAsString } from 'nuqs';
-import { usePayments } from '@/features/payments/hooks/use-payments';
-import { PaymentTable } from './payment-tables/payment-table';
-import { MethodOption } from './payment-tables/columns';
-import { DataTableSkeleton } from '@/components/ui/table/data-table-skeleton';
+export default async function PaymentListingPage() {
+  const page = searchParamsCache.get("page");
+  const perPage = searchParamsCache.get("perPage");
+  const user_name = searchParamsCache.get("user_name");
+  const method = searchParamsCache.get("method");
+  const payment_date = searchParamsCache.get("payment_date");
+  const subscription_status = searchParamsCache.get("subscription_status");
+  const sort = searchParamsCache.get("sort");
 
-export default function PaymentListingPage() {
-  const [page] = useQueryState('page', parseAsInteger.withDefault(1));
-  const [perPage] = useQueryState('perPage', parseAsInteger.withDefault(10));
-  const [user_name] = useQueryState('user_name', parseAsString);
-  const [method] = useQueryState('method', parseAsString);
-  const [payment_date] = useQueryState('payment_date', parseAsString);
-  const [subscription_status] = useQueryState('subscription_status', parseAsString);
-
-  const { data, isLoading, isError, error } = usePayments({
+  const filters = {
     page,
     perPage,
-    user_name,
-    method,
-    payment_date,
-    subscription_status
-  });
+    user_name: user_name ?? undefined,
+    method: method ?? undefined,
+    payment_date: payment_date ?? undefined,
+    subscription_status: subscription_status ?? undefined,
+    sort: sort,
+  };
 
-  const methodOptions: MethodOption[] = [
-    { label: 'Efectivo', value: 'cash' },
-    { label: 'Tarjeta', value: 'card' },
-    { label: 'Transferencia', value: 'transfer' }
-  ];
+  let data: import("./payment-tables/columns").Payment[] = [];
+  let totalItems = 0;
+  let errorMsg = null;
 
-  if (isLoading) {
-    return <DataTableSkeleton columnCount={6} rowCount={perPage} filterCount={3} />;
+  try {
+    const result = await getPayments(filters);
+    data = result.data;
+    totalItems = result.total;
+  } catch (err) {
+    errorMsg = err instanceof Error ? err.message : "Error desconocido";
   }
 
-  if (isError) {
+  const methodOptions: MethodOption[] = [
+    { label: "Efectivo", value: "cash" },
+    { label: "Tarjeta", value: "card" },
+    { label: "Transferencia", value: "transfer" },
+  ];
+
+  if (errorMsg) {
     return (
       <div className="p-4 border border-destructive/50 bg-destructive/10 rounded-lg text-destructive">
-        Error al cargar pagos: {error instanceof Error ? error.message : 'Unknown error'}
+        Error al cargar pagos: {errorMsg}
       </div>
     );
   }
 
-  return (
-    <PaymentTable
-      data={data?.data || []}
-      totalItems={data?.total || 0}
-      methodOptions={methodOptions}
-    />
-  );
+  return <PaymentTable data={data} totalItems={totalItems} methodOptions={methodOptions} />;
 }

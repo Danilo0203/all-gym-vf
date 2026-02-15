@@ -5,6 +5,8 @@ import { DataTableSkeleton } from '@/components/ui/table/data-table-skeleton';
 import { PlanFormSheet } from '@/features/plans/components/plan-form-sheet';
 import { searchParamsCache } from '@/lib/searchparams';
 import { SearchParams } from 'nuqs/server';
+import { getUserAccessContext } from '@/lib/auth/authorization';
+import { redirect } from 'next/navigation';
 
 export const metadata = {
   title: 'Dashboard : Planes'
@@ -15,6 +17,14 @@ type pageProps = {
 };
 
 export default async function Page(props: pageProps) {
+  const access = await getUserAccessContext();
+  if (!access.isAuthenticated) {
+    redirect('/iniciar-sesion');
+  }
+  if (!access.isAdmin) {
+    redirect('/panel');
+  }
+
   const searchParams = await props.searchParams;
   // Allow nested RSCs to access the search params (in a type-safe way)
   searchParamsCache.parse(searchParams);

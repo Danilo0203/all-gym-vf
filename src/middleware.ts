@@ -58,32 +58,16 @@ export async function middleware(request: NextRequest) {
   const isAdminRoute = adminOnlyRoutes.some((route) => request.nextUrl.pathname.startsWith(route));
 
   if (user && isAdminRoute) {
-    let role = user.user_metadata?.role;
-
-    // If role is missing in metadata, check profile table
-    if (!role) {
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-      role = profile?.role;
-    }
-
-    console.log("🔍 Middleware - User accessing admin route:", {
-      path: request.nextUrl.pathname,
-      userId: user.id,
-      email: user.email,
-      roleFromMetadata: user.user_metadata?.role,
-      finalRole: role,
-    });
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    const role = profile?.role ?? user.user_metadata?.role;
 
     // Only admin role can access these routes
     if (role !== "admin") {
-      console.log("❌ Access denied - Role:", role, "attempting to access:", request.nextUrl.pathname);
       // Redirect to panel root
       const url = request.nextUrl.clone();
       url.pathname = "/panel";
       return NextResponse.redirect(url);
     }
-
-    console.log("✅ Access granted - Admin role confirmed");
   }
 
   return response;

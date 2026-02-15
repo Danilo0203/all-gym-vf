@@ -1,30 +1,32 @@
 import PageContainer from "@/components/layout/page-container";
-import { getUsers } from "@/features/users/actions/user-actions";
-import { UsersTable } from "@/features/users/components/users-table";
+import UserListing from "@/features/users/components/user-listing";
 import { Suspense } from "react";
 import { DataTableSkeleton } from "@/components/ui/table/data-table-skeleton";
 import { CreateUserButton } from "@/features/users/components/create-user-button";
+import { getUserAccessContext } from "@/lib/auth/authorization";
+import { searchParamsCache } from "@/lib/searchparams";
+import { redirect } from "next/navigation";
+import { SearchParams } from "nuqs/server";
 
 export const metadata = {
   title: "Dashboard: Usuarios",
 };
 
-export default async function UsersPage() {
-  const { data: users, success, error } = await getUsers();
+type PageProps = {
+  searchParams: Promise<SearchParams>;
+};
 
-  if (!success || !users) {
-    // Handle error state appropriately
-    return (
-      <PageContainer
-        scrollable={false}
-        pageTitle="Usuarios"
-        pageDescription="Administración de usuarios del sistema"
-        pageHeaderAction={<CreateUserButton />}
-      >
-        <div className="p-4 text-red-500">Error al cargar usuarios: {error}</div>
-      </PageContainer>
-    );
+export default async function UsersPage(props: PageProps) {
+  const access = await getUserAccessContext();
+  if (!access.isAuthenticated) {
+    redirect("/iniciar-sesion");
   }
+  if (!access.isAdmin) {
+    redirect("/panel");
+  }
+
+  const searchParams = await props.searchParams;
+  searchParamsCache.parse(searchParams);
 
   return (
     <PageContainer
@@ -33,8 +35,8 @@ export default async function UsersPage() {
       pageDescription="Administración de usuarios del sistema"
       pageHeaderAction={<CreateUserButton />}
     >
-      <Suspense fallback={<DataTableSkeleton columnCount={4} rowCount={5} />}>
-        <UsersTable data={users} />
+      <Suspense fallback={<DataTableSkeleton columnCount={4} rowCount={8} />}>
+        <UserListing />
       </Suspense>
     </PageContainer>
   );

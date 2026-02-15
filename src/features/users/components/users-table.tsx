@@ -202,6 +202,7 @@ export function UsersTable({ data }: UsersTableProps) {
     data,
     columns,
     pageCount: 1,
+    shallow: false,
   });
 
   return (

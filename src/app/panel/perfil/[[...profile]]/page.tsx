@@ -1,9 +1,15 @@
-import ProfileViewPage from '@/features/profile/components/profile-view-page';
+import { Suspense } from "react";
+import ProfileWrapper from "@/features/profile/components/profile-wrapper";
+import { ProfileSkeleton } from "@/features/profile/components/profile-skeleton";
 
 export const metadata = {
-  title: 'Dashboard : Profile'
+  title: "Dashboard : Profile",
 };
 
 export default async function Page() {
-  return <ProfileViewPage />;
+  return (
+    <Suspense fallback={<ProfileSkeleton />}>
+      <ProfileWrapper />
+    </Suspense>
+  );
 }

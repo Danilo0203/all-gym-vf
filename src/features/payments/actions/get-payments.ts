@@ -1,7 +1,9 @@
-'use server';
+"use server";
 
-import { createClient } from '@/lib/supabase/server';
-import { Payment } from '../components/payment-tables/columns';
+import { createClient } from "@/lib/supabase/server";
+import { getUserAccessContext } from "@/lib/auth/authorization";
+import { Payment } from "../components/payment-tables/columns";
+import type { ExtendedColumnSort } from "@/types/data-table";
 
 export interface GetPaymentsParams {
   page: number;
@@ -10,11 +12,25 @@ export interface GetPaymentsParams {
   method?: string | null;
   payment_date?: string | null;
   subscription_status?: string | null;
+  sort?: ExtendedColumnSort<Payment>[] | null;
 }
 
 export interface GetPaymentsResponse {
   data: Payment[];
   total: number;
+}
+
+interface PaymentRow {
+  id: string;
+  payment_date: string;
+  amount_paid: number | string;
+  method: Payment["method"];
+  user_id: string;
+  user_name: string | null;
+  avatar_url: string | null;
+  plan_name: string | null;
+  subscription_status: string | null;
+  subscription_end_date: string | null;
 }
 
 export async function getPayments({
@@ -23,51 +39,49 @@ export async function getPayments({
   user_name,
   method,
   payment_date,
-  subscription_status
+  subscription_status,
+  sort,
 }: GetPaymentsParams): Promise<GetPaymentsResponse> {
+  const access = await getUserAccessContext();
+  if (!access.isAuthenticated) {
+    throw new Error("No autenticado");
+  }
+  if (!access.isAdmin) {
+    throw new Error("No autorizado: Solo administradores");
+  }
+
   const supabase = await createClient();
-
-  // Determine if we need an inner join for subscriptions filtering
-  const subscriptionJoinType = subscription_status ? 'subscriptions!inner' : 'subscriptions';
-
-  // Query from the payments table with joins
-  let query = supabase
-    .from('payments')
-    .select(`
-      *,
-      profiles!inner(full_name, avatar_url),
-      ${subscriptionJoinType}(status, end_date, plans(name))
-    `, { count: 'exact' });
+  let query = supabase.from("payments_overview").select("*", { count: "exact" });
 
   // Apply text filters
   if (user_name) {
-    query = query.ilike('profiles.full_name', `%${user_name}%`);
+    query = query.ilike("user_name", `%${user_name}%`);
   }
 
   // Apply subscription status filter
   if (subscription_status) {
-    const statuses = subscription_status.split(',').filter(Boolean);
+    const statuses = subscription_status.split(",").filter(Boolean);
     if (statuses.length > 0) {
-      query = query.in('subscriptions.status', statuses);
+      query = query.in("subscription_status", statuses);
     }
   }
 
   // Apply method filter (multi-select)
   if (method) {
-    const methods = method.split(',').filter(Boolean);
+    const methods = method.split(",").filter(Boolean);
     if (methods.length > 0) {
-      query = query.in('method', methods);
+      query = query.in("method", methods);
     }
   }
 
   // Apply date range filter
   if (payment_date) {
-    const dates = payment_date.split(',').filter(Boolean);
+    const dates = payment_date.split(",").filter(Boolean);
     if (dates.length >= 1 && dates[0]) {
       const startTimestamp = parseInt(dates[0], 10);
       if (!isNaN(startTimestamp)) {
         const startDate = new Date(startTimestamp);
-        query = query.gte('payment_date', startDate.toISOString());
+        query = query.gte("payment_date", startDate.toISOString());
       }
     }
     if (dates.length >= 2 && dates[1]) {
@@ -75,7 +89,7 @@ export async function getPayments({
       if (!isNaN(endTimestamp)) {
         const endDate = new Date(endTimestamp);
         endDate.setHours(23, 59, 59, 999);
-        query = query.lte('payment_date', endDate.toISOString());
+        query = query.lte("payment_date", endDate.toISOString());
       }
     }
   }
@@ -83,36 +97,60 @@ export async function getPayments({
   // Pagination
   const from = (page - 1) * perPage;
   const to = from + perPage - 1;
-  query = query.order('payment_date', { ascending: false }).range(from, to);
+
+  // Sorting logic
+  if (sort && sort.length > 0) {
+    const sortColumnMap: Partial<Record<string, keyof PaymentRow>> = {
+      payment_date: "payment_date",
+      user_name: "user_name",
+      subscription_status: "subscription_status",
+      plan_name: "plan_name",
+      method: "method",
+      amount_paid: "amount_paid",
+    };
+    let hasAppliedSort = false;
+
+    sort.forEach((s) => {
+      const column = sortColumnMap[s.id];
+      if (column) {
+        query = query.order(column, { ascending: !s.desc, nullsFirst: false });
+        hasAppliedSort = true;
+      }
+    });
+
+    if (!hasAppliedSort) {
+      query = query.order("payment_date", { ascending: false });
+    }
+  } else {
+    query = query.order("payment_date", { ascending: false });
+  }
+
+  query = query.range(from, to);
 
   const { data, error, count } = await query;
 
   if (error) {
-    console.error('Error fetching payments:', error);
-    throw new Error('Error al cargar pagos');
+    console.error("Error fetching payments:", error);
+    throw new Error("Error al cargar pagos");
   }
 
-  const payments: Payment[] = (data || []).map((p: any) => {
-    const profile = p.profiles;
-    const subscription = p.subscriptions; 
-    const plan = subscription?.plans;
-
+  const payments: Payment[] = ((data || []) as PaymentRow[]).map((p) => {
     return {
       id: p.id,
       payment_date: p.payment_date,
       amount_paid: Number(p.amount_paid),
       method: p.method,
       user_id: p.user_id,
-      user_name: profile?.full_name || 'Usuario eliminado',
-      avatar_url: profile?.avatar_url,
-      plan_name: plan?.name || 'Sin plan',
-      subscription_status: subscription?.status,
-      subscription_end_date: subscription?.end_date,
+      user_name: p.user_name || "Usuario eliminado",
+      avatar_url: p.avatar_url,
+      plan_name: p.plan_name || "Sin plan",
+      subscription_status: p.subscription_status,
+      subscription_end_date: p.subscription_end_date,
     };
   });
 
   return {
     data: payments,
-    total: count || 0
+    total: count || 0,
   };
 }

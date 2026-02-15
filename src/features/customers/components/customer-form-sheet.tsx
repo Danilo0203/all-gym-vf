@@ -347,18 +347,16 @@ export function CustomerFormSheet({
 
     // Validar que el descuento no sea mayor que el precio del plan
     if (discount > selectedPlanPrice && selectedPlanPrice > 0) {
-      if (!discountError) {
-        form.setError("discount_amount", {
-          type: "manual",
-          message: `El descuento no puede ser mayor al precio del plan (Q${selectedPlanPrice.toFixed(2)})`,
-        });
-        setDiscountError(true);
-      }
-    } else if (discountError) {
+      form.setError("discount_amount", {
+        type: "manual",
+        message: `El descuento no puede ser mayor al precio del plan (Q${selectedPlanPrice.toFixed(2)})`,
+      });
+      setDiscountError(true);
+    } else {
       form.clearErrors("discount_amount");
       setDiscountError(false);
     }
-  }, [selectedPlanPrice, watchedDiscount, discountError]);
+  }, [selectedPlanPrice, watchedDiscount, form]);
 
   // Handler para cuando el usuario modifica las fechas manualmente
   const handleDateRangeChange = (range: DateRange | undefined) => {
@@ -424,7 +422,7 @@ export function CustomerFormSheet({
         <SheetTrigger asChild>{defaultTrigger}</SheetTrigger>
       )}
       <SheetContent className="sm:max-w-xl w-full flex flex-col h-full p-0 gap-0">
-        <SheetHeader className="px-6 py-4 border-b space-y-1">
+        <SheetHeader className="px-6 py-4 border-b space-y-1 sticky top-0 bg-background/80 backdrop-blur-md z-10">
           <SheetTitle>{isEditing ? "Editar Cliente" : "Registro de Nuevo Cliente"}</SheetTitle>
           <SheetDescription>
             {isEditing
@@ -805,17 +803,17 @@ export function CustomerFormSheet({
             </form>
           </Form>
         </div>
-        <SheetFooter className="flex-shrink-0 border-t px-6 py-4 flex-row gap-2">
+        <div className="px-6 py-4 border-t flex justify-end gap-3 sticky bottom-0 bg-background/80 backdrop-blur-md z-10 font-sans">
           <SheetClose asChild>
-            <Button variant="outline" disabled={isPending} className="flex-1">
+            <Button variant="outline" disabled={isPending}>
               Cancelar
             </Button>
           </SheetClose>
-          <Button type="submit" disabled={isPending} onClick={form.handleSubmit(onSubmit)} className="flex-1">
+          <Button type="submit" disabled={isPending} onClick={form.handleSubmit(onSubmit)}>
             {isPending && <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isEditing ? "Guardar Cambios" : "Registrar"}
           </Button>
-        </SheetFooter>
+        </div>
       </SheetContent>
     </Sheet>
   );
