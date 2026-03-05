@@ -318,6 +318,9 @@ export function CustomerHistoryClient({
               </div>
 
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                <span className="w-full text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Datos personales
+                </span>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
                   <div className="p-1 rounded bg-muted">
                     <IconReceipt2 className="h-3.5 w-3.5" />
@@ -378,6 +381,7 @@ export function CustomerHistoryClient({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
+                  data-testid="customer-actions-menu"
                   variant="default"
                   size="sm"
                   className="gap-2 font-bold uppercase tracking-tighter text-[10px] h-9 px-4 shadow-lg shadow-primary/20"
@@ -531,6 +535,7 @@ export function CustomerHistoryClient({
 
           <section id="body" className="scroll-mt-32 space-y-6">
             <SectionHeader icon={<IconActivity />} title="Progreso Somatométrico" />
+            <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Datos físicos</h4>
             <BodyAssessmentTab bodyAssessments={bodyAssessments} />
           </section>
         </div>

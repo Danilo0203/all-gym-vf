@@ -18,7 +18,7 @@ import { IconUser, IconSettings, IconLogout } from '@tabler/icons-react';
 
 export function UserNav() {
   const router = useRouter();
-  const { data: user, isLoading } = useCurrentUser();
+  const { data: user, isPending } = useCurrentUser();
 
   const handleSignOut = async () => {
     const supabase = createBrowserClient(
@@ -30,7 +30,7 @@ export function UserNav() {
   };
 
   // Loading state
-  if (isLoading) {
+  if (isPending) {
     return (
       <Button variant='ghost' className='relative h-8 w-8 rounded-full'>
         <Skeleton className='h-8 w-8 rounded-full' />

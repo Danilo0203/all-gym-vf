@@ -37,7 +37,7 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
   const router = useRouter();
 
   // Fetch automático cuando se abre el modal
-  const { data: customerDetails, isLoading: isLoadingDetails } = useCustomer(editOpen ? data.id : null);
+  const { data: customerDetails, isPending: isPendingDetails } = useCustomer(editOpen ? data.id : null);
 
   // Combinar datos locales de la tabla con datos detallados del servidor si existen
   const customerToEdit = customerDetails
@@ -192,9 +192,9 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
                   e.stopPropagation();
                   setEditOpen(true);
                 }}
-                disabled={editOpen && isLoadingDetails}
+                disabled={editOpen && isPendingDetails}
               >
-                {editOpen && isLoadingDetails ? (
+                {editOpen && isPendingDetails ? (
                   <IconLoader2 className="h-4 w-4 animate-spin text-blue-500" />
                 ) : (
                   <IconEdit className="h-4 w-4 text-blue-500" />
@@ -208,7 +208,7 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
           </Tooltip>
         </TooltipProvider>
 
-        <TooltipProvider>
+        {/* <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -228,30 +228,8 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
               <p>Registrar rostro / biometría</p>
             </TooltipContent>
           </Tooltip>
-        </TooltipProvider>
-
-        {/* <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant='ghost'
-                size='icon'
-                className='h-8 w-8 hover:bg-muted'
-                onClick={(e) => {
-                  e.stopPropagation();
-                  router.push(`/panel/clientes/${data.id}/history`);
-                }}
-              >
-                <IconHistory className='h-4 w-4 text-orange-500' />
-                <span className='sr-only'>Ver historial</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Historial del cliente</p>
-            </TooltipContent>
-          </Tooltip>
         </TooltipProvider> */}
-
+        
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>

@@ -1,9 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useForm, type Resolver } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
+import { useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -29,31 +26,10 @@ import {
 import { es } from "date-fns/locale";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { usePlans } from "@/features/plans/hooks/use-plans";
-import { renewSubscription } from "../actions/customer-actions";
-import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
-import { addDays, format, parse, isValid, differenceInDays } from "date-fns";
-import { computeFitnessPlan } from "@/lib/fitness/excel-calculator";
-import type { ActivityLevel, BodyType, DietType } from "@/lib/fitness/types";
-
-function toBodyType(value?: string | null): BodyType {
-  if (value === "ectomorph" || value === "mesomorph" || value === "endomorph") return value;
-  return "mesomorph";
-}
-
-function toDietType(value?: string | null): DietType {
-  if (value === "hipocalorica" || value === "normocalorica" || value === "hipercalorica") return value;
-  return "normocalorica";
-}
-
-function toActivityLevel(value?: string | null): ActivityLevel {
-  if (value === "sedentario" || value === "1_3_dias" || value === "3_5_dias" || value === "6_7_dias" || value === "2_veces_dia") {
-    return value;
-  }
-  return "3_5_dias";
-}
+import { differenceInDays, format, isValid, parse } from "date-fns";
+import { useHookFormRenewSubscription } from "../hooks/use-hook-form-customers";
 
 function DatePickerInput({ value, onChange }: { value?: Date; onChange: (date?: Date) => void }) {
   const [inputValue, setInputValue] = useState<string | undefined>(undefined);
@@ -133,43 +109,6 @@ interface RenewSubscriptionSheetProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-// SCHEMA DE VALIDACIÓN
-const renewSchema = z.object({
-  // MEMBRESÍA
-  plan_id: z.string().min(1, "Selecciona un plan"),
-
-  // Rango de fechas como objeto, igual que en customer form
-  subscription_period: z.object({
-    from: z.date({ message: "La fecha de inicio es obligatoria" }),
-    to: z.date({ message: "La fecha de fin es obligatoria" }),
-  }),
-
-  price: z.number(), // Precio lista del plan
-  discount_amount: z.coerce.number().min(0).default(0),
-  final_price: z.number(), // Precio final calculado
-  payment_method: z.enum(["cash", "card", "transfer"]),
-
-  // FICHA MÉDICA
-  weight_kg: z.coerce.number().positive("El peso debe ser mayor a 0"),
-  height_cm: z.coerce.number().positive("La estatura debe ser mayor a 0"),
-  body_type: z.enum(["ectomorph", "mesomorph", "endomorph"]),
-  diet_type: z.enum(["hipocalorica", "normocalorica", "hipercalorica"]),
-  activity_level: z.enum(["sedentario", "1_3_dias", "3_5_dias", "6_7_dias", "2_veces_dia"]),
-  body_fat_percentage: z.coerce.number().min(1, "Ingresa % grasa").max(100),
-  muscle_mass_kg: z.coerce.number().positive("Ingresa masa muscular"),
-  chest: z.coerce.number().positive("Ingresa pecho"),
-  waist: z.coerce.number().positive("Ingresa cintura"),
-  hip: z.coerce.number().positive("Ingresa cadera"),
-  arm_right: z.coerce.number().positive("Ingresa brazo derecho"),
-  arm_left: z.coerce.number().positive("Ingresa brazo izquierdo"),
-  leg_right: z.coerce.number().positive("Ingresa pierna derecha"),
-  leg_left: z.coerce.number().positive("Ingresa pierna izquierda"),
-  injuries: z.string().optional().or(z.literal("")),
-  notes: z.string().optional().or(z.literal("")),
-});
-
-type RenewFormValues = z.infer<typeof renewSchema>;
-
 export function RenewSubscriptionSheet({
   customerId,
   customerName,
@@ -180,194 +119,15 @@ export function RenewSubscriptionSheet({
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
 }: RenewSubscriptionSheetProps) {
-  const [internalOpen, setInternalOpen] = useState(false);
-  const isControlled = controlledOpen !== undefined;
-  const open = isControlled ? controlledOpen : internalOpen;
-  const setOpen = isControlled ? (controlledOnOpenChange ?? setInternalOpen) : setInternalOpen;
-  const [loading, setLoading] = useState(false);
-
-  // Estado para controlar si el usuario modificó manualmente las fechas
-  const [userModifiedDates, setUserModifiedDates] = useState(false);
-  const previousPlanId = useRef<string | null>(null);
-  const [selectedPlanPrice, setSelectedPlanPrice] = useState<number>(0);
-
-  // Hook de planes
-  const { data: plans = [] } = usePlans(true);
-
-  // Form
-  const form = useForm<RenewFormValues>({
-    resolver: zodResolver(renewSchema) as Resolver<RenewFormValues>,
-    defaultValues: {
-      plan_id: "",
-      subscription_period: {
-        from: new Date(),
-        to: new Date(),
-      },
-      price: 0,
-      discount_amount: 0,
-      final_price: 0,
-      payment_method: "cash",
-      weight_kg: lastAssessment?.weight_kg || 0,
-      height_cm: lastAssessment?.height_cm || 0,
-      body_type: toBodyType(lastAssessment?.body_type),
-      diet_type: toDietType(lastAssessment?.diet_type),
-      activity_level: toActivityLevel(lastAssessment?.activity_level),
-      body_fat_percentage: lastAssessment?.body_fat_percentage || 0,
-      muscle_mass_kg: lastAssessment?.muscle_mass || 0,
-      chest: lastAssessment?.chest_cm || 0,
-      waist: lastAssessment?.waist_cm || 0,
-      hip: 0,
-      arm_right: 0,
-      arm_left: 0,
-      leg_right: 0,
-      leg_left: 0,
-      injuries: lastAssessment?.injuries || "",
-      notes: lastAssessment?.notes || "",
-    },
-  });
-
-  // Watchers
-  const watchedPlanId = form.watch("plan_id");
-  const watchedDiscount = form.watch("discount_amount");
-  const watchedWeight = form.watch("weight_kg");
-  const watchedHeight = form.watch("height_cm");
-  const watchedBodyType = form.watch("body_type");
-  const watchedDietType = form.watch("diet_type");
-  const watchedActivity = form.watch("activity_level");
-
-  const calculationPreview =
-    watchedWeight &&
-    watchedHeight &&
-    watchedBodyType &&
-    watchedDietType &&
-    watchedActivity &&
-    customerBirthDate &&
-    customerGender
-      ? computeFitnessPlan({
-          birthDate: new Date(customerBirthDate),
-          gender: customerGender,
-          weightKg: watchedWeight,
-          heightCm: watchedHeight,
-          bodyType: watchedBodyType,
-          dietType: watchedDietType,
-          activityLevel: watchedActivity,
-        })
-      : null;
-
-  // RESETEAR AL ABRIR
-  useEffect(() => {
-    if (open) {
-      form.reset({
-        plan_id: "",
-        subscription_period: {
-          from: new Date(),
-          to: new Date(),
-        },
-        price: 0,
-        discount_amount: 0,
-        final_price: 0,
-        payment_method: "cash",
-        weight_kg: lastAssessment?.weight_kg || 0,
-        height_cm: lastAssessment?.height_cm || 0,
-        body_type: toBodyType(lastAssessment?.body_type),
-        diet_type: toDietType(lastAssessment?.diet_type),
-        activity_level: toActivityLevel(lastAssessment?.activity_level),
-        body_fat_percentage: lastAssessment?.body_fat_percentage || 0,
-        muscle_mass_kg: lastAssessment?.muscle_mass || 0,
-        chest: lastAssessment?.chest_cm || 0,
-        waist: lastAssessment?.waist_cm || 0,
-        hip: 0,
-        arm_right: 0,
-        arm_left: 0,
-        leg_right: 0,
-        leg_left: 0,
-        injuries: lastAssessment?.injuries || "",
-        notes: lastAssessment?.notes || "",
-      });
-      setUserModifiedDates(false);
-      previousPlanId.current = null;
-      setSelectedPlanPrice(0);
-    }
-  }, [open, lastAssessment, form]);
-
-  // Cuando cambia el plan, actualizar fechas (solo si el usuario no las modificó manualmente)
-  useEffect(() => {
-    if (!watchedPlanId) return;
-
-    // Si el plan cambió (no es el mismo que antes)
-    const planChanged = previousPlanId.current !== watchedPlanId;
-    previousPlanId.current = watchedPlanId;
-
-    const selectedPlan = plans.find((p) => p.id.toString() === watchedPlanId);
-
-    if (selectedPlan) {
-      // Siempre actualizar el precio base
-      setSelectedPlanPrice(selectedPlan.price);
-      form.setValue("price", selectedPlan.price);
-
-      // Solo auto-calcular fechas si:
-      // 1. El plan cambió, y
-      // 2. El usuario no ha modificado manualmente las fechas
-      if (planChanged && !userModifiedDates) {
-        const startDate = form.getValues("subscription_period.from") || new Date();
-        const endDate = addDays(startDate, selectedPlan.duration_days);
-        form.setValue("subscription_period", {
-          from: startDate,
-          to: endDate,
-        });
-      }
-    }
-  }, [watchedPlanId, plans, form, userModifiedDates]);
-
-  // Calcular Precio Final Automáticamente
-  useEffect(() => {
-    const discount = Number(watchedDiscount) || 0;
-    const final = Math.max(0, selectedPlanPrice - discount);
-    form.setValue("final_price", final);
-  }, [selectedPlanPrice, watchedDiscount, form]);
-
-  const onSubmit = async (values: RenewFormValues) => {
-    try {
-      setLoading(true);
-      const result = await renewSubscription(customerId, {
-        plan_id: Number(values.plan_id),
-        start_date: values.subscription_period.from,
-        end_date: values.subscription_period.to,
-        price: values.price,
-        discount_amount: values.discount_amount,
-        amount_paid: values.final_price,
-        payment_method: values.payment_method,
-        weight_kg: values.weight_kg,
-        height_cm: values.height_cm,
-        body_type: values.body_type,
-        diet_type: values.diet_type,
-        activity_level: values.activity_level,
-        body_fat_percentage: values.body_fat_percentage,
-        muscle_mass_kg: values.muscle_mass_kg,
-        chest: values.chest,
-        waist: values.waist,
-        hip: values.hip,
-        arm_right: values.arm_right,
-        arm_left: values.arm_left,
-        leg_right: values.leg_right,
-        leg_left: values.leg_left,
-        injuries: values.injuries,
-        notes: values.notes,
-      });
-
-      if (result.success) {
-        toast.success("Suscripción renovada exitosamente");
-        setOpen(false);
-      } else {
-        toast.error(result.error || "Error al renovar");
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error("Error inesperado");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { open, setOpen, form, plans, loading, selectedPlanPrice, calculationPreview, onSubmit, markDatesAsModified } =
+    useHookFormRenewSubscription({
+      customerId,
+      customerGender,
+      customerBirthDate,
+      lastAssessment,
+      open: controlledOpen,
+      onOpenChange: controlledOnOpenChange,
+    });
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -424,7 +184,7 @@ export function RenewSubscriptionSheet({
 
                       // Handlers for individual date inputs
                       const handleStartChange = (date?: Date) => {
-                        setUserModifiedDates(true);
+                        markDatesAsModified();
                         form.setValue("subscription_period", {
                           from: date || new Date(),
                           to: field.value?.to || date || new Date(),
@@ -432,7 +192,7 @@ export function RenewSubscriptionSheet({
                       };
 
                       const handleEndChange = (date?: Date) => {
-                        setUserModifiedDates(true);
+                        markDatesAsModified();
                         form.setValue("subscription_period", {
                           from: field.value?.from || new Date(),
                           to: date || new Date(),

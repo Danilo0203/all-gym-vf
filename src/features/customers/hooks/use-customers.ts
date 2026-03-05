@@ -40,9 +40,16 @@ export function useCreateCustomer() {
       return result;
     },
     onSuccess: (result) => {
-      // Asumiendo que createCustomer puede devolver void o un objeto
-      // Revisaremos la implementación actual de createCustomer
-      toast.success("Cliente creado exitosamente");
+      const deviceSync = (result as any)?.deviceSync;
+      const deviceQueued = deviceSync?.attempted ? deviceSync?.queued === true : null;
+
+      if (deviceQueued === false) {
+        toast.warning("Cliente creado, pero falló el envío automático al dispositivo.");
+      } else if (deviceQueued === true) {
+        toast.success("Cliente creado y sincronizado con el reloj.");
+      } else {
+        toast.success("Cliente creado exitosamente");
+      }
       queryClient.invalidateQueries({ queryKey: customersKeys.lists() });
       router.refresh();
     },

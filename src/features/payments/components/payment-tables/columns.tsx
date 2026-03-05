@@ -139,7 +139,7 @@ export function getColumns(methodOptions: MethodOption[] = defaultMethodOptions)
     {
       accessorKey: 'plan_name',
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="PLAN" />
+        <DataTableColumnHeader column={column} title="SUSCRIPCIÓN" />
       ),
       cell: ({ row }) => (
         <Badge variant='outline' className='whitespace-nowrap font-normal border-muted-foreground/30 text-muted-foreground'>

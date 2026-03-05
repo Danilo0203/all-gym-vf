@@ -67,7 +67,7 @@ export function DataTable<TData>({
                 ) : (
                   <TableRow>
                     <TableCell colSpan={table.getAllColumns().length} className="h-24 text-center">
-                      No hay resultados.
+                      Sin resultados
                     </TableCell>
                   </TableRow>
                 )}

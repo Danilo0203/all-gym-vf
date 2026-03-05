@@ -1,48 +1,14 @@
 "use client";
 
-import { useForm, FormProvider } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
+import { FormProvider } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/forms/form-input";
-import { useUpdatePassword } from "../hooks/use-profile";
 import { IconLoader2, IconLock } from "@tabler/icons-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
-const passwordSchema = z
-  .object({
-    currentPassword: z.string().min(1, "La contraseña actual es requerida"),
-    newPassword: z.string().min(6, "La nueva contraseña debe tener al menos 6 caracteres"),
-    confirmPassword: z.string().min(1, "Confirma tu nueva contraseña"),
-  })
-  .refine((data) => data.newPassword === data.confirmPassword, {
-    message: "Las contraseñas no coinciden",
-    path: ["confirmPassword"],
-  });
-
-type PasswordFormValues = z.infer<typeof passwordSchema>;
+import { useHookFormPassword } from "../hooks/use-hook-form-profile";
 
 export function PasswordForm() {
-  const updatePassword = useUpdatePassword();
-
-  const form = useForm<PasswordFormValues>({
-    resolver: zodResolver(passwordSchema),
-    defaultValues: {
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
-    },
-  });
-
-  const onSubmit = async (values: PasswordFormValues) => {
-    await updatePassword.mutateAsync({
-      currentPassword: values.currentPassword,
-      newPassword: values.newPassword,
-    });
-
-    // Reset form on success
-    form.reset();
-  };
+  const { form, isPending, onSubmit } = useHookFormPassword();
 
   return (
     <Card className="py-4 gap-4">
@@ -79,8 +45,8 @@ export function PasswordForm() {
             </div>
 
             <div className="flex justify-end pt-4">
-              <Button type="submit" disabled={updatePassword.isPending} variant="outline">
-                {updatePassword.isPending ? (
+              <Button type="submit" disabled={isPending} variant="outline">
+                {isPending ? (
                   <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <IconLock className="mr-2 h-4 w-4" />

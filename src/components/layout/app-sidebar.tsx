@@ -74,7 +74,7 @@ export default function AppSidebar() {
               ) : (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.url}>
-                    <Link href={item.url}>
+                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase()}`}>
                       <Icon />
                       <span>{item.title}</span>
                     </Link>

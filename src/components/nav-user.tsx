@@ -29,7 +29,7 @@ import { toast } from "sonner";
 export function NavUser() {
   const { isMobile } = useSidebar();
   const router = useRouter();
-  const { data: user, isLoading } = useCurrentUser();
+  const { data: user, isPending } = useCurrentUser();
 
   const handleSignOut = async () => {
     try {
@@ -58,7 +58,7 @@ export function NavUser() {
   };
 
   // Loading state
-  if (isLoading) {
+  if (isPending) {
     return (
       <SidebarMenu>
         <SidebarMenuItem>

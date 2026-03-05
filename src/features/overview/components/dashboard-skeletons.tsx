@@ -1,19 +1,21 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function KPICardsSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="rounded-xl border bg-card text-card-foreground shadow p-6 space-y-3">
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-9 w-9 rounded-lg" />
-            <Skeleton className="h-4 w-24" />
+    <div data-testid="dashboard-loading-indicator" aria-live="polite">
+      <p className="mb-3 text-sm text-muted-foreground">Cargando resumen...</p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-xl border bg-card text-card-foreground shadow p-6 space-y-3">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-9 w-9 rounded-lg" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-4 w-20" />
           </div>
-          <Skeleton className="h-8 w-32" />
-          <Skeleton className="h-4 w-20" />
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

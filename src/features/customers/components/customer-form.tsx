@@ -7,36 +7,7 @@ import { FormDatePicker } from "@/components/forms/form-date-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form } from "@/components/ui/form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import * as z from "zod";
-
-// Profile type for this form (different from view type)
-interface ProfileFormData {
-  id?: string;
-  full_name: string | null;
-  phone: string | null;
-  birth_date?: string | null;
-  gender?: "male" | "female" | "other" | null;
-  emergency_contact?: string | null;
-  emergency_phone?: string | null;
-  injuries?: string | null;
-  medical_notes?: string | null;
-}
-
-const formSchema = z.object({
-  full_name: z.string().min(2, {
-    message: "El nombre debe tener al menos 2 caracteres.",
-  }),
-  phone: z.string().optional().or(z.literal("")),
-  birth_date: z.date().optional().nullable(),
-  gender: z.enum(["male", "female", "other"]).optional(),
-  emergency_contact: z.string().optional().or(z.literal("")),
-  emergency_phone: z.string().optional().or(z.literal("")),
-  injuries: z.string().optional().or(z.literal("")),
-  medical_notes: z.string().optional().or(z.literal("")),
-});
+import { ProfileFormData, useHookFormCustomerProfile } from "../hooks/use-hook-form-customers";
 
 export default function CustomerForm({
   initialData,
@@ -45,30 +16,7 @@ export default function CustomerForm({
   initialData: ProfileFormData | null;
   pageTitle: string;
 }) {
-  const defaultValues = {
-    full_name: initialData?.full_name || "",
-    phone: initialData?.phone || "",
-    birth_date: initialData?.birth_date ? new Date(initialData.birth_date) : undefined,
-    gender: initialData?.gender || "male",
-    emergency_contact: initialData?.emergency_contact || "",
-    emergency_phone: initialData?.emergency_phone || "",
-    injuries: initialData?.injuries || "",
-    medical_notes: initialData?.medical_notes || "",
-  };
-
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: defaultValues,
-  });
-
-  const router = useRouter();
-
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    // Form submission logic (Supabase update)
-    console.log(values);
-    // TODO: Implement Supabase update for profiles
-    router.push("/panel/clientes");
-  }
+  const { form, onSubmit, onCancel } = useHookFormCustomerProfile({ initialData });
 
   return (
     <Card className="mx-auto w-full">
@@ -142,7 +90,7 @@ export default function CustomerForm({
             </div>
 
             <div className="flex gap-4 pt-4">
-              <Button type="button" variant="outline" onClick={() => router.back()}>
+              <Button type="button" variant="outline" onClick={onCancel}>
                 Cancelar
               </Button>
               <Button type="submit">Guardar Cliente</Button>

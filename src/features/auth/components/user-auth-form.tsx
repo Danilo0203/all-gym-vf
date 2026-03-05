@@ -1,57 +1,19 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
-import { useForm } from "react-hook-form";
-import { toast } from "sonner";
-import * as z from "zod";
 import GithubSignInButton from "./github-auth-button";
 import { FormInput } from "@/components/forms/form-input";
-import { createBrowserClient } from "@supabase/ssr";
-
-const formSchema = z.object({
-  email: z.string().email({ message: "Introduce un correo electrónico válido" }),
-  password: z.string().min(1, { message: "La contraseña es obligatoria" }),
-});
-
-type UserFormValue = z.infer<typeof formSchema>;
+import { useHookFormAuth } from "../hooks/use-hook-form-auth";
 
 export default function UserAuthForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const callbackUrl = searchParams.get("callbackUrl");
-  const [loading, startTransition] = useTransition();
-  const defaultValues = {
-    email: "demo@gmail.com",
-    password: "",
-  };
-  const form = useForm<UserFormValue>({
-    resolver: zodResolver(formSchema),
-    defaultValues,
+  const { form, loading, onSubmit } = useHookFormAuth({
+    callbackUrl,
+    onSuccessRedirect: (path) => router.push(path),
   });
-
-  const onSubmit = async (data: UserFormValue) => {
-    startTransition(async () => {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
-      );
-
-      const { error } = await supabase.auth.signInWithPassword({
-        email: data.email,
-        password: data.password,
-      });
-
-      if (error) {
-        toast.error(error.message);
-      } else {
-        toast.success("¡Sesión iniciada correctamente!");
-        router.push(callbackUrl || "/panel");
-      }
-    });
-  };
 
   return (
     <>

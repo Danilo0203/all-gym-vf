@@ -1,0 +1,8 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:3000",
+  "loginUser": "danilocalderon0203@gmail.com",
+  "loginPassword": "123456"
+}

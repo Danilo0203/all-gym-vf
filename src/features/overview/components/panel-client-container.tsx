@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, ReactNode, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useState, ReactNode } from 'react';
 import { DashboardPeriodSelector } from './period-selector';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -105,20 +104,7 @@ interface DashboardClientContainerProps {
 }
 
 export function DashboardClientContainer({ children, periodLabel }: DashboardClientContainerProps) {
-  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
-  const previousParamsRef = useRef<string>('');
-  
-  const currentParams = searchParams.toString();
-  
-  // Reset loading state when URL params actually change (new data is being rendered)
-  useEffect(() => {
-    // When params change, the new content is being rendered, so reset loading
-    if (previousParamsRef.current !== '' && previousParamsRef.current !== currentParams) {
-      setIsLoading(false);
-    }
-    previousParamsRef.current = currentParams;
-  }, [currentParams]);
 
   const handleLoadingChange = (loading: boolean) => {
     setIsLoading(loading);
@@ -142,7 +128,14 @@ export function DashboardClientContainer({ children, periodLabel }: DashboardCli
       </div>
 
       {/* Content or Skeletons */}
-      {isLoading ? <DashboardSkeletons /> : children}
+      {isLoading ? (
+        <div aria-live="polite" data-testid="dashboard-loading-indicator">
+          <p className="mb-2 text-sm text-muted-foreground">Cargando resumen...</p>
+          <DashboardSkeletons />
+        </div>
+      ) : (
+        children
+      )}
     </>
   );
 }

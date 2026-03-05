@@ -1,0 +1,1807 @@
+[
+  {
+    "id": "TC001",
+    "title": "Acceder al Panel y navegar a Resumen desde la navegación",
+    "description": "Verifica que un usuario autenticado puede ver métricas en /panel y navegar a /panel/resumen para ver el resumen financiero y gráficos.",
+    "category": "Dashboard & Summary",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Métricas\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Resumen\" navigation item"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/resumen\""
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Validar contenido visible de métricas rápidas y tarjetas en el Panel",
+    "description": "Verifica que el Panel principal muestra métricas rápidas y/o tarjetas de actividad reciente de forma visible tras iniciar sesión.",
+    "category": "Dashboard & Summary",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Actividad\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Recent activity\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Quick metrics\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Cargar Resumen: se muestra estado de carga y luego datos exitosos",
+    "description": "Verifica que /panel/resumen muestra un estado de carga y luego presenta gráficos y totales cuando los datos cargan correctamente.",
+    "category": "Dashboard & Summary",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Resumen\" navigation item"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/resumen\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Cargando\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Charts\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Resumen muestra totales y tendencias una vez cargado",
+    "description": "Verifica que en /panel/resumen son visibles el resumen financiero (totales) y al menos un indicador de tendencia una vez finaliza la carga.",
+    "category": "Dashboard & Summary",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Resumen\" navigation item"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Financial summary\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Total\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Tendencia\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Navegación cruzada: volver del Resumen al Panel principal",
+    "description": "Verifica que el usuario puede volver desde /panel/resumen al Panel principal mediante navegación de la aplicación.",
+    "category": "Dashboard & Summary",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Resumen\" navigation item"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/resumen\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Panel\" navigation item"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Robustez de UI: desplazamiento en Resumen mantiene visibles secciones clave",
+    "description": "Verifica que al hacer scroll en /panel/resumen, siguen siendo accesibles/visibles secciones clave como totales y gráficos (sin quedar en blanco).",
+    "category": "Dashboard & Summary",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Resumen\" navigation item"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Financial summary\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the bottom of the page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Charts\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "View client list, search, and open a client profile",
+    "description": "Verifies that an authenticated user can view the client list, search, and open a client profile to see personal and physical data.",
+    "category": "Client Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Clientes\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/clientes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Client list\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Type \"a\" into the client search field"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Client list\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click on the first client row in the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Perfil\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Datos personales\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Datos físicos\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Create a new client with required fields and see it in the list",
+    "description": "Verifies that an authenticated user can add a new client by completing required fields and then see the client in the client list.",
+    "category": "Client Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Clientes\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/clientes"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Agregar nuevo cliente\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Nuevo cliente\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Cliente E2E\" into the \"Nombre\" field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Prueba\" into the \"Apellido\" field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"e2e.cliente+001@example.com\" into the \"Email\" field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"+54 11 5555 0001\" into the \"Teléfono\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Guardar\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/clientes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Cliente E2E\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Attempt to create a client with missing required fields and see validation errors",
+    "description": "Verifies that the client creation form enforces required fields and shows field-level validation errors without leaving the form.",
+    "category": "Client Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Clientes\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/clientes"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Agregar nuevo cliente\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Nuevo cliente\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Cliente Incompleto\" into the \"Nombre\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Guardar\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Este campo es obligatorio\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Nuevo cliente\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Edit an existing client's contact information and verify it updates on the profile",
+    "description": "Verifies that an authenticated user can edit a client profile, save changes, and see updated contact info on the profile page.",
+    "category": "Client Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Clientes\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/clientes"
+      },
+      {
+        "type": "action",
+        "description": "Click on the first client row in the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Perfil\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Editar\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Editar cliente\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"+54 11 5555 9999\" into the \"Teléfono\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Guardar\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"+54 11 5555 9999\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Search for a non-matching term shows no results (or empty state)",
+    "description": "Verifies that searching for a term with no matching clients presents a clear empty state and does not open a profile.",
+    "category": "Client Management",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Clientes\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/clientes"
+      },
+      {
+        "type": "action",
+        "description": "Type \"zzzz-no-existe-12345\" into the client search field"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Sin resultados\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Cancel/close new client form does not create a client and returns to list",
+    "description": "Verifies that leaving the new client form via cancel/close returns to the list and does not add the partially entered client.",
+    "category": "Client Management",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Clientes\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/clientes"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Agregar nuevo cliente\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Nuevo cliente\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Cliente Temporal\" into the \"Nombre\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Cancelar\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/clientes"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Cliente Temporal\" into the client search field"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Sin resultados\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Validation clears after fixing missing required fields on the new client form",
+    "description": "Verifies that validation errors appear for missing required fields and disappear after providing valid values.",
+    "category": "Client Management",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Clientes\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/clientes"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Agregar nuevo cliente\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Nuevo cliente\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Guardar\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Este campo es obligatorio\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Cliente Valido\" into the \"Nombre\" field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Apellido\" into the \"Apellido\" field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"e2e.cliente+validacion@example.com\" into the \"Email\" field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Guardar\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/clientes"
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Create a new membership plan successfully",
+    "description": "Verifies an authenticated user can create a plan with valid name, price, and duration and see it listed.",
+    "category": "Plans & Subscriptions",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Iniciar sesión\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Planes\" in the panel navigation"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Crear plan\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Crear plan\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Plan Mensual QA\" into the plan name field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"49.99\" into the price field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"30\" into the duration field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Guardar\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Plan Mensual QA\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Validate negative price when creating a plan",
+    "description": "Verifies the create plan form blocks saving when price is negative and shows a visible validation message.",
+    "category": "Plans & Subscriptions",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Iniciar sesión\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Planes\" in the panel navigation"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Crear plan\""
+      },
+      {
+        "type": "action",
+        "description": "Type \"Plan Negativo QA\" into the plan name field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"-10\" into the price field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"30\" into the duration field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Guardar\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"precio\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Plan Negativo QA\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Required field validation when creating a plan (missing name)",
+    "description": "Verifies the create plan form blocks saving when a required field is empty and shows a visible validation message.",
+    "category": "Plans & Subscriptions",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Iniciar sesión\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Planes\" in the panel navigation"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Crear plan\""
+      },
+      {
+        "type": "action",
+        "description": "Type \"\" into the plan name field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"39.99\" into the price field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"30\" into the duration field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Guardar\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"nombre\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Crear plan\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC017",
+    "title": "Cancel out of create plan form without saving",
+    "description": "Verifies a user can exit the create plan screen using a cancel/back action and no new plan appears in the list.",
+    "category": "Plans & Subscriptions",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Iniciar sesión\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Planes\" in the panel navigation"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Crear plan\""
+      },
+      {
+        "type": "action",
+        "description": "Type \"Plan No Guardar QA\" into the plan name field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"10.00\" into the price field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"7\" into the duration field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Cancelar\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Planes\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Plan No Guardar QA\" is not visible"
+      }
+    ]
+  },
+  {
+    "id": "TC018",
+    "title": "Record a new payment (cash) and verify it appears in the list",
+    "description": "Verifies a user can record a payment using Efectivo and see it added to the payments history.",
+    "category": "Payments & Financial Tracking",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Pagos\" in the panel navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/pagos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Registrar pago\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"150\" into the amount (monto) field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Efectivo\" from the payment method dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Guardar\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"150\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC019",
+    "title": "Record a new payment (card) and verify it appears in the list",
+    "description": "Verifies a user can record a payment using Card and see it added to the payments history.",
+    "category": "Payments & Financial Tracking",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Pagos\" in the panel navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/pagos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Registrar pago\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"200\" into the amount (monto) field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Card\" from the payment method dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Guardar\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"200\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC020",
+    "title": "Record a new payment (transfer) and verify it appears in the list",
+    "description": "Verifies a user can record a payment using Transfer and see it added to the payments history.",
+    "category": "Payments & Financial Tracking",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Pagos\" in the panel navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/pagos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Registrar pago\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"350\" into the amount (monto) field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Transfer\" from the payment method dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Guardar\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"350\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC021",
+    "title": "Filter payments by date range and verify list and totals update",
+    "description": "Verifies the date range filters update the visible transactions and the totals shown on the payments page.",
+    "category": "Payments & Financial Tracking",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Pagos\" in the panel navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/pagos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the date range filter control"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Últimos 7 días\" from the date range options"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Total\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC022",
+    "title": "Amount is required when recording a payment (validation error)",
+    "description": "Verifies the payment form blocks saving when the amount is empty and shows a visible validation error.",
+    "category": "Payments & Financial Tracking",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Pagos\" in the panel navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/pagos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Registrar pago\" button"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Efectivo\" from the payment method dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Guardar\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"monto\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC023",
+    "title": "Open an existing transaction and verify details are shown",
+    "description": "Verifies a user can open a transaction and see client and subscription information in the details view.",
+    "category": "Payments & Financial Tracking",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Pagos\" in the panel navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/pagos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the first transaction in the payments list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Cliente\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Suscripción\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC024",
+    "title": "Cancel recording a payment and return to payments list without changes",
+    "description": "Verifies the user can exit the record payment flow via cancel/back and return to the payments list.",
+    "category": "Payments & Financial Tracking",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Pagos\" in the panel navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/pagos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Registrar pago\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Cancelar\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/pagos\""
+      }
+    ]
+  },
+  {
+    "id": "TC025",
+    "title": "Payments page shows list and totals on initial load",
+    "description": "Verifies the payments page loads successfully and shows a visible list area and totals section.",
+    "category": "Payments & Financial Tracking",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Pagos\" in the panel navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel/pagos\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Pagos\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Total\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC026",
+    "title": "Generar plan de nutrición desde Evaluación Física (éxito)",
+    "description": "Verifica que se pueda generar un plan con calorías, agua y macronutrientes desde la evaluación física de un cliente.",
+    "category": "Fitness Logic Engine (Nutrición y Rutinas)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Clientes\" in the main navigation/menu"
+      },
+      {
+        "type": "action",
+        "description": "Click on the first visible client row in the clients list/table"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Agregar Evaluación Física\""
+      }
+    ]
+  },
+  {
+    "id": "TC027",
+    "title": "Plan de nutrición muestra calorías, agua y macros generados",
+    "description": "Verifica que, tras completar los datos, el resultado incluya calorías diarias, objetivo de agua y distribución de macronutrientes visible.",
+    "category": "Fitness Logic Engine (Nutrición y Rutinas)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Clientes\" in the main navigation/menu"
+      },
+      {
+        "type": "action",
+        "description": "Click on the first visible client row in the clients list/table"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Agregar Evaluación Física\""
+      },
+      {
+        "type": "action",
+        "description": "Type \"30\" into the Age/Edad field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Masculino\" from the Gender/Género dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Type \"80\" into the Weight/Peso field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"180\" into the Height/Altura field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Moderado\" from the Activity level/Nivel de actividad dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Generate Plan\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Calorías\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Agua\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Proteína\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Carbohidratos\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Grasas\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC028",
+    "title": "Generar rutina de entrenamiento (éxito)",
+    "description": "Verifica que se pueda generar una rutina seleccionando objetivo e intensidad y que se muestren bloques de rutina y ejercicios sugeridos.",
+    "category": "Fitness Logic Engine (Nutrición y Rutinas)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Clientes\" in the main navigation/menu"
+      },
+      {
+        "type": "action",
+        "description": "Click on the first visible client row in the clients list/table"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Generar Rutina\""
+      },
+      {
+        "type": "action",
+        "description": "Select \"Hipertrofia\" from the Objective/Objetivo dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Media\" from the Intensity/Intensidad dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Generate\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Rutina\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Ejercicios\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC029",
+    "title": "Validación: falta un campo requerido en evaluación física",
+    "description": "Verifica que al dejar un dato obligatorio vacío se muestre un error de validación y no se avance al resultado.",
+    "category": "Fitness Logic Engine (Nutrición y Rutinas)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Clientes\" in the main navigation/menu"
+      },
+      {
+        "type": "action",
+        "description": "Click on the first visible client row in the clients list/table"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Agregar Evaluación Física\""
+      },
+      {
+        "type": "action",
+        "description": "Type \"30\" into the Age/Edad field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Femenino\" from the Gender/Género dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Type \"165\" into the Height/Altura field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Ligero\" from the Activity level/Nivel de actividad dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Generate Plan\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"obligatorio\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Evaluation form\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC030",
+    "title": "Validación: métricas no numéricas en peso/altura",
+    "description": "Verifica que el formulario rechace valores no numéricos en campos métricos y muestre un mensaje de error visible.",
+    "category": "Fitness Logic Engine (Nutrición y Rutinas)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Clientes\" in the main navigation/menu"
+      },
+      {
+        "type": "action",
+        "description": "Click on the first visible client row in the clients list/table"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Agregar Evaluación Física\""
+      },
+      {
+        "type": "action",
+        "description": "Type \"abc\" into the Weight/Peso field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"xyz\" into the Height/Altura field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Generate Plan\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"número\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC031",
+    "title": "Rutina: evitar generación sin seleccionar objetivo",
+    "description": "Verifica que el generador de rutina exija seleccionar un objetivo antes de generar y muestre un error si falta.",
+    "category": "Fitness Logic Engine (Nutrición y Rutinas)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Iniciar sesión\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Clientes\" in the main navigation/menu"
+      },
+      {
+        "type": "action",
+        "description": "Click on the first visible client row in the clients list/table"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Generar Rutina\""
+      },
+      {
+        "type": "action",
+        "description": "Select \"Alta\" from the Intensity/Intensidad dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Generate\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Objetivo\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"obligatorio\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC032",
+    "title": "Cambio de tema: alternar a modo oscuro desde el control de tema",
+    "description": "Verifica que al activar el control de tema se cambia inmediatamente a modo oscuro con un indicador visible.",
+    "category": "Command Bar (KBar) & Theme",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/usuario field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password/contraseña field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Iniciar sesión\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the theme control (Light/Dark) in the header"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Dark\" from the theme options"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Dark\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC033",
+    "title": "Cambio de tema: alternar a modo claro desde el control de tema",
+    "description": "Verifica que al volver a modo claro el indicador visible del tema se actualiza correctamente.",
+    "category": "Command Bar (KBar) & Theme",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /iniciar-sesion"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/usuario field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password/contraseña field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Iniciar sesión\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/panel\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the theme control (Light/Dark) in the header"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Light\" from the theme options"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Light\" is visible"
+      }
+    ]
+  }
+]

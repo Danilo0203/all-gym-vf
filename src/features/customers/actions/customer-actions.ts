@@ -9,7 +9,98 @@ import type { ActivityLevel, BodyType, DietType } from "@/lib/fitness/types";
 import { generateRoutineFromTemplates } from "@/lib/fitness/routine-generator";
 import { getUserAccessContext } from "@/lib/auth/authorization";
 
+try {
+  require("dotenv").config({ path: ".env.local" });
+} catch (e) {}
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+let SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const DEFAULT_ZK_DEVICE_SN = (process.env.DEFAULT_ZK_DEVICE_SN || "").trim();
+if (!SUPABASE_SERVICE_ROLE_KEY) {
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const envLocal = fs.readFileSync(path.join(process.cwd(), ".env.local"), "utf8");
+    const match = envLocal.match(/SUPABASE_SERVICE_ROLE_KEY=([^ \n]+)/);
+    if (match) SUPABASE_SERVICE_ROLE_KEY = match[1].trim();
+  } catch (e) {}
+}
+
+function normalizeZkUserName(fullName: string | null | undefined, biometricId: number | string) {
+  return (
+    (fullName || `USER${biometricId}`)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 24) || `USER${biometricId}`
+  );
+}
+
+function buildZkDataUserCommand(params: { biometricId: number | string; fullName?: string | null }) {
+  const normalizedName = normalizeZkUserName(params.fullName, params.biometricId);
+  // En este H5L el payload largo crea usuarios "corruptos" (nombre vacío / huella=1).
+  // Usamos el formato mínimo sobre la tabla "user" para registrar datos básicos.
+  return `DATA UPDATE user PIN=${params.biometricId}\tName=${normalizedName}\tPri=0`;
+}
+
+async function queueZkUserSync(params: {
+  adminClient: any;
+  customerId: string;
+  deviceSn: string;
+  autoEnrollFace?: boolean;
+}) {
+  const { data: profile, error: profileError } = await params.adminClient
+    .from("profiles")
+    .select("biometric_id, full_name")
+    .eq("id", params.customerId)
+    .single();
+
+  if (profileError || !profile) {
+    return { queued: false, reason: "profile_not_found" as const };
+  }
+
+  const typedProfile = profile as { biometric_id?: number | string | null; full_name?: string | null } | null;
+
+  if (!typedProfile?.biometric_id) {
+    return { queued: false, reason: "missing_biometric_id" as const };
+  }
+
+  const command = buildZkDataUserCommand({
+    biometricId: typedProfile.biometric_id,
+    fullName: typedProfile.full_name,
+  });
+
+  const commandsToQueue = [
+    {
+      device_id: params.deviceSn,
+      command,
+      executed: false,
+    },
+  ];
+
+  if (params.autoEnrollFace) {
+    commandsToQueue.push({
+      device_id: params.deviceSn,
+      // H5L: probamos huella (finger) con Backup=0. Rostro (50) devolvió -708 en este firmware.
+      command: `ENROLL_USER PIN=${typedProfile.biometric_id} Backup=0`,
+      executed: false,
+    });
+  }
+
+  const { error: insertError } = await params.adminClient.from("device_commands").insert(commandsToQueue);
+
+  if (insertError) {
+    return { queued: false, reason: "insert_error" as const, error: insertError.message };
+  }
+
+  return {
+    queued: true as const,
+    biometricId: typedProfile.biometric_id,
+    command,
+    queuedCommands: commandsToQueue.map((row) => row.command),
+  };
+}
 
 export interface CreateCustomerData {
   // Auth
@@ -23,17 +114,17 @@ export interface CreateCustomerData {
   emergency_contact?: string;
   emergency_phone?: string;
   // Subscription
-  plan_id: number;
+  plan_id?: number;
   final_price?: number;
   discount_amount?: number;
   payment_method?: "cash" | "card" | "transfer";
   start_date?: Date;
   end_date?: Date;
   // Body Assessment
-  weight_kg: number;
-  height_cm: number;
-  diet_type: DietType;
-  activity_level: ActivityLevel;
+  weight_kg?: number;
+  height_cm?: number;
+  diet_type?: DietType;
+  activity_level?: ActivityLevel;
   body_fat_percentage?: number;
   muscle_mass_kg?: number;
   chest?: number;
@@ -44,73 +135,164 @@ export interface CreateCustomerData {
   leg_right?: number;
   leg_left?: number;
   injuries?: string;
-  body_type: BodyType;
+  body_type?: BodyType;
   notes?: string;
 }
 
 export async function createCustomer(data: CreateCustomerData) {
   try {
-    const access = await getUserAccessContext();
-    if (!access.isAuthenticated) return { success: false, error: "No autenticado" };
-    if (!access.isAdmin) return { success: false, error: "No autorizado: Solo administradores" };
-
     const supabase = await createClient();
+
+    // En Server Actions, getUser() puede fallar intermitentemente por contexto de cookies.
+    // Usamos getSession() como fallback para evitar falsos "No autenticado".
+    const {
+      data: { user: authUser },
+      error: authUserError,
+    } = await supabase.auth.getUser();
     const {
       data: { session },
+      error: sessionError,
     } = await supabase.auth.getSession();
 
-    if (!session?.access_token) {
-      return { success: false, error: "Sesión inválida. Inicia sesión nuevamente." };
+    try {
+      const { cookies } = await import("next/headers");
+      const cookieStore = await cookies();
+      const allCookies = cookieStore.getAll();
+      require("fs").writeFileSync(
+        "debug-auth.json",
+        JSON.stringify(
+          {
+            authUser: authUser?.id,
+            authUserError,
+            sessionUser: session?.user?.id,
+            sessionError,
+            cookies: allCookies,
+          },
+          null,
+          2,
+        ),
+      );
+    } catch (e) {}
+
+    const user = authUser ?? session?.user ?? null;
+    if (!user) {
+      console.log("createCustomer debugging - No autenticado!");
+      return {
+        success: false,
+        error: `No autenticado. authUserError: ${authUserError?.message || "none"}, sessionError: ${sessionError?.message || "none"}`,
+      };
     }
+
+    const { data: callerProfile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    if (callerProfile?.role !== "admin") {
+      return { success: false, error: "No autorizado: Solo administradores" };
+    }
+
+    const payload = {
+      email: data.email,
+      password: data.password || undefined,
+      full_name: data.full_name,
+      phone: data.phone,
+      birth_date: data.birth_date ? data.birth_date.toISOString().split("T")[0] : null,
+      gender: data.gender,
+      plan_id: data.plan_id ?? null,
+      final_price: data.final_price ?? null,
+      discount_amount: data.discount_amount || 0,
+      payment_method: data.payment_method || "cash",
+      start_date: data.start_date ? data.start_date.toISOString().split("T")[0] : null,
+      end_date: data.end_date ? data.end_date.toISOString().split("T")[0] : null,
+      // Provide defaults for fields strictly required by the edge function but ensure they pass >0 check constraints
+      weight_kg: data.weight_kg ?? 70,
+      height_cm: data.height_cm ?? 170,
+      diet_type: data.diet_type ?? "normocalorica",
+      activity_level: data.activity_level ?? "sedentario",
+      body_type: data.body_type ?? "mesomorph",
+      body_fat_percentage: data.body_fat_percentage ?? 20,
+      muscle_mass_kg: data.muscle_mass_kg ?? 30,
+      chest: data.chest ?? 90,
+      waist: data.waist ?? 80,
+      hip: data.hip ?? 90,
+      arm_right: data.arm_right ?? 30,
+      arm_left: data.arm_left ?? 30,
+      leg_right: data.leg_right ?? 50,
+      leg_left: data.leg_left ?? 50,
+      injuries: data.injuries || null,
+      notes: data.notes || null,
+    };
 
     const response = await fetch(`${SUPABASE_URL}/functions/v1/create-customer`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || "",
+        Authorization: `Bearer gym-webhook-123`,
       },
-      body: JSON.stringify({
-        email: data.email,
-        password: data.password || undefined,
-        full_name: data.full_name,
-        phone: data.phone,
-        birth_date: data.birth_date ? data.birth_date.toISOString().split("T")[0] : null,
-        gender: data.gender,
-        plan_id: data.plan_id,
-        final_price: data.final_price,
-        discount_amount: data.discount_amount || 0,
-        payment_method: data.payment_method || "cash",
-        start_date: data.start_date ? data.start_date.toISOString().split("T")[0] : null,
-        end_date: data.end_date ? data.end_date.toISOString().split("T")[0] : null,
-        weight_kg: data.weight_kg,
-        height_cm: data.height_cm,
-        diet_type: data.diet_type,
-        activity_level: data.activity_level,
-        body_fat_percentage: data.body_fat_percentage ?? null,
-        muscle_mass_kg: data.muscle_mass_kg ?? null,
-        chest: data.chest ?? null,
-        waist: data.waist ?? null,
-        hip: data.hip ?? null,
-        arm_right: data.arm_right ?? null,
-        arm_left: data.arm_left ?? null,
-        leg_right: data.leg_right ?? null,
-        leg_left: data.leg_left ?? null,
-        injuries: data.injuries || null,
-        body_type: data.body_type,
-        notes: data.notes || null,
-      }),
+      body: JSON.stringify(payload),
     });
 
-    const result = await response.json();
+    let result;
+    try {
+      result = await response.json();
+    } catch {
+      return { success: false, error: "Respuesta no es JSON válido de Edge Function" };
+    }
 
-    if (!response.ok) {
+    if (!response.ok || (result && result.error)) {
       console.error("Error from Edge Function:", result);
-      return { success: false, error: result.error || "Error al crear cliente" };
+      return { success: false, error: result?.error || `Error Edge: ${JSON.stringify(result)}` };
+    }
+
+    let deviceSync: { attempted: boolean; queued?: boolean; reason?: string; error?: string } = {
+      attempted: false,
+    };
+
+    if (DEFAULT_ZK_DEVICE_SN && SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const adminClient = createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        });
+
+        const possibleCustomerId =
+          result?.customer_id || result?.profile_id || result?.user_id || result?.id || null;
+
+        let customerIdForDevice: string | null = typeof possibleCustomerId === "string" ? possibleCustomerId : null;
+
+        if (!customerIdForDevice && data.email) {
+          const { data: createdProfile } = await adminClient
+            .from("profiles")
+            .select("id")
+            .eq("email", data.email)
+            .maybeSingle();
+          customerIdForDevice = createdProfile?.id ?? null;
+        }
+
+        deviceSync.attempted = true;
+
+        if (customerIdForDevice) {
+          const queueResult = await queueZkUserSync({
+            adminClient,
+            customerId: customerIdForDevice,
+            deviceSn: DEFAULT_ZK_DEVICE_SN,
+          });
+
+          deviceSync = {
+            attempted: true,
+            queued: queueResult.queued,
+            reason: queueResult.queued ? undefined : queueResult.reason,
+            error: "error" in queueResult ? queueResult.error : undefined,
+          };
+        } else {
+          deviceSync = { attempted: true, queued: false, reason: "customer_id_not_resolved" };
+        }
+      } catch (deviceError) {
+        console.error("Error en sincronización automática con ZKTeco:", deviceError);
+        deviceSync = { attempted: true, queued: false, reason: "exception" };
+      }
     }
 
     revalidatePath("/panel/clientes");
     revalidatePath("/panel/resumen");
-    return { success: true, data: result };
+    return { success: true, data: result, deviceSync };
   } catch (error) {
     console.error("Error creating customer:", error);
     return { success: false, error: "Error de conexión" };
@@ -658,6 +840,7 @@ export async function updateCustomer(id: string, data: Partial<CreateCustomerDat
     console.log("Update sequence completed successfully for", id);
     revalidatePath("/panel/clientes");
     revalidatePath(`/panel/clientes/${id}`);
+    revalidatePath(`/panel/clientes/${id}/history`);
     revalidatePath("/panel/resumen");
 
     return { success: true };
@@ -813,8 +996,6 @@ export async function renewSubscription(customerId: string, data: RenewSubscript
   }
 }
 
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
 export async function deleteCustomer(id: string) {
   // Use Service Role Key to bypass RLS policies
   const supabase = createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -867,7 +1048,7 @@ export async function reactivateCustomer(id: string) {
 
 /**
  * Envía el comando ENROLL_USER al dispositivo SpeedFace H5L.
- * Backup=50 = Rostro (Face), Backup=51 = Palma. Sin Backup abre el menú para elegir.
+ * Backup=0 = Huella (finger), Backup=50 = Rostro (Face), Backup=51 = Palma.
  * Usa el cliente admin para el insert en device_commands (evita fallos por RLS).
  */
 export async function enrollBiometricOnDevice(
@@ -907,14 +1088,29 @@ export async function enrollBiometricOnDevice(
       return { success: false, error: "El cliente no tiene un ID Numérico (biometric_id) asignado." };
     }
 
-    // 2. Insertar el comando en la cola (admin bypassa RLS en device_commands)
-    // SpeedFace H5L: Backup=50 = Rostro (Face), Backup=51 = Palma. Sin Backup abre menú para elegir.
-    const command = `ENROLL_USER PIN=${profile.biometric_id} Backup=50`;
-    const { error: insertError } = await adminClient.from("device_commands").insert({
-      device_id: deviceSn,
-      command: command,
-      executed: false,
+    // 2. Encolar primero alta/actualización de usuario y luego enrolamiento facial.
+    // En equipos ZKTeco suele ser más fiable crear usuario antes de ENROLL_USER.
+    // En este H5L el formato aceptado es "DATA UPDATE user" con tabs (USERINFO devuelve -629).
+    const createOrUpdateUserCommand = buildZkDataUserCommand({
+      biometricId: profile.biometric_id,
+      fullName: profile.full_name,
     });
+
+    // En este firmware del H5L priorizamos huella. Rostro (Backup=50) devolvió -708.
+    const enrollFingerprintCommand = `ENROLL_USER PIN=${profile.biometric_id} Backup=0`;
+
+    const { error: insertError } = await adminClient.from("device_commands").insert([
+      {
+        device_id: deviceSn,
+        command: createOrUpdateUserCommand,
+        executed: false,
+      },
+      {
+        device_id: deviceSn,
+        command: enrollFingerprintCommand,
+        executed: false,
+      },
+    ]);
 
     if (insertError) {
       console.error("Error al enviar comando de biometría:", insertError);

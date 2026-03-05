@@ -1,0 +1,66 @@
+version: "2"
+type: frontend
+tech_stack:
+  - TypeScript
+  - Next.js (App Router)
+  - Tailwind CSS
+  - Radix UI
+  - Shadcn UI
+  - Supabase
+  - TanStack Query
+  - Zustand
+routes:
+  - path: /
+    file: src/app/page.tsx
+    auth_required: false
+    description: Landing page or root redirect
+  - path: /iniciar-sesion
+    file: src/app/iniciar-sesion/page.tsx
+    auth_required: false
+    description: User login page
+  - path: /panel
+    file: src/app/panel/page.tsx
+    auth_required: true
+    description: Dashboard main panel
+  - path: /panel/clientes
+    file: src/app/panel/clientes/page.tsx
+    auth_required: true
+    description: Management of gym customers
+  - path: /panel/pagos
+    file: src/app/panel/pagos/page.tsx
+    auth_required: true
+    description: Management of payments
+  - path: /panel/planes
+    file: src/app/panel/planes/page.tsx
+    auth_required: true
+    description: Management of gym plans
+  - path: /panel/resumen
+    file: src/app/panel/resumen/page.tsx
+    auth_required: true
+    description: Statistical summary and charts
+features:
+  - name: User Login
+    description: Login with email and password or Google OAuth using Supabase
+    files:
+      - src/app/iniciar-sesion/page.tsx
+      - src/components/iniciar-sesion-form.tsx
+    entry_route: /iniciar-sesion
+    user_interactions:
+      - Fill email input field
+      - Fill password input field
+      - Click "Iniciar Sesión" button
+      - Click "Continuar con Google" button
+    api_calls:
+      - method: POST
+        endpoint: auth/v1/token?grant_type=password
+    auth_required: false
+  - name: Client Management
+    description: View and manage gym clients
+    files:
+      - src/app/panel/clientes/page.tsx
+    entry_route: /panel/clientes
+    user_interactions:
+      - View list of clients
+      - Search for clients
+    auth_required: true
+known_limitations: []
