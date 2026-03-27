@@ -73,6 +73,16 @@ export const navItems: NavItem[] = [
         url: "/panel/planes",
         icon: "billing",
       },
+      {
+        title: "Asistencias",
+        url: "/panel/asistencias",
+        icon: "dashboard",
+      },
+      {
+        title: "Ejercicios",
+        url: "/panel/ejercicios",
+        icon: "product",
+      },
     ],
   },
   {

@@ -16,6 +16,11 @@ interface AccessHistoryTabProps {
 }
 
 export function AccessHistoryTab({ accessHistory, heatmapData }: AccessHistoryTabProps) {
+  const parseHeatmapDate = (value: string) => {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, (month || 1) - 1, day || 1);
+  };
+
   // Generar los últimos 12 meses para el heatmap
   const months = [];
   const now = new Date();
@@ -33,7 +38,7 @@ export function AccessHistoryTab({ accessHistory, heatmapData }: AccessHistoryTa
   const visitsByMonth = months.map((m) => {
     let count = 0;
     Object.keys(heatmapData).forEach((date) => {
-      const d = new Date(date);
+      const d = parseHeatmapDate(date);
       if (d.getMonth() === m.month && d.getFullYear() === m.year) {
         count += heatmapData[date];
       }
@@ -67,26 +72,28 @@ export function AccessHistoryTab({ accessHistory, heatmapData }: AccessHistoryTa
             </div>
           </div>
         </CardHeader>
-        <CardContent className="pt-10 pb-6 px-6 sm:px-10">
-          <div className="flex gap-2 sm:gap-4 items-end justify-between h-40">
+        <CardContent className="px-6 pb-6 pt-8 sm:px-10">
+          <div className="grid h-56 grid-cols-12 gap-2 sm:gap-4">
             <TooltipProvider>
               {months.map((month, idx) => (
                 <Tooltip key={idx}>
                   <TooltipTrigger asChild>
-                    <div className="flex flex-col items-center gap-3 flex-1 group cursor-default">
-                      <div className="relative w-full flex items-end justify-center h-full">
+                    <div className="group flex min-w-0 flex-col items-center gap-3 cursor-default">
+                      <div className="relative flex h-44 w-full items-end justify-center rounded-xl bg-muted/20 px-2 py-3">
                         <div
                           className={cn(
-                            "w-full max-w-[40px] rounded-t-lg transition-all duration-500 ease-out group-hover:opacity-80",
-                            visitsByMonth[idx] > 0 ? "bg-primary" : "bg-muted",
+                            "w-full max-w-[40px] rounded-md border transition-all duration-500 ease-out group-hover:opacity-90",
+                            visitsByMonth[idx] > 0
+                              ? "border-primary/30 bg-primary shadow-[0_0_18px_hsl(var(--primary)/0.35)]"
+                              : "border-border/40 bg-muted/60",
                           )}
                           style={{
-                            height: `${Math.max((visitsByMonth[idx] / maxVisits) * 100, 5)}%`,
-                            opacity: 0.1 + (visitsByMonth[idx] / maxVisits) * 0.9,
+                            height: `${Math.max((visitsByMonth[idx] / maxVisits) * 100, visitsByMonth[idx] > 0 ? 12 : 6)}%`,
+                            opacity: visitsByMonth[idx] > 0 ? 1 : 0.45,
                           }}
                         />
                         {visitsByMonth[idx] > 0 && (
-                          <span className="absolute -top-6 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                          <span className="absolute -top-6 whitespace-nowrap text-[10px] font-bold opacity-0 transition-opacity group-hover:opacity-100">
                             {visitsByMonth[idx]}
                           </span>
                         )}
@@ -125,21 +132,23 @@ export function AccessHistoryTab({ accessHistory, heatmapData }: AccessHistoryTa
           {accessHistory.length === 0 ? (
             <p className="text-muted-foreground text-center py-12">No hay registros de acceso</p>
           ) : (
-            <Table>
+            <Table containerClassName="max-h-[386px] overflow-y-auto">
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50 border-y border-primary/5">
-                  <TableHead className="w-[200px] font-bold text-xs uppercase tracking-wider pl-6">
-                    Fecha y Hora
-                  </TableHead>
-                  <TableHead className="font-bold text-xs uppercase tracking-wider">Día</TableHead>
-                  <TableHead className="font-bold text-xs uppercase tracking-wider text-right pr-6">
-                    Estado de Acceso
-                  </TableHead>
-                </TableRow>
+                    <TableHead className="sticky top-0 z-20 w-[200px] border-b border-primary/5 bg-muted/95 pl-6 font-bold text-xs uppercase tracking-wider backdrop-blur supports-[backdrop-filter]:bg-muted/85">
+                      Fecha y Hora
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-20 border-b border-primary/5 bg-muted/95 font-bold text-xs uppercase tracking-wider backdrop-blur supports-[backdrop-filter]:bg-muted/85">
+                      Día
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-20 border-b border-primary/5 bg-muted/95 pr-6 text-right font-bold text-xs uppercase tracking-wider backdrop-blur supports-[backdrop-filter]:bg-muted/85">
+                      Estado de Acceso
+                    </TableHead>
+                  </TableRow>
               </TableHeader>
               <TableBody>
                 {accessHistory.map((log) => (
-                  <TableRow key={log.id} className="hover:bg-primary/[0.02] border-primary/5 transition-colors h-14">
+                  <TableRow key={log.id} className="hover:bg-primary/[0.02] border-primary/5 transition-colors h-[62px]">
                     <TableCell className="font-medium pl-6">
                       <div className="flex flex-col">
                         <span className="text-sm">
@@ -157,7 +166,7 @@ export function AccessHistoryTab({ accessHistory, heatmapData }: AccessHistoryTa
                       <Badge
                         variant="outline"
                         className={cn(
-                          "px-2.5 py-0.5 rounded-full text-[10px] font-bold border-transparent flex items-center gap-1 ml-auto w-fit",
+                          "ml-auto flex w-fit items-center gap-1 rounded-full border-transparent px-2.5 py-0.5 text-[10px] font-bold",
                           log.status === "authorized" ? "bg-green-500/10 text-green-600" : "bg-red-500/10 text-red-600",
                         )}
                       >

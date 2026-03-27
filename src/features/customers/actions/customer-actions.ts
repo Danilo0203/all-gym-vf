@@ -1,29 +1,47 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use server";
 
+import fs from "node:fs";
+import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createClientAdmin } from "@supabase/supabase-js";
 import { getUserEmail } from "@/lib/supabase/admin";
 import { computeFitnessPlan } from "@/lib/fitness/excel-calculator";
 import type { ActivityLevel, BodyType, DietType } from "@/lib/fitness/types";
-import { generateRoutineFromTemplates } from "@/lib/fitness/routine-generator";
 import { getUserAccessContext } from "@/lib/auth/authorization";
+import { syncTrainingProfileWithAdmin } from "@/features/customers/actions/customer-routine-actions";
+import type { NutritionContext, TrainingProfileInput } from "@/lib/training/types";
 
-try {
-  require("dotenv").config({ path: ".env.local" });
-} catch (e) {}
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-let SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-const DEFAULT_ZK_DEVICE_SN = (process.env.DEFAULT_ZK_DEVICE_SN || "").trim();
-if (!SUPABASE_SERVICE_ROLE_KEY) {
+type AdminSupabaseClient = any;
+type DeviceSyncMethod = "direct" | "queue" | "none";
+type DeviceSyncResult = {
+  attempted: boolean;
+  synced?: boolean;
+  queued?: boolean;
+  method?: DeviceSyncMethod;
+  reason?: string;
+  error?: string;
+};
+
+function readEnvValueFromLocalFile(key: string) {
   try {
-    const fs = require("fs");
-    const path = require("path");
     const envLocal = fs.readFileSync(path.join(process.cwd(), ".env.local"), "utf8");
-    const match = envLocal.match(/SUPABASE_SERVICE_ROLE_KEY=([^ \n]+)/);
-    if (match) SUPABASE_SERVICE_ROLE_KEY = match[1].trim();
-  } catch (e) {}
+    const match = envLocal.match(new RegExp(`^${key}=([^\\n]+)$`, "m"));
+    return match?.[1]?.trim() || "";
+  } catch {
+    return "";
+  }
 }
+
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || readEnvValueFromLocalFile("SUPABASE_SERVICE_ROLE_KEY");
+const DEFAULT_ZK_DEVICE_SN = (process.env.DEFAULT_ZK_DEVICE_SN || "").trim();
+const GYM_SYNC_SERVER_URL = (process.env.GYM_SYNC_SERVER_URL || "http://127.0.0.1:8080").trim();
+const GYM_SYNC_API_TOKEN = (process.env.GYM_SYNC_API_TOKEN || "").trim();
+const ZK_DEFAULT_USER_GROUP = Number(process.env.ZK_DEFAULT_USER_GROUP || 1);
+const ZK_DEFAULT_AUTHORIZE_TIMEZONE_ID = Number(process.env.ZK_DEFAULT_AUTHORIZE_TIMEZONE_ID || 1);
+const ZK_DEFAULT_AUTHORIZE_DOOR_ID = Number(process.env.ZK_DEFAULT_AUTHORIZE_DOOR_ID || 1);
 
 function normalizeZkUserName(fullName: string | null | undefined, biometricId: number | string) {
   return (
@@ -37,69 +55,244 @@ function normalizeZkUserName(fullName: string | null | undefined, biometricId: n
   );
 }
 
-function buildZkDataUserCommand(params: { biometricId: number | string; fullName?: string | null }) {
-  const normalizedName = normalizeZkUserName(params.fullName, params.biometricId);
-  // En este H5L el payload largo crea usuarios "corruptos" (nombre vacío / huella=1).
-  // Usamos el formato mínimo sobre la tabla "user" para registrar datos básicos.
-  return `DATA UPDATE user PIN=${params.biometricId}\tName=${normalizedName}\tPri=0`;
+function sanitizeZkFieldValue(value: string | null | undefined, max = 64) {
+  return String(value || "")
+    .replace(/[\t\r\n=]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
 }
 
-async function queueZkUserSync(params: {
-  adminClient: any;
-  customerId: string;
-  deviceSn: string;
-  autoEnrollFace?: boolean;
-}) {
-  const { data: profile, error: profileError } = await params.adminClient
+function buildZkDataUserCommand(params: { biometricId: number | string; fullName?: string | null }) {
+  const displayName =
+    sanitizeZkFieldValue(params.fullName, 24) || normalizeZkUserName(params.fullName, params.biometricId);
+
+  // SpeedFace/H5L usa el formato del protocolo de seguridad: CardNo/Pin/Password/Group/StartTime/EndTime/Name/Privilege.
+  // Evitamos tanto USERINFO (-629 en este firmware) como los payloads viejos mal interpretados por el equipo.
+  return (
+    `DATA UPDATE user ` +
+    `CardNo=\t` +
+    `Pin=${params.biometricId}\t` +
+    `Password=\t` +
+    `Group=${ZK_DEFAULT_USER_GROUP}\t` +
+    `StartTime=0\t` +
+    `EndTime=0\t` +
+    `Name=${displayName}\t` +
+    `Privilege=0`
+  );
+}
+
+function buildZkUserAuthorizeCommand(params: { biometricId: number | string }) {
+  return (
+    `DATA UPDATE userauthorize ` +
+    `Pin=${params.biometricId}\t` +
+    `AuthorizeTimezoneId=${ZK_DEFAULT_AUTHORIZE_TIMEZONE_ID}\t` +
+    `AuthorizeDoorId=${ZK_DEFAULT_AUTHORIZE_DOOR_ID}`
+  );
+}
+
+function buildZkUserDisableCommand(params: { biometricId: number | string }) {
+  return `DATA DELETE userauthorize Pin=${params.biometricId}`;
+}
+
+function buildZkUserDeleteCommands(params: { biometricId: number | string }) {
+  const commands = [buildZkUserDisableCommand(params)];
+
+  for (let fingerId = 0; fingerId <= 9; fingerId += 1) {
+    commands.push(`DATA DELETE templatev10 Pin=${params.biometricId}\tFingerID=${fingerId}`);
+  }
+
+  commands.push(`DATA DELETE user Pin=${params.biometricId}`);
+  return commands;
+}
+
+function normalizeDeviceSyncMethod(value: unknown): DeviceSyncMethod {
+  return value === "direct" || value === "queue" || value === "none" ? value : "none";
+}
+
+function normalizeOptionalString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+async function getCustomerDeviceProfile(adminClient: AdminSupabaseClient, customerId: string) {
+  const { data: profile, error: profileError } = await adminClient
     .from("profiles")
     .select("biometric_id, full_name")
-    .eq("id", params.customerId)
+    .eq("id", customerId)
     .single();
 
   if (profileError || !profile) {
-    return { queued: false, reason: "profile_not_found" as const };
+    return { ok: false as const, reason: "profile_not_found" as const, error: profileError?.message };
   }
 
   const typedProfile = profile as { biometric_id?: number | string | null; full_name?: string | null } | null;
-
   if (!typedProfile?.biometric_id) {
-    return { queued: false, reason: "missing_biometric_id" as const };
+    return { ok: false as const, reason: "missing_biometric_id" as const };
   }
 
-  const command = buildZkDataUserCommand({
+  return {
+    ok: true as const,
     biometricId: typedProfile.biometric_id,
     fullName: typedProfile.full_name,
-  });
+  };
+}
 
-  const commandsToQueue = [
-    {
-      device_id: params.deviceSn,
-      command,
-      executed: false,
-    },
-  ];
-
-  if (params.autoEnrollFace) {
-    commandsToQueue.push({
-      device_id: params.deviceSn,
-      // H5L: probamos huella (finger) con Backup=0. Rostro (50) devolvió -708 en este firmware.
-      command: `ENROLL_USER PIN=${typedProfile.biometric_id} Backup=0`,
-      executed: false,
-    });
+async function queueZkCommands(params: {
+  adminClient: AdminSupabaseClient;
+  customerId: string;
+  deviceSn: string;
+  buildCommands: (profile: { biometricId: number | string; fullName?: string | null }) => string[];
+}) {
+  const profile = await getCustomerDeviceProfile(params.adminClient, params.customerId);
+  if (!profile.ok) {
+    return { queued: false, reason: profile.reason, error: profile.error };
   }
 
-  const { error: insertError } = await params.adminClient.from("device_commands").insert(commandsToQueue);
+  const commands = params
+    .buildCommands({
+      biometricId: profile.biometricId,
+      fullName: profile.fullName,
+    })
+    .filter(Boolean);
 
+  if (commands.length === 0) {
+    return { queued: false, reason: "missing_commands" as const };
+  }
+
+  const rows = commands.map((command) => ({
+    device_id: params.deviceSn,
+    command,
+    executed: false,
+  }));
+
+  const { error: insertError } = await params.adminClient.from("device_commands").insert(rows);
   if (insertError) {
     return { queued: false, reason: "insert_error" as const, error: insertError.message };
   }
 
   return {
     queued: true as const,
-    biometricId: typedProfile.biometric_id,
-    command,
-    queuedCommands: commandsToQueue.map((row) => row.command),
+    biometricId: profile.biometricId,
+    fullName: profile.fullName,
+    queuedCommands: commands,
   };
+}
+
+async function queueZkUserSync(params: {
+  adminClient: AdminSupabaseClient;
+  customerId: string;
+  deviceSn: string;
+  autoEnrollFace?: boolean;
+}) {
+  const queued = await queueZkCommands({
+    adminClient: params.adminClient,
+    customerId: params.customerId,
+    deviceSn: params.deviceSn,
+    buildCommands: (profile) => {
+      const commands = [
+        buildZkDataUserCommand({
+          biometricId: profile.biometricId,
+          fullName: profile.fullName,
+        }),
+        buildZkUserAuthorizeCommand({
+          biometricId: profile.biometricId,
+        }),
+      ];
+
+      if (params.autoEnrollFace) {
+        commands.push(`ENROLL_USER PIN=${profile.biometricId} Backup=0`);
+      }
+
+      return commands;
+    },
+  });
+
+  if (!queued.queued) {
+    return queued;
+  }
+
+  const queuedCommands = queued.queuedCommands || [];
+
+  return {
+    queued: true as const,
+    biometricId: queued.biometricId,
+    command: queuedCommands[0],
+    queuedCommands,
+  };
+}
+
+async function callGymSyncServer(pathname: string, body: Record<string, unknown>) {
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+
+  if (GYM_SYNC_API_TOKEN) {
+    headers.Authorization = `Bearer ${GYM_SYNC_API_TOKEN}`;
+  }
+
+  try {
+    const response = await fetch(new URL(pathname, GYM_SYNC_SERVER_URL).toString(), {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+
+    let result: Record<string, unknown> | null = null;
+    try {
+      result = await response.json();
+    } catch {}
+
+    if (!response.ok) {
+      return {
+        attempted: true,
+        synced: false,
+        queued: false,
+        method: normalizeDeviceSyncMethod(result?.method),
+        reason: normalizeOptionalString(result?.error) || `http_${response.status}`,
+        error: normalizeOptionalString(result?.details) || normalizeOptionalString(result?.error),
+      } satisfies DeviceSyncResult;
+    }
+
+    return {
+      attempted: true,
+      synced: result?.success === true,
+      queued: result?.success === true,
+      method: normalizeDeviceSyncMethod(result?.method),
+      reason: undefined,
+      error: undefined,
+    } satisfies DeviceSyncResult;
+  } catch (error) {
+    return {
+      attempted: true,
+      synced: false,
+      queued: false,
+      method: "none" as const,
+      reason: "sync_server_unreachable",
+      error: error instanceof Error ? error.message : "sync_server_unreachable",
+    } satisfies DeviceSyncResult;
+  }
+}
+
+async function syncCustomerWithGymSyncServer(params: { customerId: string; deviceSn: string }) {
+  return callGymSyncServer("/api/device-users/register", {
+    customer_id: params.customerId,
+    device_id: params.deviceSn,
+  });
+}
+
+async function disableCustomerOnGymSyncServer(params: { customerId: string; deviceSn: string }) {
+  return callGymSyncServer("/api/device-users/disable", {
+    customer_id: params.customerId,
+    device_id: params.deviceSn,
+  });
+}
+
+async function deleteCustomerFromGymSyncServer(params: { customerId: string; deviceSn: string }) {
+  return callGymSyncServer("/api/device-users/delete", {
+    customer_id: params.customerId,
+    device_id: params.deviceSn,
+  });
 }
 
 export interface CreateCustomerData {
@@ -137,165 +330,400 @@ export interface CreateCustomerData {
   injuries?: string;
   body_type?: BodyType;
   notes?: string;
+  primary_goal?: TrainingProfileInput["primary_goal"];
+  secondary_goal?: TrainingProfileInput["secondary_goal"];
+  focus_areas?: TrainingProfileInput["focus_areas"];
+  experience_level?: TrainingProfileInput["experience_level"];
+  days_per_week?: number;
+  session_minutes?: number;
+  training_location?: TrainingProfileInput["training_location"];
+  equipment_available?: TrainingProfileInput["equipment_available"];
+  cardio_preference?: TrainingProfileInput["cardio_preference"];
+  exercise_preferences?: string;
+  exercise_dislikes?: string;
+  injuries_or_pain?: string;
+  restricted_movements?: TrainingProfileInput["restricted_movements"];
+  parq_requires_attention?: boolean;
+  medical_clearance_notes?: string;
+}
+
+function buildTrainingProfileInput(data: Partial<CreateCustomerData>): TrainingProfileInput {
+  return {
+    primary_goal: data.primary_goal ?? null,
+    secondary_goal: data.secondary_goal ?? null,
+    focus_areas: data.focus_areas ?? [],
+    experience_level: data.experience_level ?? null,
+    days_per_week: data.days_per_week ?? null,
+    session_minutes: data.session_minutes ?? null,
+    training_location: data.training_location ?? null,
+    equipment_available: data.equipment_available ?? [],
+    activity_level: data.activity_level ?? null,
+    cardio_preference: data.cardio_preference ?? null,
+    exercise_preferences: data.exercise_preferences ?? null,
+    exercise_dislikes: data.exercise_dislikes ?? null,
+    injuries_or_pain: data.injuries_or_pain ?? data.injuries ?? null,
+    restricted_movements: data.restricted_movements ?? [],
+    parq_requires_attention: data.parq_requires_attention ?? null,
+    medical_clearance_notes: data.medical_clearance_notes ?? null,
+  };
+}
+
+function buildPartialTrainingProfileUpdate(data: Partial<CreateCustomerData>): Partial<TrainingProfileInput> {
+  const update: Partial<TrainingProfileInput> = {};
+
+  if (data.primary_goal !== undefined) update.primary_goal = data.primary_goal;
+  if (data.secondary_goal !== undefined) update.secondary_goal = data.secondary_goal;
+  if (data.focus_areas !== undefined) update.focus_areas = data.focus_areas;
+  if (data.experience_level !== undefined) update.experience_level = data.experience_level;
+  if (data.days_per_week !== undefined) update.days_per_week = data.days_per_week;
+  if (data.session_minutes !== undefined) update.session_minutes = data.session_minutes;
+  if (data.training_location !== undefined) update.training_location = data.training_location;
+  if (data.equipment_available !== undefined) update.equipment_available = data.equipment_available;
+  if (data.activity_level !== undefined) update.activity_level = data.activity_level;
+  if (data.cardio_preference !== undefined) update.cardio_preference = data.cardio_preference;
+  if (data.exercise_preferences !== undefined) update.exercise_preferences = data.exercise_preferences;
+  if (data.exercise_dislikes !== undefined) update.exercise_dislikes = data.exercise_dislikes;
+  if (data.injuries_or_pain !== undefined || data.injuries !== undefined) {
+    update.injuries_or_pain = data.injuries_or_pain ?? data.injuries ?? null;
+  }
+  if (data.restricted_movements !== undefined) update.restricted_movements = data.restricted_movements;
+  if (data.parq_requires_attention !== undefined) update.parq_requires_attention = data.parq_requires_attention;
+  if (data.medical_clearance_notes !== undefined) update.medical_clearance_notes = data.medical_clearance_notes;
+
+  return update;
+}
+
+function buildNutritionContextFromData(data: Partial<CreateCustomerData>): NutritionContext {
+  return {
+    birthDate: data.birth_date ?? null,
+    gender: data.gender ?? null,
+    weightKg: data.weight_kg ?? null,
+    heightCm: data.height_cm ?? null,
+    bodyType: data.body_type ?? null,
+    dietType: data.diet_type ?? null,
+    activityLevel: data.activity_level ?? null,
+  };
+}
+
+function canCreateBodyAssessment(data: Partial<CreateCustomerData>) {
+  return typeof data.weight_kg === "number" && typeof data.height_cm === "number";
+}
+
+function canComputeNutritionPlan(data: Partial<CreateCustomerData>) {
+  return Boolean(
+    data.birth_date &&
+      data.gender &&
+      typeof data.weight_kg === "number" &&
+      typeof data.height_cm === "number" &&
+      data.body_type &&
+      data.diet_type &&
+      data.activity_level,
+  );
+}
+
+async function createSubscriptionAndPayment(params: {
+  adminClient: AdminSupabaseClient;
+  userId: string;
+  planId?: number;
+  startDate?: Date;
+  endDate?: Date;
+  finalPrice?: number;
+  discountAmount?: number;
+  paymentMethod?: "cash" | "card" | "transfer";
+}) {
+  const { adminClient, userId, planId } = params;
+  if (!planId) {
+    return { subscriptionId: null as string | null };
+  }
+
+  const { data: planData, error: planError } = await adminClient
+    .from("plans")
+    .select("id, price, duration_days")
+    .eq("id", planId)
+    .single();
+
+  if (planError || !planData) {
+    throw new Error("Plan no encontrado");
+  }
+
+  const subscriptionStartDate = params.startDate ? formatToLocalISO(params.startDate) : new Date().toISOString().split("T")[0];
+  const subscriptionEndDate =
+    params.endDate
+      ? formatToLocalISO(params.endDate)
+      : (() => {
+          const dt = new Date(subscriptionStartDate!);
+          dt.setDate(dt.getDate() + Number(planData.duration_days || 30));
+          return dt.toISOString().split("T")[0];
+        })();
+
+  const { data: subscription, error: subscriptionError } = await adminClient
+    .from("subscriptions")
+    .insert({
+      user_id: userId,
+      plan_id: planId,
+      start_date: subscriptionStartDate,
+      end_date: subscriptionEndDate,
+      status: "active",
+      discount_amount: params.discountAmount || 0,
+    })
+    .select("id")
+    .single();
+
+  if (subscriptionError || !subscription) {
+    throw subscriptionError || new Error("No se pudo crear la suscripción");
+  }
+
+  const amountOriginal = Number(planData.price);
+  const discountAmount = Number(params.discountAmount || 0);
+  const amountPaid = Number(params.finalPrice ?? amountOriginal - discountAmount);
+
+  const { error: paymentError } = await adminClient.from("payments").insert({
+    subscription_id: subscription.id,
+    user_id: userId,
+    amount_original: amountOriginal,
+    discount_amount: discountAmount,
+    amount_paid: amountPaid,
+    method: params.paymentMethod || "cash",
+    payment_date: new Date().toISOString(),
+  });
+
+  if (paymentError) {
+    throw paymentError;
+  }
+
+  return { subscriptionId: subscription.id };
+}
+
+async function createBodyAssessmentAndMaybeSnapshot(params: {
+  adminClient: AdminSupabaseClient;
+  userId: string;
+  sourceEvent: "signup" | "renewal";
+  subscriptionId?: string | null;
+  metrics: Partial<CreateCustomerData>;
+}) {
+  const { adminClient, userId, sourceEvent, subscriptionId, metrics } = params;
+  if (!canCreateBodyAssessment(metrics)) {
+    return { computed: null as ReturnType<typeof computeFitnessPlan> | null };
+  }
+
+  const computed = canComputeNutritionPlan(metrics)
+    ? computeFitnessPlan({
+        birthDate: metrics.birth_date!,
+        gender: metrics.gender!,
+        weightKg: metrics.weight_kg!,
+        heightCm: metrics.height_cm!,
+        bodyType: metrics.body_type!,
+        dietType: metrics.diet_type!,
+        activityLevel: metrics.activity_level!,
+      })
+    : null;
+
+  const assessmentPayload = {
+    user_id: userId,
+    date: new Date().toISOString().split("T")[0],
+    weight_kg: metrics.weight_kg!,
+    height_cm: metrics.height_cm!,
+    body_type: metrics.body_type ?? null,
+    diet_type: metrics.diet_type ?? null,
+    activity_level: metrics.activity_level ?? null,
+    body_fat_percentage: metrics.body_fat_percentage ?? null,
+    muscle_mass_kg: metrics.muscle_mass_kg ?? null,
+    chest: metrics.chest ?? null,
+    waist: metrics.waist ?? null,
+    hip: metrics.hip ?? null,
+    arm_right: metrics.arm_right ?? null,
+    arm_left: metrics.arm_left ?? null,
+    leg_right: metrics.leg_right ?? null,
+    leg_left: metrics.leg_left ?? null,
+    notes: metrics.notes || metrics.injuries_or_pain || metrics.injuries || null,
+    daily_calories: computed?.dailyCalories ?? null,
+    protein_grams: computed?.proteinGrams ?? null,
+    carbs_grams: computed?.carbsGrams ?? null,
+    fat_grams: computed?.fatGrams ?? null,
+    water_liters_goal: computed?.waterLitersGoal ?? null,
+  };
+
+  const { error: assessmentError } = await adminClient.from("body_assessments").insert(assessmentPayload);
+  if (assessmentError) throw assessmentError;
+
+  if (computed) {
+    const { error: snapshotError } = await adminClient.from("training_nutrition_snapshots").insert({
+      user_id: userId,
+      source_event: sourceEvent,
+      subscription_id: subscriptionId ?? null,
+      gender: metrics.gender!,
+      age_years: computed.ageYears,
+      height_cm: metrics.height_cm!,
+      weight_kg: metrics.weight_kg!,
+      body_type: metrics.body_type!,
+      diet_type: metrics.diet_type!,
+      activity_level: metrics.activity_level!,
+      body_fat_percentage: metrics.body_fat_percentage ?? null,
+      muscle_mass_kg: metrics.muscle_mass_kg ?? null,
+      chest_cm: metrics.chest ?? null,
+      waist_cm: metrics.waist ?? null,
+      arm_right_cm: metrics.arm_right ?? null,
+      arm_left_cm: metrics.arm_left ?? null,
+      hip_cm: metrics.hip ?? null,
+      leg_right_cm: metrics.leg_right ?? null,
+      leg_left_cm: metrics.leg_left ?? null,
+      notes: metrics.notes || metrics.injuries_or_pain || metrics.injuries || null,
+      daily_calories: computed.dailyCalories,
+      protein_grams: computed.proteinGrams,
+      carbs_grams: computed.carbsGrams,
+      fat_grams: computed.fatGrams,
+      water_liters_goal: computed.waterLitersGoal,
+      cardio_minutes: computed.cardioMinutes,
+      routine_mode: computed.routineMode,
+      algorithm_version: computed.algorithmVersion,
+    });
+
+    if (snapshotError) throw snapshotError;
+  }
+
+  return { computed };
 }
 
 export async function createCustomer(data: CreateCustomerData) {
   try {
-    const supabase = await createClient();
-
-    // En Server Actions, getUser() puede fallar intermitentemente por contexto de cookies.
-    // Usamos getSession() como fallback para evitar falsos "No autenticado".
-    const {
-      data: { user: authUser },
-      error: authUserError,
-    } = await supabase.auth.getUser();
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-
-    try {
-      const { cookies } = await import("next/headers");
-      const cookieStore = await cookies();
-      const allCookies = cookieStore.getAll();
-      require("fs").writeFileSync(
-        "debug-auth.json",
-        JSON.stringify(
-          {
-            authUser: authUser?.id,
-            authUserError,
-            sessionUser: session?.user?.id,
-            sessionError,
-            cookies: allCookies,
-          },
-          null,
-          2,
-        ),
-      );
-    } catch (e) {}
-
-    const user = authUser ?? session?.user ?? null;
-    if (!user) {
-      console.log("createCustomer debugging - No autenticado!");
-      return {
-        success: false,
-        error: `No autenticado. authUserError: ${authUserError?.message || "none"}, sessionError: ${sessionError?.message || "none"}`,
-      };
+    const access = await getUserAccessContext();
+    if (!access.isAuthenticated || !access.userId) {
+      return { success: false, error: "No autenticado" };
     }
-
-    const { data: callerProfile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-    if (callerProfile?.role !== "admin") {
+    if (!access.isAdmin) {
       return { success: false, error: "No autorizado: Solo administradores" };
     }
 
-    const payload = {
-      email: data.email,
-      password: data.password || undefined,
-      full_name: data.full_name,
-      phone: data.phone,
-      birth_date: data.birth_date ? data.birth_date.toISOString().split("T")[0] : null,
-      gender: data.gender,
-      plan_id: data.plan_id ?? null,
-      final_price: data.final_price ?? null,
-      discount_amount: data.discount_amount || 0,
-      payment_method: data.payment_method || "cash",
-      start_date: data.start_date ? data.start_date.toISOString().split("T")[0] : null,
-      end_date: data.end_date ? data.end_date.toISOString().split("T")[0] : null,
-      // Provide defaults for fields strictly required by the edge function but ensure they pass >0 check constraints
-      weight_kg: data.weight_kg ?? 70,
-      height_cm: data.height_cm ?? 170,
-      diet_type: data.diet_type ?? "normocalorica",
-      activity_level: data.activity_level ?? "sedentario",
-      body_type: data.body_type ?? "mesomorph",
-      body_fat_percentage: data.body_fat_percentage ?? 20,
-      muscle_mass_kg: data.muscle_mass_kg ?? 30,
-      chest: data.chest ?? 90,
-      waist: data.waist ?? 80,
-      hip: data.hip ?? 90,
-      arm_right: data.arm_right ?? 30,
-      arm_left: data.arm_left ?? 30,
-      leg_right: data.leg_right ?? 50,
-      leg_left: data.leg_left ?? 50,
-      injuries: data.injuries || null,
-      notes: data.notes || null,
-    };
+    if (!SUPABASE_SERVICE_ROLE_KEY) {
+      return { success: false, error: "Falta SUPABASE_SERVICE_ROLE_KEY para crear clientes." };
+    }
 
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/create-customer`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || "",
-        Authorization: `Bearer gym-webhook-123`,
-      },
-      body: JSON.stringify(payload),
+    const adminClient = createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    let result;
+    let createdUserId: string | null = null;
+
     try {
-      result = await response.json();
-    } catch {
-      return { success: false, error: "Respuesta no es JSON válido de Edge Function" };
+      const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
+        email: data.email,
+        password: data.password || "Gym2026!",
+        email_confirm: true,
+        user_metadata: {
+          full_name: data.full_name,
+          role: "client",
+        },
+      });
+
+      if (authError || !authData.user) {
+        return { success: false, error: `Error creando usuario: ${authError?.message || "unknown"}` };
+      }
+
+      createdUserId = authData.user.id;
+
+      const { error: profileError } = await adminClient.from("profiles").upsert({
+        id: createdUserId,
+        full_name: data.full_name,
+        phone: data.phone,
+        birth_date: formatToLocalISO(data.birth_date) ?? null,
+        gender: data.gender,
+        injuries: data.injuries_or_pain || data.injuries || null,
+        medical_notes: data.medical_clearance_notes || null,
+        role: "client",
+        is_active: true,
+        training_profile_status: "pending",
+      });
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      const { subscriptionId } = await createSubscriptionAndPayment({
+        adminClient,
+        userId: createdUserId,
+        planId: data.plan_id,
+        startDate: data.start_date,
+        endDate: data.end_date,
+        finalPrice: data.final_price,
+        discountAmount: data.discount_amount,
+        paymentMethod: data.payment_method,
+      });
+
+      await createBodyAssessmentAndMaybeSnapshot({
+        adminClient,
+        userId: createdUserId,
+        sourceEvent: "signup",
+        subscriptionId,
+        metrics: data,
+      });
+
+      await syncTrainingProfileWithAdmin({
+        adminClient,
+        userId: createdUserId,
+        createdBy: access.userId,
+        trainingProfile: buildTrainingProfileInput(data),
+        nutritionContext: buildNutritionContextFromData(data),
+      });
+    } catch (creationError) {
+      if (createdUserId) {
+        await adminClient.auth.admin.deleteUser(createdUserId).catch(() => null);
+      }
+      throw creationError;
     }
 
-    if (!response.ok || (result && result.error)) {
-      console.error("Error from Edge Function:", result);
-      return { success: false, error: result?.error || `Error Edge: ${JSON.stringify(result)}` };
-    }
-
-    let deviceSync: { attempted: boolean; queued?: boolean; reason?: string; error?: string } = {
+    let deviceSync: DeviceSyncResult = {
       attempted: false,
     };
 
-    if (DEFAULT_ZK_DEVICE_SN && SUPABASE_SERVICE_ROLE_KEY) {
+    if (DEFAULT_ZK_DEVICE_SN) {
       try {
-        const adminClient = createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-          auth: { autoRefreshToken: false, persistSession: false },
-        });
-
-        const possibleCustomerId =
-          result?.customer_id || result?.profile_id || result?.user_id || result?.id || null;
-
-        let customerIdForDevice: string | null = typeof possibleCustomerId === "string" ? possibleCustomerId : null;
-
-        if (!customerIdForDevice && data.email) {
-          const { data: createdProfile } = await adminClient
-            .from("profiles")
-            .select("id")
-            .eq("email", data.email)
-            .maybeSingle();
-          customerIdForDevice = createdProfile?.id ?? null;
-        }
+        const customerIdForDevice = createdUserId;
 
         deviceSync.attempted = true;
 
         if (customerIdForDevice) {
-          const queueResult = await queueZkUserSync({
-            adminClient,
+          const syncResult = await syncCustomerWithGymSyncServer({
             customerId: customerIdForDevice,
             deviceSn: DEFAULT_ZK_DEVICE_SN,
           });
 
-          deviceSync = {
-            attempted: true,
-            queued: queueResult.queued,
-            reason: queueResult.queued ? undefined : queueResult.reason,
-            error: "error" in queueResult ? queueResult.error : undefined,
-          };
+          deviceSync = syncResult;
+
+          if (!syncResult.synced && SUPABASE_SERVICE_ROLE_KEY) {
+            const adminClient = createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+              auth: { autoRefreshToken: false, persistSession: false },
+            });
+
+            const queueResult = await queueZkUserSync({
+              adminClient,
+              customerId: customerIdForDevice,
+              deviceSn: DEFAULT_ZK_DEVICE_SN,
+            });
+
+            deviceSync = {
+              attempted: true,
+              synced: queueResult.queued,
+              queued: queueResult.queued,
+              method: queueResult.queued ? "queue" : "none",
+              reason: queueResult.queued ? undefined : normalizeOptionalString(queueResult.reason),
+              error: "error" in queueResult ? normalizeOptionalString(queueResult.error) : syncResult.error,
+            };
+          }
         } else {
-          deviceSync = { attempted: true, queued: false, reason: "customer_id_not_resolved" };
+          deviceSync = { attempted: true, synced: false, queued: false, method: "none", reason: "customer_id_not_resolved" };
         }
       } catch (deviceError) {
         console.error("Error en sincronización automática con ZKTeco:", deviceError);
-        deviceSync = { attempted: true, queued: false, reason: "exception" };
+        deviceSync = { attempted: true, synced: false, queued: false, method: "none", reason: "exception" };
       }
     }
 
     revalidatePath("/panel/clientes");
     revalidatePath("/panel/resumen");
-    return { success: true, data: result, deviceSync };
+    return { success: true, data: { user_id: createdUserId }, deviceSync };
   } catch (error) {
     console.error("Error creating customer:", error);
-    return { success: false, error: "Error de conexión" };
+    return { success: false, error: error instanceof Error ? error.message : "Error de conexión" };
   }
 }
 
@@ -353,6 +781,12 @@ export async function getCustomerById(id: string) {
     .eq("user_id", id)
     .order("captured_at", { ascending: false })
     .limit(1)
+    .maybeSingle();
+
+  const { data: trainingProfile } = await supabase
+    .from("training_profiles")
+    .select("*")
+    .eq("user_id", id)
     .maybeSingle();
 
   // Si la vista no tiene plan_id pero tiene plan_name, necesitamos obtener el ID del plan
@@ -429,7 +863,7 @@ export async function getCustomerById(id: string) {
   // Fetch profile data
   const { data: profileData } = await supabase
     .from("profiles")
-    .select("birth_date, injuries, gender")
+    .select("birth_date, injuries, gender, medical_notes")
     .eq("id", id)
     .maybeSingle();
 
@@ -491,6 +925,23 @@ export async function getCustomerById(id: string) {
     leg_left: bodyAssessment?.leg_left || null,
     notes: bodyAssessment?.notes || null,
     body_assessment_id: bodyAssessment?.id || null,
+    primary_goal: trainingProfile?.primary_goal || null,
+    secondary_goal: trainingProfile?.secondary_goal || null,
+    focus_areas: trainingProfile?.focus_areas || [],
+    experience_level: trainingProfile?.experience_level || null,
+    days_per_week: trainingProfile?.days_per_week || null,
+    session_minutes: trainingProfile?.session_minutes || null,
+    training_location: trainingProfile?.training_location || null,
+    equipment_available: trainingProfile?.equipment_available || [],
+    cardio_preference: trainingProfile?.cardio_preference || null,
+    exercise_preferences: trainingProfile?.exercise_preferences || null,
+    exercise_dislikes: trainingProfile?.exercise_dislikes || null,
+    injuries_or_pain: trainingProfile?.injuries_or_pain || profileData?.injuries || null,
+    restricted_movements: trainingProfile?.restricted_movements || [],
+    parq_requires_attention:
+      typeof trainingProfile?.parq_requires_attention === "boolean" ? trainingProfile.parq_requires_attention : null,
+    medical_clearance_notes: trainingProfile?.medical_clearance_notes || profileData?.medical_notes || null,
+    training_profile_status: trainingProfile?.is_complete ? "complete" : "pending",
   };
 }
 
@@ -617,6 +1068,23 @@ export async function updateCustomer(id: string, data: Partial<CreateCustomerDat
   console.log(`Updating customer ${id}`, data);
 
   try {
+    const currentAccess = await getUserAccessContext();
+    if (!currentAccess.isAuthenticated || !currentAccess.isAdmin || !currentAccess.userId) {
+      return { success: false, error: "No autorizado" };
+    }
+
+    const [{ data: currentProfile }, { data: existingTrainingProfile }, { data: latestAssessmentRow }] = await Promise.all([
+      supabase.from("profiles").select("birth_date, gender, injuries, medical_notes").eq("id", id).maybeSingle(),
+      supabase.from("training_profiles").select("*").eq("user_id", id).maybeSingle(),
+      supabase
+        .from("body_assessments")
+        .select("*")
+        .eq("user_id", id)
+        .order("date", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
     // 0. Actualizar contraseña si se proporciona
     if (data.password && data.password.length >= 6) {
       console.log(`Updating password for user ${id}`);
@@ -675,7 +1143,10 @@ export async function updateCustomer(id: string, data: Partial<CreateCustomerDat
     if (data.phone !== undefined) profileUpdate.phone = data.phone;
     if (data.birth_date !== undefined) profileUpdate.birth_date = formatToLocalISO(data.birth_date);
     if (data.gender !== undefined) profileUpdate.gender = data.gender;
-    if (data.injuries !== undefined) profileUpdate.injuries = data.injuries || null;
+    if (data.injuries !== undefined || data.injuries_or_pain !== undefined) {
+      profileUpdate.injuries = data.injuries_or_pain || data.injuries || null;
+    }
+    if (data.medical_clearance_notes !== undefined) profileUpdate.medical_notes = data.medical_clearance_notes || null;
 
     const { error: profileError } = await supabase.from("profiles").update(profileUpdate).eq("id", id);
 
@@ -784,57 +1255,112 @@ export async function updateCustomer(id: string, data: Partial<CreateCustomerDat
       data.diet_type !== undefined ||
       data.activity_level !== undefined
     ) {
-      console.log("Updating body assessment for customer", id, {
-        weight_kg: data.weight_kg,
-        height_cm: data.height_cm,
-        body_type: data.body_type,
-      });
-
-      const { data: existingAssessment, error: fetchAssessError } = await supabase
-        .from("body_assessments")
-        .select("id")
-        .eq("user_id", id)
-        .order("date", { ascending: false }) // Cambiado de created_at a date
-        .limit(1)
-        .maybeSingle();
-
-      if (fetchAssessError) {
-        console.error("Error fetching existing assessment:", fetchAssessError);
-      }
-
-      const assessmentData: Record<string, unknown> = {
-        user_id: id,
+      const mergedMetrics = {
+        weight_kg: data.weight_kg ?? latestAssessmentRow?.weight_kg ?? undefined,
+        height_cm: data.height_cm ?? latestAssessmentRow?.height_cm ?? undefined,
+        body_type: data.body_type ?? latestAssessmentRow?.body_type ?? undefined,
+        diet_type: data.diet_type ?? latestAssessmentRow?.diet_type ?? undefined,
+        activity_level: data.activity_level ?? latestAssessmentRow?.activity_level ?? undefined,
+        body_fat_percentage: data.body_fat_percentage ?? latestAssessmentRow?.body_fat_percentage ?? undefined,
+        muscle_mass_kg: data.muscle_mass_kg ?? latestAssessmentRow?.muscle_mass_kg ?? undefined,
+        chest: data.chest ?? latestAssessmentRow?.chest ?? undefined,
+        waist: data.waist ?? latestAssessmentRow?.waist ?? undefined,
+        hip: data.hip ?? latestAssessmentRow?.hip ?? undefined,
+        arm_right: data.arm_right ?? latestAssessmentRow?.arm_right ?? undefined,
+        arm_left: data.arm_left ?? latestAssessmentRow?.arm_left ?? undefined,
+        leg_right: data.leg_right ?? latestAssessmentRow?.leg_right ?? undefined,
+        leg_left: data.leg_left ?? latestAssessmentRow?.leg_left ?? undefined,
+        notes: data.notes ?? data.injuries_or_pain ?? data.injuries ?? latestAssessmentRow?.notes ?? undefined,
       };
-      if (data.weight_kg !== undefined) assessmentData.weight_kg = data.weight_kg;
-      if (data.height_cm !== undefined) assessmentData.height_cm = data.height_cm;
-      if (data.body_type !== undefined) assessmentData.body_type = data.body_type;
-      if (data.diet_type !== undefined) assessmentData.diet_type = data.diet_type;
-      if (data.activity_level !== undefined) assessmentData.activity_level = data.activity_level;
-      if (data.body_fat_percentage !== undefined) assessmentData.body_fat_percentage = data.body_fat_percentage;
-      if (data.muscle_mass_kg !== undefined) assessmentData.muscle_mass_kg = data.muscle_mass_kg;
-      if (data.chest !== undefined) assessmentData.chest = data.chest;
-      if (data.waist !== undefined) assessmentData.waist = data.waist;
-      if (data.hip !== undefined) assessmentData.hip = data.hip;
-      if (data.arm_right !== undefined) assessmentData.arm_right = data.arm_right;
-      if (data.arm_left !== undefined) assessmentData.arm_left = data.arm_left;
-      if (data.leg_right !== undefined) assessmentData.leg_right = data.leg_right;
-      if (data.leg_left !== undefined) assessmentData.leg_left = data.leg_left;
-      if (data.notes !== undefined) assessmentData.notes = data.notes;
 
-      if (existingAssessment) {
-        console.log("Updating existing assessment", existingAssessment.id);
-        const { error: assessError } = await supabase
-          .from("body_assessments")
-          .update(assessmentData)
-          .eq("id", existingAssessment.id);
-        if (assessError) console.error("Error updating assessment:", assessError);
-      } else {
-        console.log("Creating new assessment");
-        const { error: assessError } = await supabase
-          .from("body_assessments")
-          .insert({ ...assessmentData, date: new Date().toISOString().split("T")[0] });
-        if (assessError) console.error("Error creating assessment:", assessError);
+      if (canCreateBodyAssessment(mergedMetrics)) {
+        const computed = canComputeNutritionPlan({
+          birth_date: data.birth_date ?? (currentProfile?.birth_date ? new Date(currentProfile.birth_date) : undefined),
+          gender: data.gender ?? currentProfile?.gender ?? undefined,
+          weight_kg: mergedMetrics.weight_kg,
+          height_cm: mergedMetrics.height_cm,
+          body_type: mergedMetrics.body_type,
+          diet_type: mergedMetrics.diet_type,
+          activity_level: mergedMetrics.activity_level,
+        })
+          ? computeFitnessPlan({
+              birthDate: data.birth_date ?? new Date(currentProfile!.birth_date),
+              gender: (data.gender ?? currentProfile!.gender) as "male" | "female" | "other",
+              weightKg: mergedMetrics.weight_kg!,
+              heightCm: mergedMetrics.height_cm!,
+              bodyType: mergedMetrics.body_type!,
+              dietType: mergedMetrics.diet_type!,
+              activityLevel: mergedMetrics.activity_level!,
+            })
+          : null;
+
+        const assessmentData: Record<string, unknown> = {
+          user_id: id,
+          weight_kg: mergedMetrics.weight_kg,
+          height_cm: mergedMetrics.height_cm,
+          body_type: mergedMetrics.body_type ?? null,
+          diet_type: mergedMetrics.diet_type ?? null,
+          activity_level: mergedMetrics.activity_level ?? null,
+          body_fat_percentage: mergedMetrics.body_fat_percentage ?? null,
+          muscle_mass_kg: mergedMetrics.muscle_mass_kg ?? null,
+          chest: mergedMetrics.chest ?? null,
+          waist: mergedMetrics.waist ?? null,
+          hip: mergedMetrics.hip ?? null,
+          arm_right: mergedMetrics.arm_right ?? null,
+          arm_left: mergedMetrics.arm_left ?? null,
+          leg_right: mergedMetrics.leg_right ?? null,
+          leg_left: mergedMetrics.leg_left ?? null,
+          notes: mergedMetrics.notes ?? null,
+          daily_calories: computed?.dailyCalories ?? null,
+          protein_grams: computed?.proteinGrams ?? null,
+          carbs_grams: computed?.carbsGrams ?? null,
+          fat_grams: computed?.fatGrams ?? null,
+          water_liters_goal: computed?.waterLitersGoal ?? null,
+        };
+
+        if (latestAssessmentRow?.id) {
+          const { error: assessError } = await supabase.from("body_assessments").update(assessmentData).eq("id", latestAssessmentRow.id);
+          if (assessError) console.error("Error updating assessment:", assessError);
+        } else {
+          const { error: assessError } = await supabase
+            .from("body_assessments")
+            .insert({ ...assessmentData, date: new Date().toISOString().split("T")[0] });
+          if (assessError) console.error("Error creating assessment:", assessError);
+        }
       }
+    }
+
+    const trainingProfileUpdate = buildPartialTrainingProfileUpdate(data);
+    const shouldSyncTrainingProfile =
+      Object.keys(trainingProfileUpdate).length > 0 ||
+      data.weight_kg !== undefined ||
+      data.height_cm !== undefined ||
+      data.birth_date !== undefined ||
+      data.gender !== undefined;
+
+    if (shouldSyncTrainingProfile || existingTrainingProfile) {
+      const mergedTrainingProfile = {
+        ...(existingTrainingProfile || {}),
+        ...trainingProfileUpdate,
+      } as TrainingProfileInput;
+
+      await syncTrainingProfileWithAdmin({
+        adminClient: createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        }),
+        userId: id,
+        createdBy: currentAccess.userId,
+        trainingProfile: mergedTrainingProfile,
+        nutritionContext: {
+          birthDate: data.birth_date ?? (currentProfile?.birth_date ? new Date(currentProfile.birth_date) : null),
+          gender: (data.gender ?? currentProfile?.gender ?? null) as "male" | "female" | "other" | null,
+          weightKg: data.weight_kg ?? latestAssessmentRow?.weight_kg ?? null,
+          heightCm: data.height_cm ?? latestAssessmentRow?.height_cm ?? null,
+          bodyType: data.body_type ?? latestAssessmentRow?.body_type ?? null,
+          dietType: data.diet_type ?? latestAssessmentRow?.diet_type ?? null,
+          activityLevel: data.activity_level ?? latestAssessmentRow?.activity_level ?? null,
+        },
+      });
     }
 
     console.log("Update sequence completed successfully for", id);
@@ -943,7 +1469,7 @@ export async function renewSubscription(customerId: string, data: RenewSubscript
       // No revertimos todo, pero logueamos el error grave
     }
 
-    const computed = await createAssessmentAndSnapshot({
+    await createAssessmentAndSnapshot({
       supabase,
       userId: customerId,
       birthDate: new Date(profile.birth_date),
@@ -970,17 +1496,31 @@ export async function renewSubscription(customerId: string, data: RenewSubscript
     });
 
     try {
-      await supabase.from("routines").update({ is_active: false }).eq("user_id", customerId).eq("is_active", true);
+      const { data: existingTrainingProfile } = await supabase
+        .from("training_profiles")
+        .select("*")
+        .eq("user_id", customerId)
+        .maybeSingle();
 
-      await generateRoutineFromTemplates({
-        supabase,
-        userId: customerId,
-        createdBy: access.userId!,
-        bodyType: data.body_type,
-        routineMode: computed.routineMode,
-        startDate: formatToLocalISO(data.start_date) as string,
-        endDate: formatToLocalISO(data.end_date) as string,
-      });
+      if (existingTrainingProfile) {
+        await syncTrainingProfileWithAdmin({
+          adminClient: createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+            auth: { autoRefreshToken: false, persistSession: false },
+          }),
+          userId: customerId,
+          createdBy: access.userId!,
+          trainingProfile: existingTrainingProfile as TrainingProfileInput,
+          nutritionContext: {
+            birthDate: new Date(profile.birth_date),
+            gender: profile.gender as "male" | "female" | "other",
+            weightKg: data.weight_kg,
+            heightCm: data.height_cm,
+            bodyType: data.body_type,
+            dietType: data.diet_type,
+            activityLevel: data.activity_level,
+          },
+        });
+      }
     } catch (routineError) {
       console.error("Routine generation warning:", routineError);
     }
@@ -989,6 +1529,25 @@ export async function renewSubscription(customerId: string, data: RenewSubscript
     revalidatePath(`/panel/clientes/${customerId}`);
     revalidatePath("/panel/resumen");
 
+    if (DEFAULT_ZK_DEVICE_SN) {
+      const syncResult = await syncCustomerWithGymSyncServer({
+        customerId,
+        deviceSn: DEFAULT_ZK_DEVICE_SN,
+      });
+
+      if (!syncResult.synced && SUPABASE_SERVICE_ROLE_KEY) {
+        const adminClient = createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        });
+
+        await queueZkUserSync({
+          adminClient,
+          customerId,
+          deviceSn: DEFAULT_ZK_DEVICE_SN,
+        });
+      }
+    }
+
     return { success: true };
   } catch (error) {
     console.error("Exception in renewSubscription:", error);
@@ -996,9 +1555,25 @@ export async function renewSubscription(customerId: string, data: RenewSubscript
   }
 }
 
+async function deleteRowsIfPossible(
+  adminClient: AdminSupabaseClient,
+  table: string,
+  column: string,
+  value: string | number,
+) {
+  const { error } = await adminClient.from(table).delete().eq(column, value);
+  if (!error) return;
+
+  const message = String(error.message || "");
+  if (message.includes("does not exist") || message.includes("Could not find the table")) {
+    return;
+  }
+
+  throw error;
+}
+
 export async function deleteCustomer(id: string) {
-  // Use Service Role Key to bypass RLS policies
-  const supabase = createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  const adminClient = createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -1006,15 +1581,44 @@ export async function deleteCustomer(id: string) {
   });
 
   try {
-    const { error } = await supabase.from("profiles").update({ is_active: false }).eq("id", id);
+    const { error } = await adminClient.from("profiles").update({ is_active: false }).eq("id", id);
 
     if (error) {
       console.error("Error soft deleting customer (admin):", error);
       return { success: false, error: "Error al desactivar cliente" };
     }
 
+    let deviceSync: DeviceSyncResult | undefined;
+
+    if (DEFAULT_ZK_DEVICE_SN) {
+      deviceSync = await disableCustomerOnGymSyncServer({
+        customerId: id,
+        deviceSn: DEFAULT_ZK_DEVICE_SN,
+      });
+
+      if (deviceSync?.synced !== true && SUPABASE_SERVICE_ROLE_KEY) {
+        const queueResult = await queueZkCommands({
+          adminClient,
+          customerId: id,
+          deviceSn: DEFAULT_ZK_DEVICE_SN,
+          buildCommands: (profile) => [buildZkUserDisableCommand({ biometricId: profile.biometricId })],
+        });
+
+        deviceSync = {
+          attempted: true,
+          synced: queueResult.queued,
+          queued: queueResult.queued,
+          method: queueResult.queued ? "queue" : "none",
+          reason: queueResult.queued ? undefined : queueResult.reason,
+          error: queueResult.queued ? undefined : queueResult.error,
+        };
+      }
+    }
+
     revalidatePath("/panel/clientes");
-    return { success: true };
+    revalidatePath(`/panel/clientes/${id}`);
+    revalidatePath("/panel/resumen");
+    return { success: true, deviceSync };
   } catch (error) {
     console.error("Exception in deleteCustomer:", error);
     return { success: false, error: "Error inesperado al desactivar" };
@@ -1022,8 +1626,7 @@ export async function deleteCustomer(id: string) {
 }
 
 export async function reactivateCustomer(id: string) {
-  // Use Service Role Key to bypass RLS policies
-  const supabase = createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  const adminClient = createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -1031,18 +1634,123 @@ export async function reactivateCustomer(id: string) {
   });
 
   try {
-    const { error } = await supabase.from("profiles").update({ is_active: true }).eq("id", id);
+    const { error } = await adminClient.from("profiles").update({ is_active: true }).eq("id", id);
 
     if (error) {
       console.error("Error reactivating customer (admin):", error);
       return { success: false, error: "Error al reactivar cliente" };
     }
 
+    let deviceSync: DeviceSyncResult | undefined;
+
+    if (DEFAULT_ZK_DEVICE_SN) {
+      deviceSync = await syncCustomerWithGymSyncServer({
+        customerId: id,
+        deviceSn: DEFAULT_ZK_DEVICE_SN,
+      });
+
+      if (deviceSync?.synced !== true && SUPABASE_SERVICE_ROLE_KEY) {
+        const queueResult = await queueZkUserSync({
+          adminClient,
+          customerId: id,
+          deviceSn: DEFAULT_ZK_DEVICE_SN,
+        });
+
+        deviceSync = {
+          attempted: true,
+          synced: queueResult.queued,
+          queued: queueResult.queued,
+          method: queueResult.queued ? "queue" : "none",
+          reason: queueResult.queued ? undefined : queueResult.reason,
+          error: queueResult.queued ? undefined : queueResult.error,
+        };
+      }
+    }
+
     revalidatePath("/panel/clientes");
-    return { success: true };
+    revalidatePath(`/panel/clientes/${id}`);
+    revalidatePath("/panel/resumen");
+    return { success: true, deviceSync };
   } catch (error) {
     console.error("Exception in reactivateCustomer:", error);
     return { success: false, error: "Error inesperado al reactivar" };
+  }
+}
+
+export async function permanentlyDeleteCustomer(id: string) {
+  const adminClient = createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+
+  try {
+    let deviceSync: DeviceSyncResult | undefined;
+
+    if (DEFAULT_ZK_DEVICE_SN) {
+      deviceSync = await deleteCustomerFromGymSyncServer({
+        customerId: id,
+        deviceSn: DEFAULT_ZK_DEVICE_SN,
+      });
+
+      if (deviceSync?.synced !== true && SUPABASE_SERVICE_ROLE_KEY) {
+        const queueResult = await queueZkCommands({
+          adminClient,
+          customerId: id,
+          deviceSn: DEFAULT_ZK_DEVICE_SN,
+          buildCommands: (profile) => buildZkUserDeleteCommands({ biometricId: profile.biometricId }),
+        });
+
+        deviceSync = {
+          attempted: true,
+          synced: queueResult.queued,
+          queued: queueResult.queued,
+          method: queueResult.queued ? "queue" : "none",
+          reason: queueResult.queued ? undefined : queueResult.reason,
+          error: queueResult.queued ? undefined : queueResult.error,
+        };
+      }
+    }
+
+    if (deviceSync?.attempted && deviceSync.synced === false) {
+      return {
+        success: false,
+        error: deviceSync.error || "No se pudo sincronizar la eliminación en el reloj",
+      };
+    }
+
+    const profile = await getCustomerDeviceProfile(adminClient, id);
+    const biometricId = profile.ok ? profile.biometricId : null;
+
+    await deleteRowsIfPossible(adminClient, "payments", "user_id", id);
+    await deleteRowsIfPossible(adminClient, "subscriptions", "user_id", id);
+    await deleteRowsIfPossible(adminClient, "routines", "user_id", id);
+    await deleteRowsIfPossible(adminClient, "body_assessments", "user_id", id);
+    await deleteRowsIfPossible(adminClient, "training_nutrition_snapshots", "user_id", id);
+
+    if (biometricId != null) {
+      await deleteRowsIfPossible(adminClient, "attendance_logs", "biometric_id", biometricId);
+    }
+
+    const { error: profileDeleteError } = await adminClient.from("profiles").delete().eq("id", id);
+    if (profileDeleteError) {
+      console.error("Error deleting profile:", profileDeleteError);
+      return { success: false, error: "Error al eliminar el perfil del cliente" };
+    }
+
+    const { error: authDeleteError } = await adminClient.auth.admin.deleteUser(id);
+    if (authDeleteError && !String(authDeleteError.message || "").toLowerCase().includes("user not found")) {
+      console.error("Error deleting auth user:", authDeleteError);
+      return { success: false, error: "Se eliminó el perfil, pero falló la eliminación del usuario autenticado" };
+    }
+
+    revalidatePath("/panel/clientes");
+    revalidatePath("/panel/resumen");
+    return { success: true, deviceSync };
+  } catch (error) {
+    console.error("Exception in permanentlyDeleteCustomer:", error);
+    return { success: false, error: "Error inesperado al eliminar completamente" };
   }
 }
 

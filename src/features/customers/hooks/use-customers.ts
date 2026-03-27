@@ -41,11 +41,11 @@ export function useCreateCustomer() {
     },
     onSuccess: (result) => {
       const deviceSync = (result as any)?.deviceSync;
-      const deviceQueued = deviceSync?.attempted ? deviceSync?.queued === true : null;
+      const deviceSynced = deviceSync?.attempted ? deviceSync?.synced === true || deviceSync?.queued === true : null;
 
-      if (deviceQueued === false) {
+      if (deviceSynced === false) {
         toast.warning("Cliente creado, pero falló el envío automático al dispositivo.");
-      } else if (deviceQueued === true) {
+      } else if (deviceSynced === true) {
         toast.success("Cliente creado y sincronizado con el reloj.");
       } else {
         toast.success("Cliente creado exitosamente");

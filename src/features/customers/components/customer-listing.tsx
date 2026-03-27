@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { CustomerTable } from "./customer-tables/customer-table";
 import { Customer } from "./customer-tables/columns";
 import { searchParamsCache } from "@/lib/searchparams";
@@ -22,6 +23,7 @@ export default async function CustomerListingPage() {
   };
 
   const supabase = await createClient();
+  const adminClient = createAdminClient();
 
   // Actualizar automáticamente suscripciones vencidas en la BD
   // Esto marca como 'expired' cualquier suscripción cuya end_date haya pasado
@@ -115,6 +117,70 @@ export default async function CustomerListingPage() {
   }
 
   const totalitems = count || 0;
+  const customerRows = ((customers as Customer[]) || []).filter(Boolean);
+  const customerIds = customerRows.map((customer) => customer.id);
 
-  return <CustomerTable data={(customers as Customer[]) || []} totalItems={totalitems} planOptions={planOptions} />;
+  let enrichedCustomers = customerRows;
+
+  if (customerIds.length > 0) {
+    const { data: profiles, error: profilesError } = await adminClient
+      .from("profiles")
+      .select("id, biometric_id")
+      .in("id", customerIds);
+
+    if (profilesError) {
+      console.error("Error fetching customer biometric ids:", profilesError);
+    } else {
+      const biometricIdByCustomerId = new Map(
+        (profiles || []).map((profile) => [profile.id, profile.biometric_id as number | null]),
+      );
+
+      const biometricIds = Array.from(
+        new Set(
+          (profiles || [])
+            .map((profile) => profile.biometric_id)
+            .filter((value): value is number => Number.isInteger(value)),
+        ),
+      );
+
+      if (biometricIds.length > 0) {
+        const { data: attendanceRows, error: attendanceError } = await adminClient
+          .from("attendance_logs")
+          .select("biometric_id, punch_time, status1")
+          .in("biometric_id", biometricIds)
+          .order("punch_time", { ascending: false });
+
+        if (attendanceError && attendanceError.code !== "42P01") {
+          console.error("Error fetching latest attendance logs:", attendanceError);
+        } else if (attendanceRows) {
+          const latestAttendanceByBiometricId = new Map<number, string>();
+
+          for (const row of attendanceRows) {
+            if (row.status1 != null && row.status1 !== 0) {
+              continue;
+            }
+            if (!latestAttendanceByBiometricId.has(row.biometric_id)) {
+              latestAttendanceByBiometricId.set(row.biometric_id, row.punch_time);
+            }
+          }
+
+          enrichedCustomers = customerRows.map((customer) => {
+            const biometricId = biometricIdByCustomerId.get(customer.id);
+            const latestAttendance =
+              biometricId != null
+                ? latestAttendanceByBiometricId.get(biometricId) || null
+                : null;
+
+            return {
+              ...customer,
+              biometric_id: biometricId ?? null,
+              last_check_in: latestAttendance || customer.last_check_in || null,
+            };
+          });
+        }
+      }
+    }
+  }
+
+  return <CustomerTable data={enrichedCustomers} totalItems={totalitems} planOptions={planOptions} />;
 }

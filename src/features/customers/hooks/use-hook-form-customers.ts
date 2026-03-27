@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { computeFitnessPlan } from "@/lib/fitness/excel-calculator";
 import type { ActivityLevel, BodyType, DietType } from "@/lib/fitness/types";
 import { usePlans } from "@/features/plans/hooks/use-plans";
+import type { EquipmentOption, FocusArea, PrimaryGoal, RestrictedMovement, TrainingProfileStatus } from "@/lib/training/types";
 import { renewSubscription, type CreateCustomerData } from "../actions/customer-actions";
 import { useCreateCustomer, useReactivateCustomer, useUpdateCustomer } from "./use-customers";
 
@@ -33,6 +34,53 @@ const optionalPositiveNumber = z.preprocess((value) => {
   return Number.isNaN(num) ? value : num;
 }, z.number({ message: "Debe ser un número" }).positive({ message: "Debe ser mayor a 0" }).optional());
 
+const optionalPercentageNumber = z.preprocess((value) => {
+  if (value === "" || value === null || value === undefined) return undefined;
+  const num = Number(value);
+  return Number.isNaN(num) ? value : num;
+}, z.number({ message: "Debe ser un número" }).min(1, { message: "Debe ser mayor a 0" }).max(100, { message: "Máximo 100" }).optional());
+
+const primaryGoalValues = ["fat_loss", "muscle_gain", "recomp", "strength", "general_fitness", "cardio"] as const;
+const experienceLevelValues = ["beginner", "intermediate", "advanced"] as const;
+const trainingLocationValues = ["gym", "home", "mixed"] as const;
+const cardioPreferenceValues = ["none", "light", "moderate", "high"] as const;
+const focusAreaValues = [
+  "upper_body",
+  "lower_body",
+  "glutes",
+  "core",
+  "chest",
+  "back",
+  "shoulders",
+  "arms",
+  "conditioning",
+] as const;
+const equipmentOptionValues = [
+  "full_gym",
+  "body_weight",
+  "dumbbell",
+  "barbell",
+  "machine",
+  "bands",
+  "kettlebell",
+  "treadmill",
+  "bike",
+  "rower",
+] as const;
+const restrictedMovementValues = [
+  "deep_knee_flexion",
+  "overhead_pressing",
+  "loaded_spinal_flexion",
+  "high_impact",
+  "horizontal_pressing",
+  "vertical_pulling",
+  "hip_hinge",
+  "unilateral_lower_body",
+] as const;
+const parqChoiceValues = ["yes", "no"] as const;
+const daysPerWeekValues = ["2", "3", "4", "5"] as const;
+const sessionMinutesValues = ["30", "45", "60", "75", "90"] as const;
+
 const customerSheetSchema = z.object({
   email: z.string().email({ message: "Email inválido" }),
   password: z.string().min(6, { message: "Mínimo 6 caracteres" }).optional().or(z.literal("")),
@@ -50,11 +98,26 @@ const customerSheetSchema = z.object({
       to: z.date().optional(),
     })
     .optional(),
+  primary_goal: z.enum(primaryGoalValues).optional(),
+  secondary_goal: z.enum(primaryGoalValues).optional(),
+  focus_areas: z.array(z.enum(focusAreaValues)).default([]),
+  experience_level: z.enum(experienceLevelValues).optional(),
+  days_per_week: z.enum(daysPerWeekValues).optional(),
+  session_minutes: z.enum(sessionMinutesValues).optional(),
+  training_location: z.enum(trainingLocationValues).optional(),
+  equipment_available: z.array(z.enum(equipmentOptionValues)).default([]),
+  cardio_preference: z.enum(cardioPreferenceValues).optional(),
+  parq_requires_attention: z.enum(parqChoiceValues).optional(),
+  restricted_movements: z.array(z.enum(restrictedMovementValues)).default([]),
+  exercise_preferences: z.string().optional().or(z.literal("")),
+  exercise_dislikes: z.string().optional().or(z.literal("")),
+  injuries_or_pain: z.string().optional().or(z.literal("")),
+  medical_clearance_notes: z.string().optional().or(z.literal("")),
   weight_kg: optionalPositiveNumber,
   height_cm: optionalPositiveNumber,
   diet_type: z.enum(["hipocalorica", "normocalorica", "hipercalorica"]).optional(),
   activity_level: z.enum(["sedentario", "1_3_dias", "3_5_dias", "6_7_dias", "2_veces_dia"]).optional(),
-  body_fat_percentage: z.coerce.number().min(1, { message: "Ingresa % de grasa" }).max(100).optional(),
+  body_fat_percentage: optionalPercentageNumber,
   muscle_mass_kg: optionalPositiveNumber,
   chest: optionalPositiveNumber,
   waist: optionalPositiveNumber,
@@ -156,6 +219,7 @@ export interface CustomerData {
   discount_amount?: number | null;
   final_price?: number | null;
   payment_method?: string | null;
+  training_profile_status?: TrainingProfileStatus | null;
   weight_kg?: number | null;
   height_cm?: number | null;
   injuries?: string | null;
@@ -172,6 +236,21 @@ export interface CustomerData {
   leg_right?: number | null;
   leg_left?: number | null;
   notes?: string | null;
+  primary_goal?: PrimaryGoal | null;
+  secondary_goal?: PrimaryGoal | null;
+  focus_areas?: FocusArea[] | null;
+  experience_level?: "beginner" | "intermediate" | "advanced" | null;
+  days_per_week?: number | null;
+  session_minutes?: number | null;
+  training_location?: "gym" | "home" | "mixed" | null;
+  equipment_available?: EquipmentOption[] | null;
+  cardio_preference?: "none" | "light" | "moderate" | "high" | null;
+  exercise_preferences?: string | null;
+  exercise_dislikes?: string | null;
+  injuries_or_pain?: string | null;
+  restricted_movements?: RestrictedMovement[] | null;
+  parq_requires_attention?: boolean | null;
+  medical_clearance_notes?: string | null;
 }
 
 interface UseHookFormCustomerProfileParams {
@@ -247,6 +326,23 @@ export function useHookFormCustomerSheet({
         final_price: customer.final_price ?? undefined,
         discount_amount: customer.discount_amount ?? 0,
         payment_method: (customer.payment_method as "cash" | "card" | "transfer") || "cash",
+        primary_goal: customer.primary_goal ?? undefined,
+        secondary_goal: customer.secondary_goal ?? undefined,
+        focus_areas: customer.focus_areas ?? [],
+        experience_level: customer.experience_level ?? undefined,
+        days_per_week: customer.days_per_week ? customer.days_per_week.toString() as CustomerSheetFormValues["days_per_week"] : undefined,
+        session_minutes:
+          customer.session_minutes ? (customer.session_minutes.toString() as CustomerSheetFormValues["session_minutes"]) : undefined,
+        training_location: customer.training_location ?? undefined,
+        equipment_available: customer.equipment_available ?? [],
+        cardio_preference: customer.cardio_preference ?? undefined,
+        parq_requires_attention:
+          customer.parq_requires_attention === true ? "yes" : customer.parq_requires_attention === false ? "no" : undefined,
+        restricted_movements: customer.restricted_movements ?? [],
+        exercise_preferences: customer.exercise_preferences || "",
+        exercise_dislikes: customer.exercise_dislikes || "",
+        injuries_or_pain: customer.injuries_or_pain || customer.injuries || "",
+        medical_clearance_notes: customer.medical_clearance_notes || "",
         injuries: customer.injuries || "",
         weight_kg: customer.weight_kg ?? undefined,
         height_cm: customer.height_cm ?? undefined,
@@ -282,6 +378,21 @@ export function useHookFormCustomerSheet({
       discount_amount: 0,
       payment_method: "cash",
       final_price: undefined,
+      primary_goal: undefined,
+      secondary_goal: undefined,
+      focus_areas: [],
+      experience_level: undefined,
+      days_per_week: undefined,
+      session_minutes: undefined,
+      training_location: undefined,
+      equipment_available: [],
+      cardio_preference: undefined,
+      parq_requires_attention: undefined,
+      restricted_movements: [],
+      exercise_preferences: "",
+      exercise_dislikes: "",
+      injuries_or_pain: "",
+      medical_clearance_notes: "",
       injuries: "",
       weight_kg: undefined,
       height_cm: undefined,
@@ -409,6 +520,26 @@ export function useHookFormCustomerSheet({
         final_price: values.final_price,
         start_date: values.subscription_period?.from,
         end_date: values.subscription_period?.to,
+        primary_goal: values.primary_goal,
+        secondary_goal: values.secondary_goal,
+        focus_areas: values.focus_areas,
+        experience_level: values.experience_level,
+        days_per_week: values.days_per_week ? Number(values.days_per_week) : undefined,
+        session_minutes: values.session_minutes ? Number(values.session_minutes) : undefined,
+        training_location: values.training_location,
+        equipment_available: values.equipment_available,
+        cardio_preference: values.cardio_preference,
+        parq_requires_attention:
+          values.parq_requires_attention === "yes"
+            ? true
+            : values.parq_requires_attention === "no"
+              ? false
+              : undefined,
+        restricted_movements: values.restricted_movements,
+        exercise_preferences: values.exercise_preferences || undefined,
+        exercise_dislikes: values.exercise_dislikes || undefined,
+        injuries_or_pain: values.injuries_or_pain || undefined,
+        medical_clearance_notes: values.medical_clearance_notes || undefined,
         weight_kg: values.weight_kg,
         height_cm: values.height_cm,
         diet_type: values.diet_type,

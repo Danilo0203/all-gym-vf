@@ -2,12 +2,17 @@
 import { AlertModal } from "@/components/modal/alert-modal";
 import { Button } from "@/components/ui/button";
 import { Customer } from "./columns";
-import { IconEdit, IconTrash, IconLoader2, IconFingerprint } from "@tabler/icons-react";
+import { IconEdit, IconTrash, IconLoader2, IconFingerprint, IconUserOff, IconUserCheck } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CustomerFormSheet, CustomerData } from "../customer-form-sheet";
-import { deleteCustomer, enrollBiometricOnDevice } from "../../actions/customer-actions";
+import {
+  deleteCustomer,
+  enrollBiometricOnDevice,
+  permanentlyDeleteCustomer,
+  reactivateCustomer,
+} from "../../actions/customer-actions";
 import { toast } from "sonner";
 import { useCustomer } from "../../hooks/use-customers";
 import { Badge } from "@/components/ui/badge";
@@ -28,8 +33,10 @@ interface CellActionProps {
 }
 
 export const CellAction: React.FC<CellActionProps> = ({ data }) => {
-  const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(false); // Modal de borrado
+  const [disableLoading, setDisableLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [disableOpen, setDisableOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false); // Sheet de edición
   const [biometricOpen, setBiometricOpen] = useState(false);
   const [deviceSn, setDeviceSn] = useState("CN4C232260011");
@@ -50,21 +57,52 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
       } as CustomerData)
     : null;
 
-  const onConfirm = async () => {
-    setLoading(true);
+  const onConfirmDisable = async () => {
+    setDisableLoading(true);
     try {
-      const result = await deleteCustomer(data.id);
+      const result = data.is_active ? await deleteCustomer(data.id) : await reactivateCustomer(data.id);
       if (result.success) {
-        toast.success("Cliente desactivado exitosamente");
+        const deviceSync = (result as any)?.deviceSync;
+        const deviceSynced = deviceSync?.attempted ? deviceSync?.synced === true || deviceSync?.queued === true : null;
+
+        if (data.is_active) {
+          if (deviceSynced === false) {
+            toast.warning("Cliente desactivado en el sistema, pero falló el envío al reloj.");
+          } else {
+            toast.success("Cliente desactivado y bloqueado en el reloj.");
+          }
+        } else if (deviceSynced === false) {
+          toast.warning("Cliente reactivado en el sistema, pero falló el envío al reloj.");
+        } else {
+          toast.success("Cliente reactivado y habilitado en el reloj.");
+        }
         router.refresh();
       } else {
-        toast.error("Error al desactivar el cliente");
+        toast.error(result.error || `Error al ${data.is_active ? "desactivar" : "reactivar"} el cliente`);
       }
     } catch (error) {
-      toast.error("Error al desactivar el cliente");
+      toast.error(`Error al ${data.is_active ? "desactivar" : "reactivar"} el cliente`);
     } finally {
-      setLoading(false);
-      setOpen(false);
+      setDisableLoading(false);
+      setDisableOpen(false);
+    }
+  };
+
+  const onConfirmDelete = async () => {
+    setDeleteLoading(true);
+    try {
+      const result = await permanentlyDeleteCustomer(data.id);
+      if (result.success) {
+        toast.success("Cliente eliminado del sistema. El reloj puede tardar unos segundos en reflejarlo.");
+        router.refresh();
+      } else {
+        toast.error(result.error || "Error al eliminar completamente el cliente");
+      }
+    } catch (error) {
+      toast.error("Error al eliminar completamente el cliente");
+    } finally {
+      setDeleteLoading(false);
+      setDeleteOpen(false);
     }
   };
 
@@ -94,16 +132,25 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
   return (
     <div onClick={(e) => e.stopPropagation()}>
       <AlertModal
-        isOpen={open}
-        onClose={() => setOpen(false)}
-        onConfirm={onConfirm}
-        loading={loading}
-        title="¿Desactivar cliente?"
+        isOpen={disableOpen}
+        onClose={() => setDisableOpen(false)}
+        onConfirm={onConfirmDisable}
+        loading={disableLoading}
+        title={data.is_active ? "¿Desactivar cliente?" : "¿Reactivar cliente?"}
         description={
           <div className="space-y-2 mt-2">
             <p>
-              El cliente <span className="font-semibold text-foreground">{data.full_name}</span> pasará a estado
-              inactivo.
+              {data.is_active ? (
+                <>
+                  El cliente <span className="font-semibold text-foreground">{data.full_name}</span> pasará a estado
+                  inactivo y el reloj ya no permitirá su ingreso.
+                </>
+              ) : (
+                <>
+                  El cliente <span className="font-semibold text-foreground">{data.full_name}</span> volverá a estado
+                  activo y se habilitará nuevamente en el reloj.
+                </>
+              )}
             </p>
             <div className="rounded-md bg-muted p-3 text-sm">
               <div className="grid grid-cols-3 gap-2 items-center">
@@ -134,11 +181,37 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
               </div>
             </div>
             <p className="text-sm text-muted-foreground mt-2">
-              Podrás reactivarlo más tarde desde el historial o editando su perfil.
+              {data.is_active
+                ? "Podrás reactivarlo más tarde y recuperar su acceso."
+                : "Se volverá a sincronizar su acceso con el reloj."}
             </p>
           </div>
         }
-        confirmText="Desactivar"
+        confirmText={data.is_active ? "Desactivar" : "Reactivar"}
+      />
+
+      <AlertModal
+        isOpen={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={onConfirmDelete}
+        loading={deleteLoading}
+        title="¿Eliminar cliente completamente?"
+        description={
+          <div className="space-y-2 mt-2">
+            <p>
+              El cliente <span className="font-semibold text-foreground">{data.full_name}</span> se eliminará del
+              sistema y del reloj.
+            </p>
+            <p className="text-sm text-destructive">
+              Esta acción intenta borrar también sus huellas del dispositivo y no se puede deshacer.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              El reloj procesa la eliminación por cola ADMS, así que puede tardar unos segundos en desaparecer de la
+              pantalla del equipo.
+            </p>
+          </div>
+        }
+        confirmText="Eliminar completamente"
       />
 
       <CustomerFormSheet
@@ -236,18 +309,44 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 hover:bg-destructive/10"
+                className="h-8 w-8 hover:bg-amber-500/10"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setOpen(true);
+                  setDisableOpen(true);
                 }}
               >
-                <IconTrash className="h-4 w-4 text-destructive" />
-                <span className="sr-only">Desactivar cliente</span>
+                {data.is_active ? (
+                  <IconUserOff className="h-4 w-4 text-amber-500" />
+                ) : (
+                  <IconUserCheck className="h-4 w-4 text-emerald-500" />
+                )}
+                <span className="sr-only">{data.is_active ? "Desactivar cliente" : "Reactivar cliente"}</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Desactivar cliente</p>
+              <p>{data.is_active ? "Desactivar cliente" : "Reactivar cliente"}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 hover:bg-destructive/10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteOpen(true);
+                }}
+              >
+                <IconTrash className="h-4 w-4 text-destructive" />
+                <span className="sr-only">Eliminar completamente</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Eliminar completamente</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

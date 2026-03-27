@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/sheet";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { FormInputGroup } from "@/components/forms/form-input-group";
+import { FormCheckboxGroup } from "@/components/forms/form-checkbox-group";
+import { FormRadioGroup } from "@/components/forms/form-radio-group";
 import { FormSelect } from "@/components/forms/form-select";
 import { FormTextarea } from "@/components/forms/form-textarea";
 import {
@@ -33,6 +35,17 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { addDays, differenceInDays, format, isValid, parse } from "date-fns";
 import { es } from "date-fns/locale";
+import {
+  CARDIO_PREFERENCE_OPTIONS,
+  DAYS_PER_WEEK_OPTIONS,
+  EQUIPMENT_OPTIONS,
+  EXPERIENCE_LEVEL_OPTIONS,
+  FOCUS_AREA_OPTIONS,
+  PRIMARY_GOAL_OPTIONS,
+  RESTRICTED_MOVEMENT_OPTIONS,
+  SESSION_MINUTES_OPTIONS,
+  TRAINING_LOCATION_OPTIONS,
+} from "@/lib/training/options";
 import { CustomerData, useHookFormCustomerSheet } from "../hooks/use-hook-form-customers";
 export type { CustomerData } from "../hooks/use-hook-form-customers";
 
@@ -477,97 +490,247 @@ export function CustomerFormSheet({
 
               <Separator />
 
-              {/* 4. FICHA MÉDICA */}
+              {/* 4. PERFIL DE ENTRENAMIENTO */}
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-primary flex items-center gap-2">
                   <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs">
                     4
                   </span>
-                  Ficha Médica
+                  Perfil de Entrenamiento
                 </h4>
                 <div className="space-y-4 pl-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormInputGroup
+                  <div className="rounded-lg border bg-muted/20 p-4 space-y-4">
+                    <div className="space-y-1">
+                      <h5 className="text-sm font-semibold">Objetivo</h5>
+                      <p className="text-xs text-muted-foreground">
+                        Si dejas campos vacíos, el cliente se guarda y la rutina quedará pendiente hasta completar el
+                        perfil.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormSelect
+                        control={form.control}
+                        name="primary_goal"
+                        label="Objetivo principal"
+                        placeholder="Seleccionar objetivo..."
+                        options={PRIMARY_GOAL_OPTIONS}
+                      />
+                      <FormSelect
+                        control={form.control}
+                        name="secondary_goal"
+                        label="Objetivo secundario"
+                        placeholder="Opcional"
+                        options={PRIMARY_GOAL_OPTIONS}
+                      />
+                    </div>
+                    <FormCheckboxGroup
                       control={form.control}
-                      name="weight_kg"
-                      label="Peso (kg)"
-                      type="number"
-                      icon={<IconScale className="h-4 w-4" />}
-                      placeholder="70"
-                    />
-                    <FormInputGroup
-                      control={form.control}
-                      name="height_cm"
-                      label="Estatura (cm)"
-                      type="number"
-                      icon={<IconRuler className="h-4 w-4" />}
-                      placeholder="170"
+                      name="focus_areas"
+                      label="Áreas de enfoque"
+                      description="Opcional. Ayuda a priorizar grupos musculares dentro de la rutina."
+                      options={FOCUS_AREA_OPTIONS}
+                      columns={3}
                     />
                   </div>
-                  <FormSelect
-                    control={form.control}
-                    name="body_type"
-                    label="Somatotipo"
-                    placeholder="Seleccionar..."
-                    options={[
-                      { label: "Ectomorfo", value: "ectomorph" },
-                      { label: "Mesomorfo", value: "mesomorph" },
-                      { label: "Endomorfo", value: "endomorph" },
-                    ]}
-                  />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormSelect
+
+                  <div className="rounded-lg border bg-muted/20 p-4 space-y-4">
+                    <div className="space-y-1">
+                      <h5 className="text-sm font-semibold">Salud y restricciones</h5>
+                      <p className="text-xs text-muted-foreground">
+                        Captura lo que cambia la prescripción: dolor actual, movimientos que se deben evitar y si
+                        necesita revisión previa.
+                      </p>
+                    </div>
+                    <FormRadioGroup
                       control={form.control}
-                      name="diet_type"
-                      label="Tipo de dieta"
-                      required
+                      name="parq_requires_attention"
+                      label="¿Necesita revisión médica o atención especial antes de entrenar?"
                       options={[
-                        { label: "Hipocalórica", value: "hipocalorica" },
-                        { label: "Normocalórica", value: "normocalorica" },
-                        { label: "Hipercalórica", value: "hipercalorica" },
+                        { label: "Sí, requiere atención", value: "yes" },
+                        { label: "No, puede entrenar normal", value: "no" },
                       ]}
+                      orientation="vertical"
                     />
-                    <FormSelect
+                    <FormTextarea
                       control={form.control}
-                      name="activity_level"
-                      label="Nivel de actividad"
-                      required
-                      options={[
-                        { label: "Poco o nada", value: "sedentario" },
-                        { label: "1 a 3 días/semana", value: "1_3_dias" },
-                        { label: "3 a 5 días/semana", value: "3_5_dias" },
-                        { label: "6 a 7 días/semana", value: "6_7_dias" },
-                        { label: "2 veces al día", value: "2_veces_dia" },
-                      ]}
+                      name="injuries_or_pain"
+                      label="Dolor actual, lesión o molestia"
+                      placeholder="Ejemplo: molestia en rodilla derecha al hacer sentadillas profundas."
+                      config={{ rows: 3, maxLength: 240 }}
+                    />
+                    <FormCheckboxGroup
+                      control={form.control}
+                      name="restricted_movements"
+                      label="Movimientos a evitar o limitar"
+                      options={RESTRICTED_MOVEMENT_OPTIONS}
+                      columns={2}
+                    />
+                    <FormTextarea
+                      control={form.control}
+                      name="medical_clearance_notes"
+                      label="Notas de autorización médica"
+                      placeholder="Opcional. Indicaciones médicas, observaciones o restricciones clínicas."
+                      config={{ rows: 3, maxLength: 240 }}
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormInputGroup
+
+                  <div className="rounded-lg border bg-muted/20 p-4 space-y-4">
+                    <div className="space-y-1">
+                      <h5 className="text-sm font-semibold">Perfil de entrenamiento</h5>
+                      <p className="text-xs text-muted-foreground">
+                        Esto define frecuencia, duración, contexto real y el tipo de ejercicios que sí puede hacer.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormSelect
+                        control={form.control}
+                        name="experience_level"
+                        label="Nivel de experiencia"
+                        placeholder="Seleccionar..."
+                        options={EXPERIENCE_LEVEL_OPTIONS}
+                      />
+                      <FormSelect
+                        control={form.control}
+                        name="training_location"
+                        label="¿Dónde entrena?"
+                        placeholder="Seleccionar..."
+                        options={TRAINING_LOCATION_OPTIONS}
+                      />
+                      <FormSelect
+                        control={form.control}
+                        name="days_per_week"
+                        label="Días por semana"
+                        placeholder="Seleccionar..."
+                        options={DAYS_PER_WEEK_OPTIONS}
+                      />
+                      <FormSelect
+                        control={form.control}
+                        name="session_minutes"
+                        label="Duración por sesión"
+                        placeholder="Seleccionar..."
+                        options={SESSION_MINUTES_OPTIONS}
+                      />
+                      <FormSelect
+                        control={form.control}
+                        name="activity_level"
+                        label="Nivel de actividad diaria"
+                        placeholder="Seleccionar..."
+                        options={[
+                          { label: "Poco o nada", value: "sedentario" },
+                          { label: "1 a 3 días/semana", value: "1_3_dias" },
+                          { label: "3 a 5 días/semana", value: "3_5_dias" },
+                          { label: "6 a 7 días/semana", value: "6_7_dias" },
+                          { label: "2 veces al día", value: "2_veces_dia" },
+                        ]}
+                      />
+                    </div>
+                    <FormRadioGroup
                       control={form.control}
-                      name="body_fat_percentage"
-                      label="% Grasa"
-                      type="number"
-                      required
+                      name="cardio_preference"
+                      label="Preferencia de cardio"
+                      options={CARDIO_PREFERENCE_OPTIONS}
+                      orientation="vertical"
                     />
-                    <FormInputGroup
+                    <FormCheckboxGroup
                       control={form.control}
-                      name="muscle_mass_kg"
-                      label="Masa Muscular (kg)"
-                      type="number"
-                      required
+                      name="equipment_available"
+                      label="Equipo disponible"
+                      description="Selecciona lo que realmente tiene a mano el cliente."
+                      options={EQUIPMENT_OPTIONS}
+                      columns={3}
+                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormTextarea
+                        control={form.control}
+                        name="exercise_preferences"
+                        label="Preferencias"
+                        placeholder="Ejemplo: le gustan máquinas, caminadora y superseries."
+                        config={{ rows: 3, maxLength: 220 }}
+                      />
+                      <FormTextarea
+                        control={form.control}
+                        name="exercise_dislikes"
+                        label="Ejercicios o formatos que evita"
+                        placeholder="Ejemplo: no le gustan burpees ni ejercicios muy técnicos."
+                        config={{ rows: 3, maxLength: 220 }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border bg-muted/20 p-4 space-y-4">
+                    <div className="space-y-1">
+                      <h5 className="text-sm font-semibold">Métricas base y seguimiento</h5>
+                      <p className="text-xs text-muted-foreground">
+                        Peso y estatura ayudan a calcular nutrición. El resto sirve para seguimiento, no para bloquear
+                        la creación del cliente.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormInputGroup
+                        control={form.control}
+                        name="weight_kg"
+                        label="Peso (kg)"
+                        type="number"
+                        icon={<IconScale className="h-4 w-4" />}
+                        placeholder="70"
+                      />
+                      <FormInputGroup
+                        control={form.control}
+                        name="height_cm"
+                        label="Estatura (cm)"
+                        type="number"
+                        icon={<IconRuler className="h-4 w-4" />}
+                        placeholder="170"
+                      />
+                      <FormSelect
+                        control={form.control}
+                        name="body_type"
+                        label="Somatotipo"
+                        placeholder="Opcional"
+                        options={[
+                          { label: "Ectomorfo", value: "ectomorph" },
+                          { label: "Mesomorfo", value: "mesomorph" },
+                          { label: "Endomorfo", value: "endomorph" },
+                        ]}
+                      />
+                      <FormSelect
+                        control={form.control}
+                        name="diet_type"
+                        label="Enfoque nutricional"
+                        placeholder="Seleccionar..."
+                        options={[
+                          { label: "Hipocalórica", value: "hipocalorica" },
+                          { label: "Normocalórica", value: "normocalorica" },
+                          { label: "Hipercalórica", value: "hipercalorica" },
+                        ]}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormInputGroup control={form.control} name="body_fat_percentage" label="% Grasa" type="number" />
+                      <FormInputGroup control={form.control} name="muscle_mass_kg" label="Masa Muscular (kg)" type="number" />
+                      <FormInputGroup control={form.control} name="chest" label="Pecho (cm)" type="number" />
+                      <FormInputGroup control={form.control} name="waist" label="Cintura (cm)" type="number" />
+                      <FormInputGroup control={form.control} name="hip" label="Cadera (cm)" type="number" />
+                      <FormInputGroup control={form.control} name="arm_right" label="Brazo Der. (cm)" type="number" />
+                      <FormInputGroup control={form.control} name="arm_left" label="Brazo Izq. (cm)" type="number" />
+                      <FormInputGroup control={form.control} name="leg_right" label="Pierna Der. (cm)" type="number" />
+                      <FormInputGroup control={form.control} name="leg_left" label="Pierna Izq. (cm)" type="number" />
+                    </div>
+                    <FormTextarea
+                      control={form.control}
+                      name="injuries"
+                      label="Observaciones generales"
+                      placeholder="Notas generales que quieras dejar guardadas en el perfil."
+                      config={{ rows: 3, maxLength: 240 }}
+                    />
+                    <FormTextarea
+                      control={form.control}
+                      name="notes"
+                      label="Notas de seguimiento"
+                      placeholder="Opcional. Contexto extra para nutrición, adherencia o seguimiento."
+                      config={{ rows: 3, maxLength: 240 }}
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormInputGroup control={form.control} name="chest" label="Pecho (cm)" type="number" required />
-                    <FormInputGroup control={form.control} name="waist" label="Cintura (cm)" type="number" required />
-                    <FormInputGroup control={form.control} name="hip" label="Cadera (cm)" type="number" required />
-                    <FormInputGroup control={form.control} name="arm_right" label="Brazo Der. (cm)" type="number" required />
-                    <FormInputGroup control={form.control} name="arm_left" label="Brazo Izq. (cm)" type="number" required />
-                    <FormInputGroup control={form.control} name="leg_right" label="Pierna Der. (cm)" type="number" required />
-                    <FormInputGroup control={form.control} name="leg_left" label="Pierna Izq. (cm)" type="number" required />
-                  </div>
-                  <FormTextarea control={form.control} name="injuries" label="Observaciones / Lesiones" />
-                  <FormTextarea control={form.control} name="notes" label="Notas nutrición/rutina" />
                   {calculationPreview && (
                     <div className="rounded-md border bg-muted/30 p-3 text-sm">
                       <p className="font-medium mb-1">Vista previa cálculo</p>

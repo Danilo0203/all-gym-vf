@@ -23,6 +23,7 @@ export type Customer = {
   last_check_in: string | null;
   is_active: boolean | null;
   email: string | null;
+  biometric_id?: number | null;
 };
 
 export interface PlanOption {
@@ -30,16 +31,27 @@ export interface PlanOption {
   value: string;
 }
 
+interface CustomerColumnsOptions {
+  fullNameColumnSize?: number;
+}
+
 // Función factory para crear columnas con opciones dinámicas
-export function getColumns(planOptions: PlanOption[] = []): ColumnDef<Customer>[] {
+export function getColumns(
+  planOptions: PlanOption[] = [],
+  options: CustomerColumnsOptions = {}
+): ColumnDef<Customer>[] {
+  const fullNameColumnSize = options.fullNameColumnSize ?? 220;
+
   return [
     {
       id: "full_name",
       accessorKey: "full_name",
+      size: fullNameColumnSize,
+      minSize: fullNameColumnSize,
       header: ({ column }) => <DataTableColumnHeader column={column} title="CLIENTE" />,
       enableColumnFilter: true,
       meta: {
-        label: "Buscar por nombre...",
+        label: "Cliente",
         placeholder: "Buscar por nombre...",
         variant: "text" as const,
       },
@@ -55,13 +67,15 @@ export function getColumns(planOptions: PlanOption[] = []): ColumnDef<Customer>[
           : "??";
 
         return (
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <Avatar className="h-9 w-9">
               <AvatarImage src={avatar_url || ""} alt={full_name || ""} />
               <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
-            <div className="flex flex-col">
-              <span className="font-medium text-sm">{full_name}</span>
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate font-medium text-sm" title={full_name || ""}>
+                {full_name}
+              </span>
             </div>
           </div>
         );
@@ -69,6 +83,8 @@ export function getColumns(planOptions: PlanOption[] = []): ColumnDef<Customer>[
     },
     {
       accessorKey: "is_active",
+      size: 140,
+      minSize: 130,
       header: ({ column }) => <DataTableColumnHeader column={column} title="ACTIVO" />,
       enableColumnFilter: true,
       meta: {
@@ -94,7 +110,12 @@ export function getColumns(planOptions: PlanOption[] = []): ColumnDef<Customer>[
     },
     {
       accessorKey: "subscription_status",
+      size: 170,
+      minSize: 160,
       header: ({ column }) => <DataTableColumnHeader column={column} title="SUSCRIPCIÓN" />,
+      meta: {
+        label: "Suscripción",
+      },
       cell: ({ row }) => (
         <SubscriptionStatusBadge
           status={row.original.subscription_status}
@@ -105,10 +126,12 @@ export function getColumns(planOptions: PlanOption[] = []): ColumnDef<Customer>[
     {
       id: "plan_name",
       accessorKey: "plan_name",
+      size: 210,
+      minSize: 180,
       header: ({ column }) => <DataTableColumnHeader column={column} title="PLAN ACTUAL" />,
       enableColumnFilter: true,
       meta: {
-        label: "Plan",
+        label: "Plan actual",
         variant: "multiSelect" as const,
         options: planOptions,
       },
@@ -116,7 +139,12 @@ export function getColumns(planOptions: PlanOption[] = []): ColumnDef<Customer>[
     },
     {
       accessorKey: "subscription_start_date",
+      size: 150,
+      minSize: 140,
       header: ({ column }) => <DataTableColumnHeader column={column} title="INICIO" />,
+      meta: {
+        label: "Inicio",
+      },
       cell: ({ row }) => {
         const date = row.original.subscription_start_date;
         if (!date) return <span className="text-muted-foreground">-</span>;
@@ -134,7 +162,12 @@ export function getColumns(planOptions: PlanOption[] = []): ColumnDef<Customer>[
     },
     {
       accessorKey: "subscription_end_date",
+      size: 190,
+      minSize: 180,
       header: ({ column }) => <DataTableColumnHeader column={column} title="VENCIMIENTO" />,
+      meta: {
+        label: "Vencimiento",
+      },
       cell: ({ row }) => {
         const date = row.original.subscription_end_date;
         if (!date) return <span className="text-muted-foreground">-</span>;
@@ -168,7 +201,12 @@ export function getColumns(planOptions: PlanOption[] = []): ColumnDef<Customer>[
     },
     {
       accessorKey: "phone",
+      size: 170,
+      minSize: 160,
       header: ({ column }) => <DataTableColumnHeader column={column} title="TELÉFONO" />,
+      meta: {
+        label: "Teléfono",
+      },
       cell: ({ row }) => {
         const phone = row.original.phone;
         if (!phone) return <span className="text-muted-foreground">-</span>;
@@ -190,20 +228,41 @@ export function getColumns(planOptions: PlanOption[] = []): ColumnDef<Customer>[
     },
     {
       accessorKey: "last_check_in",
+      size: 170,
+      minSize: 160,
       header: ({ column }) => <DataTableColumnHeader column={column} title="ÚLTIMO INGRESO" />,
+      meta: {
+        label: "Último ingreso",
+      },
       cell: ({ row }) => {
         const date = row.original.last_check_in;
         if (!date) return <span className="text-muted-foreground text-xs">Nunca</span>;
+
+        const parsedDate = new Date(date);
+        if (Number.isNaN(parsedDate.getTime())) {
+          return <span className="text-sm text-muted-foreground">{date}</span>;
+        }
+
         return (
-          <span className="text-sm text-muted-foreground">
-            {format(new Date(date), "dd MMM HH:mm", { locale: es })}
-          </span>
+          <div className="flex flex-col">
+            <span className="text-sm text-muted-foreground">
+              {format(parsedDate, "dd/MM/yyyy", { locale: es })}
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {format(parsedDate, "HH:mm 'hs'", { locale: es })}
+            </span>
+          </div>
         );
       },
     },
     {
       id: "actions",
+      size: 140,
+      minSize: 130,
       header: "Acciones",
+      meta: {
+        label: "Acciones",
+      },
       cell: ({ row }) => <CellAction data={row.original} />,
     },
   ];

@@ -1,9 +1,16 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getUserEmail } from "@/lib/supabase/admin";
+import { createAdminClient, getUserEmail } from "@/lib/supabase/admin";
 
 type PlanSummary = { name?: string | null; price?: number | null };
+type AttendanceLogRow = {
+  id: number;
+  punch_time: string;
+  status1: number | null;
+  raw_line: string | null;
+};
+const ACCESS_TIME_ZONE = "America/Guatemala";
 
 function getPlanSummary(planRef: unknown): PlanSummary | null {
   if (!planRef) return null;
@@ -11,6 +18,97 @@ function getPlanSummary(planRef: unknown): PlanSummary | null {
     return (planRef[0] as PlanSummary | undefined) ?? null;
   }
   return planRef as PlanSummary;
+}
+
+function getDateFormatterParts(value: string, options: Intl.DateTimeFormatOptions) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: ACCESS_TIME_ZONE,
+    ...options,
+  }).formatToParts(new Date(value));
+}
+
+function getLocalDateKey(value: string): string {
+  const parts = getDateFormatterParts(value, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  const year = parts.find((part) => part.type === "year")?.value || "0000";
+  const month = parts.find((part) => part.type === "month")?.value || "01";
+  const day = parts.find((part) => part.type === "day")?.value || "01";
+
+  return `${year}-${month}-${day}`;
+}
+
+function getLocalizedDayOfWeek(value: string): string {
+  const formatted = new Intl.DateTimeFormat("es-GT", {
+    timeZone: ACCESS_TIME_ZONE,
+    weekday: "long",
+  }).format(new Date(value));
+
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
+function isAuthorizedAccess(row: Pick<AttendanceLogRow, "status1" | "raw_line">): boolean {
+  const rawLine = String(row.raw_line || "").toLowerCase();
+  const isAccessControlEvent = rawLine.includes("pin=") && rawLine.includes("event=");
+
+  if (isAccessControlEvent) {
+    return row.status1 == null || row.status1 === 0;
+  }
+
+  // ATTLOG clásico no trae el mismo significado en status1; lo tratamos como ingreso válido.
+  return true;
+}
+
+async function getCustomerBiometricId(customerId: string): Promise<number | null> {
+  const adminClient = createAdminClient();
+  const { data, error } = await adminClient
+    .from("profiles")
+    .select("biometric_id")
+    .eq("id", customerId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching biometric id:", error.message);
+    return null;
+  }
+
+  return typeof data?.biometric_id === "number" ? data.biometric_id : null;
+}
+
+async function getAttendanceLogsForCustomer(
+  customerId: string,
+  options: { limit?: number; since?: string } = {},
+): Promise<AttendanceLogRow[]> {
+  const biometricId = await getCustomerBiometricId(customerId);
+  if (biometricId == null) return [];
+
+  const adminClient = createAdminClient();
+  let query = adminClient
+    .from("attendance_logs")
+    .select("id, punch_time, status1, raw_line")
+    .eq("biometric_id", biometricId)
+    .order("punch_time", { ascending: false });
+
+  if (options.since) {
+    query = query.gte("punch_time", options.since);
+  }
+
+  if (options.limit) {
+    query = query.limit(options.limit);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    if (error.code !== "42P01") {
+      console.error("Error fetching attendance logs:", error.message);
+    }
+    return [];
+  }
+
+  return (data || []) as AttendanceLogRow[];
 }
 
 // Tipos para el historial del cliente
@@ -151,15 +249,21 @@ export async function getCustomerKPIs(customerId: string): Promise<CustomerHisto
   // Fecha de creación de cuenta
   const { data: profileData } = await supabase.from("profiles").select("created_at").eq("id", customerId).single();
 
-  // Total de visitas - manejar si la tabla no existe
   let totalVisits = 0;
-  const { count, error: accessError } = await supabase
-    .from("access_logs")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", customerId);
+  const biometricId = await getCustomerBiometricId(customerId);
+  if (biometricId != null) {
+    const adminClient = createAdminClient();
+    const { count, error: attendanceError } = await adminClient
+      .from("attendance_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("biometric_id", biometricId)
+      .or("status1.is.null,status1.eq.0");
 
-  if (!accessError) {
-    totalVisits = count || 0;
+    if (!attendanceError) {
+      totalVisits = count || 0;
+    } else if (attendanceError.code !== "42P01") {
+      console.error("Error counting attendance logs:", attendanceError.message);
+    }
   }
 
   // Peso inicial y actual
@@ -185,31 +289,14 @@ export async function getCustomerKPIs(customerId: string): Promise<CustomerHisto
 
 // Obtener historial de accesos
 export async function getAccessHistory(customerId: string, limit = 50): Promise<AccessLogEntry[]> {
-  const supabase = await createClient();
+  const data = await getAttendanceLogsForCustomer(customerId, { limit });
 
-  const { data, error } = await supabase
-    .from("access_logs")
-    .select("id, check_in_time, status")
-    .eq("user_id", customerId)
-    .order("check_in_time", { ascending: false })
-    .limit(limit);
-
-  if (error) {
-    // Silenciar si la tabla no existe
-    if (error.code !== "42P01") {
-      console.error("Error fetching access logs:", error.message);
-    }
-    return [];
-  }
-
-  return (data || []).map((log) => {
-    const date = new Date(log.check_in_time);
-    const days = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+  return data.map((log) => {
     return {
-      id: log.id,
-      check_in_time: log.check_in_time,
-      day_of_week: days[date.getDay()],
-      status: log.status || "authorized",
+      id: String(log.id),
+      check_in_time: log.punch_time,
+      day_of_week: getLocalizedDayOfWeek(log.punch_time),
+      status: isAuthorizedAccess(log) ? "authorized" : "denied",
     };
   });
 }
@@ -413,29 +500,18 @@ export async function getBodyAssessmentHistory(customerId: string): Promise<Body
 
 // Obtener datos para el calendario de calor (últimos 12 meses)
 export async function getAccessHeatmapData(customerId: string): Promise<Record<string, number>> {
-  const supabase = await createClient();
-
   const oneYearAgo = new Date();
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-
-  const { data, error } = await supabase
-    .from("access_logs")
-    .select("check_in_time")
-    .eq("user_id", customerId)
-    .gte("check_in_time", oneYearAgo.toISOString());
-
-  if (error) {
-    // Silenciar si la tabla no existe
-    if (error.code !== "42P01") {
-      console.error("Error fetching heatmap data:", error.message);
-    }
-    return {};
-  }
-
-  // Agrupar por fecha (YYYY-MM-DD)
   const heatmap: Record<string, number> = {};
-  (data || []).forEach((log) => {
-    const date = log.check_in_time.split("T")[0];
+
+  const data = await getAttendanceLogsForCustomer(customerId, {
+    since: oneYearAgo.toISOString(),
+  });
+
+  data.forEach((log) => {
+    if (!isAuthorizedAccess(log)) return;
+
+    const date = getLocalDateKey(log.punch_time);
     heatmap[date] = (heatmap[date] || 0) + 1;
   });
 

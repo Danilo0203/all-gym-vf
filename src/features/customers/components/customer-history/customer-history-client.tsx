@@ -19,14 +19,18 @@ import {
   IconFileCertificate,
   IconRun,
   IconActivity,
-  IconReceipt2,
   IconChartLine,
   IconEdit,
   IconTrash,
+  IconUserOff,
+  IconUserCheck,
+  IconMail,
+  IconPhone,
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
+import type { CustomerRoutineWorkspace } from "@/lib/training/types";
 import type {
   CustomerProfile,
   CustomerHistoryKPIs,
@@ -37,7 +41,7 @@ import type {
 } from "../../actions/customer-history-actions";
 
 // Import sub-components
-import { AccessHistoryTab, PaymentHistoryTab, SubscriptionHistoryTab, BodyAssessmentTab } from "./tabs";
+import { AccessHistoryTab, PaymentHistoryTab, SubscriptionHistoryTab, BodyAssessmentTab, RoutineWorkspaceTab } from "./tabs";
 import { cn } from "@/lib/utils";
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -52,8 +56,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CustomerFormSheet } from "@/features/customers/components/customer-form-sheet";
-import { RenewSubscriptionSheet } from "@/features/customers/components/renew-subscription-sheet";
-import { deleteCustomer } from "@/features/customers/actions/customer-actions";
+import {
+  deleteCustomer,
+  permanentlyDeleteCustomer,
+  reactivateCustomer,
+} from "@/features/customers/actions/customer-actions";
 
 function toCustomerGender(value: string | null): "male" | "female" | "other" | null {
   if (value === "male" || value === "female" || value === "other") return value;
@@ -68,6 +75,7 @@ interface CustomerHistoryClientProps {
   subscriptionHistory: SubscriptionEntry[];
   bodyAssessments: BodyAssessmentEntry[];
   heatmapData: Record<string, number>;
+  routineWorkspace: CustomerRoutineWorkspace;
 }
 
 export function CustomerHistoryClient({
@@ -78,12 +86,14 @@ export function CustomerHistoryClient({
   subscriptionHistory,
   bodyAssessments,
   heatmapData,
+  routineWorkspace,
 }: CustomerHistoryClientProps) {
   const [activeSection, setActiveSection] = useState("overview");
   const [editOpen, setEditOpen] = useState(false);
-  const [renewOpen, setRenewOpen] = useState(false);
   const [deactivateOpen, setDeactivateOpen] = useState(false);
   const [isDeactivating, setIsDeactivating] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
   const isScrollingRef = useRef(false);
 
@@ -97,7 +107,7 @@ export function CustomerHistoryClient({
     const handleScroll = () => {
       if (isScrollingRef.current) return;
 
-      const sections = ["overview", "subscriptions", "payments", "access", "body"];
+      const sections = ["overview", "routine", "subscriptions", "payments", "access", "body"];
       let currentSection = sections[0];
 
       const viewportRect = viewport.getBoundingClientRect();
@@ -137,6 +147,8 @@ export function CustomerHistoryClient({
   const memberSinceFormatted = kpis.memberSince
     ? formatDistanceToNow(new Date(kpis.memberSince), { locale: es, addSuffix: true })
     : "N/A";
+  const customerEmail = profile.email?.trim() || "Sin correo";
+  const customerPhone = profile.phone?.trim() || "Sin teléfono";
 
   const lastAssessment = bodyAssessments.length > 0 ? bodyAssessments[0] : null;
   const latestSubscription = subscriptionHistory[0];
@@ -187,26 +199,79 @@ export function CustomerHistoryClient({
     leg_right: null,
     leg_left: null,
     notes: lastAssessment?.notes ?? null,
+    primary_goal: routineWorkspace.trainingProfile?.primary_goal ?? null,
+    secondary_goal: routineWorkspace.trainingProfile?.secondary_goal ?? null,
+    focus_areas: routineWorkspace.trainingProfile?.focus_areas ?? [],
+    experience_level: routineWorkspace.trainingProfile?.experience_level ?? null,
+    days_per_week: routineWorkspace.trainingProfile?.days_per_week ?? null,
+    session_minutes: routineWorkspace.trainingProfile?.session_minutes ?? null,
+    training_location: routineWorkspace.trainingProfile?.training_location ?? null,
+    equipment_available: routineWorkspace.trainingProfile?.equipment_available ?? [],
+    cardio_preference: routineWorkspace.trainingProfile?.cardio_preference ?? null,
+    exercise_preferences: routineWorkspace.trainingProfile?.exercise_preferences ?? null,
+    exercise_dislikes: routineWorkspace.trainingProfile?.exercise_dislikes ?? null,
+    injuries_or_pain: routineWorkspace.trainingProfile?.injuries_or_pain ?? null,
+    restricted_movements: routineWorkspace.trainingProfile?.restricted_movements ?? [],
+    parq_requires_attention: routineWorkspace.trainingProfile?.parq_requires_attention ?? null,
+    medical_clearance_notes: routineWorkspace.trainingProfile?.medical_clearance_notes ?? null,
+    training_profile_status: routineWorkspace.trainingProfileStatus,
   };
 
-  const handleDeactivateCustomer = async () => {
+  const handleToggleCustomerStatus = async () => {
     if (isDeactivating) return;
 
     try {
       setIsDeactivating(true);
-      const result = await deleteCustomer(profile.id);
+      const result = profile.is_active ? await deleteCustomer(profile.id) : await reactivateCustomer(profile.id);
       if (!result.success) {
-        toast.error(result.error || "No se pudo desactivar el cliente");
+        toast.error(result.error || `No se pudo ${profile.is_active ? "desactivar" : "reactivar"} el cliente`);
         return;
       }
-      toast.success("Cliente desactivado correctamente");
+
+      const deviceSync =
+        typeof result === "object" && result !== null && "deviceSync" in result ? result.deviceSync : undefined;
+      const deviceSynced = deviceSync?.attempted ? deviceSync?.synced === true || deviceSync?.queued === true : null;
+
+      if (profile.is_active) {
+        if (deviceSynced === false) {
+          toast.warning("Cliente desactivado en el sistema, pero falló el envío al reloj.");
+        } else {
+          toast.success("Cliente desactivado y bloqueado en el reloj.");
+        }
+      } else if (deviceSynced === false) {
+        toast.warning("Cliente reactivado en el sistema, pero falló el envío al reloj.");
+      } else {
+        toast.success("Cliente reactivado y habilitado en el reloj.");
+      }
+
       router.refresh();
-      router.push("/panel/clientes");
     } catch {
-      toast.error("Error inesperado al desactivar cliente");
+      toast.error(`Error inesperado al ${profile.is_active ? "desactivar" : "reactivar"} el cliente`);
     } finally {
       setIsDeactivating(false);
       setDeactivateOpen(false);
+    }
+  };
+
+  const handlePermanentDeleteCustomer = async () => {
+    if (isDeleting) return;
+
+    try {
+      setIsDeleting(true);
+      const result = await permanentlyDeleteCustomer(profile.id);
+      if (!result.success) {
+        toast.error(result.error || "No se pudo eliminar completamente el cliente");
+        return;
+      }
+
+      toast.success("Cliente eliminado del sistema. El reloj puede tardar unos segundos en reflejarlo.");
+      router.refresh();
+      router.push("/panel/clientes");
+    } catch {
+      toast.error("Error inesperado al eliminar completamente el cliente");
+    } finally {
+      setIsDeleting(false);
+      setDeleteOpen(false);
     }
   };
 
@@ -246,14 +311,23 @@ export function CustomerHistoryClient({
       <AlertModal
         isOpen={deactivateOpen}
         onClose={() => setDeactivateOpen(false)}
-        onConfirm={handleDeactivateCustomer}
+        onConfirm={handleToggleCustomerStatus}
         loading={isDeactivating}
-        title="¿Desactivar cliente?"
+        title={profile.is_active ? "¿Desactivar cliente?" : "¿Reactivar cliente?"}
         description={
           <div className="space-y-2 mt-2">
             <p>
-              El cliente <span className="font-semibold text-foreground">{profile.full_name}</span> pasará a estado
-              inactivo.
+              {profile.is_active ? (
+                <>
+                  El cliente <span className="font-semibold text-foreground">{profile.full_name}</span> pasará a estado
+                  inactivo y el reloj ya no permitirá su ingreso.
+                </>
+              ) : (
+                <>
+                  El cliente <span className="font-semibold text-foreground">{profile.full_name}</span> volverá a
+                  estado activo y se habilitará nuevamente en el reloj.
+                </>
+              )}
             </p>
             <div className="rounded-md bg-muted p-3 text-sm">
               <div className="grid grid-cols-3 gap-2 items-center">
@@ -279,153 +353,188 @@ export function CustomerHistoryClient({
               </div>
             </div>
             <p className="text-sm text-muted-foreground mt-2">
-              Podrás reactivarlo más tarde desde el historial o editando su perfil.
+              {profile.is_active
+                ? "Podrás reactivarlo más tarde y recuperar su acceso."
+                : "Se volverá a sincronizar su acceso con el reloj."}
             </p>
           </div>
         }
-        confirmText="Desactivar"
+        confirmText={profile.is_active ? "Desactivar" : "Reactivar"}
+      />
+
+      <AlertModal
+        isOpen={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={handlePermanentDeleteCustomer}
+        loading={isDeleting}
+        title="¿Eliminar cliente completamente?"
+        description={
+          <div className="space-y-2 mt-2">
+            <p>
+              El cliente <span className="font-semibold text-foreground">{profile.full_name}</span> se eliminará del
+              sistema y del reloj.
+            </p>
+            <p className="text-sm text-destructive">
+              Esta acción intenta borrar también sus huellas del dispositivo y no se puede deshacer.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              El reloj procesa la eliminación por cola ADMS, así que puede tardar unos segundos en desaparecer de la
+              pantalla del equipo.
+            </p>
+          </div>
+        }
+        confirmText="Eliminar completamente"
       />
 
       {/* Fixed Header Section */}
       <div className="flex-shrink-0 border-b bg-gradient-to-b from-background via-background to-muted/20 backdrop-blur-xl z-10 shadow-sm">
         {/* Profile Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 p-6 lg:p-8 pb-4">
-          <div className="flex items-center gap-6 flex-1 min-w-0">
-            <div className="relative group">
-              <Avatar className="h-20 w-20 border-4 border-background shadow-xl scale-100 group-hover:scale-105 transition-transform duration-300">
-                <AvatarImage src={profile.avatar_url || ""} alt={profile.full_name} />
-                <AvatarFallback className="text-2xl font-black bg-gradient-to-br from-primary to-primary/60 text-primary-foreground">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-              {profile.is_active && (
-                <div
-                  className="absolute bottom-1 right-1 h-5 w-5 bg-green-500 border-2 border-background rounded-full shadow-lg"
-                  title="Cliente Activo"
-                />
-              )}
+        <div className="flex flex-col gap-4 p-4 sm:p-5 lg:p-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex items-start gap-4 flex-1 min-w-0">
+              <div className="relative group">
+                <Avatar className="h-16 w-16 sm:h-[72px] sm:w-[72px] border-4 border-background shadow-lg scale-100 group-hover:scale-105 transition-transform duration-300">
+                  <AvatarImage src={profile.avatar_url || ""} alt={profile.full_name} />
+                  <AvatarFallback className="text-xl font-black bg-gradient-to-br from-primary to-primary/60 text-primary-foreground">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                {profile.is_active && (
+                  <div
+                    className="absolute bottom-0.5 right-0.5 h-4 w-4 bg-green-500 border-2 border-background rounded-full shadow-lg"
+                    title="Cliente Activo"
+                  />
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1 space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="min-w-0 truncate text-2xl font-black tracking-tight sm:text-[2rem]">
+                    {profile.full_name}
+                  </h1>
+                  <Badge
+                    variant={profile.is_active ? "success" : "secondary"}
+                    className="h-6 rounded-full px-3 font-bold uppercase tracking-tighter text-[10px]"
+                  >
+                    {profile.is_active ? "Activo" : "Inactivo"}
+                  </Badge>
+                  <SubscriptionStatusBadge
+                    status={profile.subscription_status}
+                    endDate={profile.subscription_end_date}
+                    className="h-6 rounded-full px-3 font-bold uppercase tracking-tighter text-[10px]"
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <HeaderMetaItem
+                    icon={<IconMail className="h-3.5 w-3.5" />}
+                    label={customerEmail}
+                    className="min-w-0 flex-[1_1_240px]"
+                  />
+                  <HeaderMetaItem
+                    icon={<IconPhone className="h-3.5 w-3.5" />}
+                    label={customerPhone}
+                    className="min-w-[180px] flex-[0_1_auto]"
+                  />
+                  <HeaderMetaItem
+                    icon={<IconCalendarStats className="h-3.5 w-3.5" />}
+                    label={`Miembro ${memberSinceFormatted}`}
+                    className="min-w-[220px] flex-[0_1_auto]"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.24em] text-muted-foreground/70">
+                  <span>Perfil del cliente</span>
+                  <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                  <span>Resumen rápido</span>
+                </div>
+              </div>
             </div>
 
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-3xl font-black tracking-tight truncate">{profile.full_name}</h1>
-                <Badge
-                  variant={profile.is_active ? "success" : "secondary"}
-                  className="h-6 px-3 font-bold uppercase tracking-tighter text-[10px]"
-                >
-                  {profile.is_active ? "Activo" : "Inactivo"}
-                </Badge>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                <span className="w-full text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Datos personales
-                </span>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
-                  <div className="p-1 rounded bg-muted">
-                    <IconReceipt2 className="h-3.5 w-3.5" />
-                  </div>
-                  <span>{profile.email}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
-                  <div className="p-1 rounded bg-muted">
-                    <IconCreditCard className="h-3.5 w-3.5" />
-                  </div>
-                  <span>{profile.phone}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 pt-1">
-                <SubscriptionStatusBadge
-                  status={profile.subscription_status}
-                  endDate={profile.subscription_end_date}
-                  className="h-6 px-3 rounded-full font-bold uppercase tracking-tighter text-[10px]"
-                />
-                <span className="text-xs text-muted-foreground font-bold uppercase tracking-widest opacity-60">
-                  Miembro {memberSinceFormatted}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 self-end lg:self-center">
-            <Link href="/panel/clientes">
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2 font-bold uppercase tracking-tighter text-[10px] h-9 px-4 border-primary/10 hover:bg-primary/5"
-              >
-                <IconArrowLeft className="h-3.5 w-3.5" />
-                Regresar
-              </Button>
-            </Link>
-
-            <CustomerFormSheet
-              mode="edit"
-              customer={customerForEdit}
-              open={editOpen}
-              onOpenChange={setEditOpen}
-              trigger={null}
-            />
-            <RenewSubscriptionSheet
-              customerId={profile.id}
-              customerName={profile.full_name || "Cliente"}
-              customerGender={toCustomerGender(profile.gender)}
-              customerBirthDate={profile.birth_date}
-              lastAssessment={lastAssessmentSafe}
-              open={renewOpen}
-              onOpenChange={setRenewOpen}
-              trigger={null}
-            />
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto xl:justify-end">
+              <Link href="/panel/clientes" className="flex-1 sm:flex-none">
                 <Button
-                  data-testid="customer-actions-menu"
-                  variant="default"
+                  variant="outline"
                   size="sm"
-                  className="gap-2 font-bold uppercase tracking-tighter text-[10px] h-9 px-4 shadow-lg shadow-primary/20"
+                  className="h-8 w-full gap-2 px-3 text-[10px] font-bold uppercase tracking-tighter border-primary/10 hover:bg-primary/5 sm:w-auto"
                 >
-                  <IconActivity className="w-3.5 h-3.5" />
-                  Acciones
+                  <IconArrowLeft className="h-3.5 w-3.5" />
+                  Regresar
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 p-2">
-                <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground font-bold">
-                  Gestión de Cliente
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem className="gap-2 py-2 cursor-pointer" onClick={() => setEditOpen(true)}>
-                  <IconEdit className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-xs font-medium">Editar Perfil</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 py-2 cursor-pointer" onClick={() => setRenewOpen(true)}>
-                  <IconFileCertificate className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-xs font-medium">Nueva Membresía</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="gap-2 py-2 cursor-pointer text-red-500 hover:text-red-600 hover:bg-red-500/10 focus:text-red-600 focus:bg-red-500/10"
-                  onClick={() => setDeactivateOpen(true)}
-                  disabled={isDeactivating || !profile.is_active}
-                >
-                  <IconTrash className="h-4 w-4" />
-                  <span className="text-xs font-medium">
-                    {profile.is_active ? "Desactivar Cliente" : "Cliente Desactivado"}
-                  </span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </Link>
+
+              <CustomerFormSheet
+                mode="edit"
+                customer={customerForEdit}
+                open={editOpen}
+                onOpenChange={setEditOpen}
+                trigger={null}
+              />
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    data-testid="customer-actions-menu"
+                    variant="default"
+                    size="sm"
+                    className="h-8 flex-1 gap-2 px-3 text-[10px] font-bold uppercase tracking-tighter shadow-lg shadow-primary/20 sm:flex-none"
+                  >
+                    <IconActivity className="w-3.5 h-3.5" />
+                    Acciones
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 p-2">
+                  <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground font-bold">
+                    Gestión de Cliente
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="gap-2 py-2 cursor-pointer" onClick={() => setEditOpen(true)}>
+                    <IconEdit className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-xs font-medium">Editar Perfil</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className={cn(
+                      "gap-2 py-2 cursor-pointer",
+                      profile.is_active
+                        ? "text-amber-500 hover:text-amber-600 hover:bg-amber-500/10 focus:text-amber-600 focus:bg-amber-500/10"
+                        : "text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10 focus:text-emerald-600 focus:bg-emerald-500/10",
+                    )}
+                    onClick={() => setDeactivateOpen(true)}
+                    disabled={isDeactivating}
+                  >
+                    {profile.is_active ? <IconUserOff className="h-4 w-4" /> : <IconUserCheck className="h-4 w-4" />}
+                    <span className="text-xs font-medium">
+                      {profile.is_active ? "Desactivar Cliente" : "Reactivar Cliente"}
+                    </span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="gap-2 py-2 cursor-pointer text-red-500 hover:text-red-600 hover:bg-red-500/10 focus:text-red-600 focus:bg-red-500/10"
+                    onClick={() => setDeleteOpen(true)}
+                    disabled={isDeleting}
+                  >
+                    <IconTrash className="h-4 w-4" />
+                    <span className="text-xs font-medium">Eliminar Completamente</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
 
         {/* Navigation Tabs (Fixed below profile) */}
-        <div className="flex items-center gap-2 px-6 lg:px-8 pb-0 overflow-x-auto no-scrollbar scroll-smooth">
+        <div className="flex items-center gap-1 px-4 sm:px-5 lg:px-6 pb-0 overflow-x-auto no-scrollbar scroll-smooth">
           <NavTab
             active={activeSection === "overview"}
             onClick={() => scrollToSection("overview")}
             label="Resumen"
             icon={<IconChartLine className="h-4 w-4" />}
+          />
+          <NavTab
+            active={activeSection === "routine"}
+            onClick={() => scrollToSection("routine")}
+            label="Rutina"
+            icon={<IconBarbell className="h-4 w-4" />}
           />
           <NavTab
             active={activeSection === "subscriptions"}
@@ -511,6 +620,11 @@ export function CustomerHistoryClient({
             </div>
           </section>
 
+          <section id="routine" className="scroll-mt-32 space-y-6">
+            <SectionHeader icon={<IconBarbell />} title="Rutina Personalizada" />
+            <RoutineWorkspaceTab customerId={profile.id} workspace={routineWorkspace} />
+          </section>
+
           <section id="subscriptions" className="scroll-mt-32 space-y-6">
             <SectionHeader icon={<IconFileCertificate />} title="Membresías y Planes" />
             <SubscriptionHistoryTab
@@ -571,7 +685,7 @@ function NavTab({
     <button
       onClick={onClick}
       className={cn(
-        "px-4 py-4 text-[11px] font-bold uppercase tracking-widest border-b-2 transition-all whitespace-nowrap flex items-center gap-2 outline-none",
+        "px-3.5 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest border-b-2 transition-all whitespace-nowrap flex items-center gap-2 outline-none",
         active
           ? "border-primary text-primary"
           : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted",
@@ -580,6 +694,30 @@ function NavTab({
       <span className={cn("transition-transform duration-300", active && "scale-110")}>{icon}</span>
       {label}
     </button>
+  );
+}
+
+function HeaderMetaItem({
+  icon,
+  label,
+  className,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "inline-flex h-9 items-center gap-2 rounded-full border border-border/60 bg-muted/35 px-3 text-sm text-muted-foreground",
+        className,
+      )}
+    >
+      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-background/80 text-foreground/75">
+        {icon}
+      </span>
+      <span className="min-w-0 truncate font-medium">{label}</span>
+    </div>
   );
 }
 

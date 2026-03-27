@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  type ColumnPinningState,
   type ColumnFiltersState,
   type PaginationState,
   type RowSelectionState,
@@ -62,6 +63,7 @@ interface UseDataTableProps<TData>
   scroll?: boolean;
   shallow?: boolean;
   startTransition?: React.TransitionStartFunction;
+  storageKey?: string;
 }
 
 export function useDataTable<TData>(props: UseDataTableProps<TData>) {
@@ -77,6 +79,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     scroll = false,
     shallow = true,
     startTransition,
+    storageKey,
     ...tableProps
   } = props;
 
@@ -106,8 +109,13 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>(
     initialState?.rowSelection ?? {}
   );
-  const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>(initialState?.columnVisibility ?? {});
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(
+    initialState?.columnVisibility ?? {}
+  );
+  const [columnPinning, setColumnPinning] = React.useState<ColumnPinningState>(
+    initialState?.columnPinning ?? {}
+  );
+  const hasLoadedPreferencesRef = React.useRef(false);
 
   const [page, setPage] = useQueryState(
     PAGE_KEY,
@@ -241,6 +249,70 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
   const [columnFilters, setColumnFilters] =
     React.useState<ColumnFiltersState>(initialColumnFilters);
 
+  React.useEffect(() => {
+    if (!storageKey || typeof window === 'undefined') {
+      hasLoadedPreferencesRef.current = true;
+      return;
+    }
+
+    try {
+      const storedVisibility = window.localStorage.getItem(
+        `${storageKey}-column-visibility`
+      );
+      const storedPinning = window.localStorage.getItem(
+        `${storageKey}-column-pinning`
+      );
+
+      if (storedVisibility) {
+        setColumnVisibility(JSON.parse(storedVisibility) as VisibilityState);
+      }
+
+      if (storedPinning) {
+        setColumnPinning(JSON.parse(storedPinning) as ColumnPinningState);
+      }
+    } catch {
+      // Ignore malformed preferences and keep defaults.
+    } finally {
+      hasLoadedPreferencesRef.current = true;
+    }
+  }, [storageKey]);
+
+  React.useEffect(() => {
+    if (!storageKey || typeof window === 'undefined') return;
+    if (!hasLoadedPreferencesRef.current) return;
+
+    window.localStorage.setItem(
+      `${storageKey}-column-visibility`,
+      JSON.stringify(columnVisibility)
+    );
+  }, [columnVisibility, storageKey]);
+
+  React.useEffect(() => {
+    if (!storageKey || typeof window === 'undefined') return;
+    if (!hasLoadedPreferencesRef.current) return;
+
+    const sanitize = (ids?: string[]) =>
+      (ids ?? []).filter((columnId) => columnIds.has(columnId));
+
+    const nextColumnPinning: ColumnPinningState = {
+      left: sanitize(columnPinning.left),
+      right: sanitize(columnPinning.right)
+    };
+
+    if (
+      nextColumnPinning.left?.join(',') !== columnPinning.left?.join(',') ||
+      nextColumnPinning.right?.join(',') !== columnPinning.right?.join(',')
+    ) {
+      setColumnPinning(nextColumnPinning);
+      return;
+    }
+
+    window.localStorage.setItem(
+      `${storageKey}-column-pinning`,
+      JSON.stringify(nextColumnPinning)
+    );
+  }, [columnIds, columnPinning, storageKey]);
+
   const onColumnFiltersChange = React.useCallback(
     (updaterOrValue: Updater<ColumnFiltersState>) => {
       if (enableAdvancedFilter) return;
@@ -284,6 +356,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       pagination,
       sorting,
       columnVisibility,
+      columnPinning,
       rowSelection,
       columnFilters
     },
@@ -297,6 +370,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     onSortingChange,
     onColumnFiltersChange,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnPinningChange: setColumnPinning,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),

@@ -28,7 +28,7 @@ export async function middleware(request: NextRequest) {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value));
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
         response = NextResponse.next({
           request,
         });
@@ -54,7 +54,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Protect Admin-Only Routes
-  const adminOnlyRoutes = ["/panel/usuarios", "/panel/planes", "/panel/pagos"];
+  const adminOnlyRoutes = ["/panel/usuarios", "/panel/planes", "/panel/pagos", "/panel/ejercicios"];
   const isAdminRoute = adminOnlyRoutes.some((route) => request.nextUrl.pathname.startsWith(route));
 
   if (user && isAdminRoute) {
