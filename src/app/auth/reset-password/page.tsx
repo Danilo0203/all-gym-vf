@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { toast } from 'sonner';
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -60,7 +59,7 @@ export default function ResetPasswordPage() {
         router.push('/panel');
         router.refresh();
       }
-    } catch (error) {
+    } catch {
       toast.error('Error al actualizar la contraseña');
     } finally {
       setIsLoading(false);

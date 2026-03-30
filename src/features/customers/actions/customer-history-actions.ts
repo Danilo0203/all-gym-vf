@@ -159,11 +159,11 @@ export interface BodyAssessmentEntry {
   fat_grams: number | null;
   water_liters_goal: number | null;
   body_type: string | null;
-  notes: string | null;
 }
 
 export interface SubscriptionEntry {
   id: string;
+  plan_id: number | null;
   plan_name: string;
   start_date: string;
   end_date: string;
@@ -184,6 +184,8 @@ export interface CustomerProfile {
   is_active: boolean | null;
   subscription_status: string | null;
   subscription_end_date: string | null;
+  injuries: string | null;
+  medical_notes: string | null;
 }
 
 // Obtener perfil básico del cliente
@@ -205,7 +207,11 @@ export async function getCustomerProfile(customerId: string): Promise<CustomerPr
   const email = await getUserEmail(customerId);
 
   // Obtener fecha de creación del perfil
-  const { data: profile } = await supabase.from("profiles").select("created_at").eq("id", customerId).single();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("created_at, injuries, medical_notes")
+    .eq("id", customerId)
+    .single();
 
   return {
     ...data,
@@ -214,6 +220,8 @@ export async function getCustomerProfile(customerId: string): Promise<CustomerPr
     is_active: data.is_active,
     subscription_status: data.subscription_status,
     subscription_end_date: data.subscription_end_date,
+    injuries: profile?.injuries ?? null,
+    medical_notes: profile?.medical_notes ?? null,
   };
 }
 
@@ -429,6 +437,7 @@ export async function getSubscriptionHistory(customerId: string): Promise<Subscr
     const plan = getPlanSummary(sub.plans);
     return {
       id: sub.id,
+      plan_id: typeof sub.plan_id === "number" ? sub.plan_id : null,
       plan_name: plan?.name || "N/A",
       start_date: sub.start_date,
       end_date: sub.end_date,
@@ -464,8 +473,7 @@ export async function getBodyAssessmentHistory(customerId: string): Promise<Body
       protein_grams,
       carbs_grams,
       fat_grams,
-      water_liters_goal,
-      notes
+      water_liters_goal
     `,
     )
     .eq("user_id", customerId)
@@ -494,7 +502,6 @@ export async function getBodyAssessmentHistory(customerId: string): Promise<Body
     fat_grams: assessment.fat_grams,
     water_liters_goal: assessment.water_liters_goal,
     body_type: assessment.body_type,
-    notes: assessment.notes,
   }));
 }
 

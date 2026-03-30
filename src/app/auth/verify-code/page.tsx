@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { toast } from 'sonner';
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -69,7 +68,7 @@ export default function VerifyCodePage() {
         toast.success('Código verificado correctamente');
         router.push('/auth/reset-password');
       }
-    } catch (error) {
+    } catch {
       toast.error('Error al verificar el código');
     } finally {
       setIsLoading(false);

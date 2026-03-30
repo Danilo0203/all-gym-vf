@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { toast } from 'sonner';
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -50,7 +49,7 @@ export default function ForgotPasswordPage() {
         toast.success('Código enviado a tu correo');
         router.push(`/auth/verify-code?email=${encodeURIComponent(email)}`);
       }
-    } catch (error) {
+    } catch {
       toast.error('Error al enviar el código');
     } finally {
       setIsLoading(false);

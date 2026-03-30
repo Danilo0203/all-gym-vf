@@ -20,7 +20,20 @@ import {
   SidebarMenuItem,
   useSidebar
 } from '@/components/ui/sidebar';
-import { useEffect, useState } from 'react';
+
+interface MockOrganization {
+  id: string;
+  name: string;
+  slug: string;
+  imageUrl: string;
+  hasImage: boolean;
+}
+
+interface MockMembership {
+  id: string;
+  organization: MockOrganization;
+  role: string;
+}
 
 export function OrgSwitcher() {
   const { isMobile, state } = useSidebar();
@@ -43,9 +56,8 @@ export function OrgSwitcher() {
          },
          role: "admin"
        }
-    ]
+    ] satisfies MockMembership[]
   };
-  const setActive = (opts: any) => console.log("Set active", opts);
 
 
   /*

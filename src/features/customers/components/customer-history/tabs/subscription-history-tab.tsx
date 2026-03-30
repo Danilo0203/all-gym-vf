@@ -32,7 +32,6 @@ interface SubscriptionHistoryTabProps {
     muscle_mass?: number | null;
     chest_cm?: number | null;
     waist_cm?: number | null;
-    notes?: string | null;
   } | null;
 }
 

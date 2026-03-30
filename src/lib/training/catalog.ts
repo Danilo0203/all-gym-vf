@@ -42,6 +42,8 @@ export function normalizeExerciseCatalogItem(row: Record<string, unknown>): Exer
     display_name_es: typeof row.display_name_es === "string" ? row.display_name_es : null,
     provider: typeof row.provider === "string" ? row.provider : null,
     provider_item_id: typeof row.provider_item_id === "string" ? row.provider_item_id : null,
+    is_favorite: row.is_favorite === true,
+    is_preview_hidden: row.is_preview_hidden === true,
     body_parts: normalizeStringArray(row.body_parts),
     target_muscles: normalizeStringArray(row.target_muscles),
     secondary_muscles: normalizeStringArray(row.secondary_muscles),
@@ -68,36 +70,64 @@ export function normalizeExerciseCatalogItem(row: Record<string, unknown>): Exer
 export function mapProviderExerciseToCatalogPayload(raw: Record<string, unknown>) {
   const name = typeof raw.name === "string" ? raw.name : "Exercise";
   const bodyParts = normalizeStringArray(raw.bodyParts);
+  const normalizedBodyParts = bodyParts.length
+    ? bodyParts
+    : typeof raw.bodyPart === "string" && raw.bodyPart.trim()
+      ? [raw.bodyPart.trim()]
+      : [];
   const equipments = normalizeStringArray(raw.equipments);
+  const normalizedEquipments = equipments.length
+    ? equipments
+    : typeof raw.equipment === "string" && raw.equipment.trim()
+      ? [raw.equipment.trim()]
+      : [];
   const exerciseType = typeof raw.exerciseType === "string" ? raw.exerciseType : null;
+  const targetMuscles = normalizeStringArray(raw.targetMuscles);
+  const normalizedTargetMuscles = targetMuscles.length
+    ? targetMuscles
+    : typeof raw.target === "string" && raw.target.trim()
+      ? [raw.target.trim()]
+      : [];
+  const providerItemId =
+    typeof raw.exerciseId === "string"
+      ? raw.exerciseId
+      : typeof raw.id === "string"
+        ? raw.id
+        : null;
+  const imageUrl =
+    typeof raw.imageUrl === "string"
+      ? raw.imageUrl
+      : typeof raw.gifUrl === "string"
+        ? raw.gifUrl
+        : null;
 
   return {
     slug: buildExerciseSlug({
       name,
-      bodyParts,
-      equipments,
+      bodyParts: normalizedBodyParts,
+      equipments: normalizedEquipments,
       exerciseType,
     }),
     name,
     display_name: name,
     display_name_es: null,
     provider: "exercisedb",
-    provider_item_id: typeof raw.exerciseId === "string" ? raw.exerciseId : null,
-    body_parts: bodyParts,
-    target_muscles: normalizeStringArray(raw.targetMuscles),
+    provider_item_id: providerItemId,
+    body_parts: normalizedBodyParts,
+    target_muscles: normalizedTargetMuscles,
     secondary_muscles: normalizeStringArray(raw.secondaryMuscles),
-    equipments,
+    equipments: normalizedEquipments,
     exercise_type: exerciseType,
     instructions: normalizeStringArray(raw.instructions),
     tips: normalizeStringArray(raw.exerciseTips),
     keywords: normalizeStringArray(raw.keywords),
     variations: normalizeStringArray(raw.variations),
-    image_url: typeof raw.imageUrl === "string" ? raw.imageUrl : null,
+    image_url: imageUrl,
     video_url: typeof raw.videoUrl === "string" ? raw.videoUrl : null,
     description: typeof raw.overview === "string" ? raw.overview : null,
-    animation_url: typeof raw.imageUrl === "string" ? raw.imageUrl : null,
-    equipment_needed: equipments[0] || null,
-    target_muscle: normalizeStringArray(raw.targetMuscles)[0] || null,
+    animation_url: imageUrl,
+    equipment_needed: normalizedEquipments[0] || null,
+    target_muscle: normalizedTargetMuscles[0] || null,
     raw_payload: raw,
     last_synced_at: new Date().toISOString(),
     is_active: true,

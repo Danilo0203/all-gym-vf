@@ -3,7 +3,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { SubscriptionStatusBadge } from "@/components/subscription-status-badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -28,7 +27,7 @@ import {
   IconPhone,
 } from "@tabler/icons-react";
 import Link from "next/link";
-import { formatDistanceToNow } from "date-fns";
+import { differenceInDays, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import type { CustomerRoutineWorkspace } from "@/lib/training/types";
 import type {
@@ -41,12 +40,20 @@ import type {
 } from "../../actions/customer-history-actions";
 
 // Import sub-components
-import { AccessHistoryTab, PaymentHistoryTab, SubscriptionHistoryTab, BodyAssessmentTab, RoutineWorkspaceTab } from "./tabs";
+import {
+  AccessHistoryTab,
+  PaymentHistoryTab,
+  SubscriptionHistoryTab,
+  BodyAssessmentTab,
+  RoutineWorkspaceTab,
+} from "./tabs";
 import { cn } from "@/lib/utils";
+import { kilogramsToPounds } from "@/lib/fitness/measurements";
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AlertModal } from "@/components/modal/alert-modal";
+import { CustomerStatusActionSummary } from "@/features/customers/components/customer-status-action-summary";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,10 +68,51 @@ import {
   permanentlyDeleteCustomer,
   reactivateCustomer,
 } from "@/features/customers/actions/customer-actions";
+import { useCustomer } from "@/features/customers/hooks/use-customers";
 
 function toCustomerGender(value: string | null): "male" | "female" | "other" | null {
   if (value === "male" || value === "female" || value === "other") return value;
   return null;
+}
+
+function getSubscriptionHeaderMeta(status: string | null | undefined, endDate: string | Date | null | undefined) {
+  if (!status || status === "cancelled") {
+    return {
+      label: status === "cancelled" ? "Plan cancelado" : "Sin plan",
+      tone: "muted" as const,
+    };
+  }
+
+  if (endDate) {
+    let parsedEndDate: Date;
+
+    if (typeof endDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      const [year, month, day] = endDate.split("-").map(Number);
+      parsedEndDate = new Date(year, month - 1, day);
+    } else {
+      parsedEndDate = new Date(endDate);
+    }
+
+    if (!Number.isNaN(parsedEndDate.getTime())) {
+      const daysLeft = differenceInDays(parsedEndDate, new Date());
+
+      if (daysLeft < 0) {
+        return { label: "Plan vencido", tone: "danger" as const };
+      }
+
+      if (daysLeft <= 3) {
+        return { label: "Plan por vencer", tone: "warning" as const };
+      }
+
+      return { label: "Plan al dia", tone: "success" as const };
+    }
+  }
+
+  if (status === "expired") {
+    return { label: "Plan vencido", tone: "danger" as const };
+  }
+
+  return { label: "Plan al dia", tone: "success" as const };
 }
 
 interface CustomerHistoryClientProps {
@@ -96,6 +144,7 @@ export function CustomerHistoryClient({
   const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
   const isScrollingRef = useRef(false);
+  const { data: customerDetails } = useCustomer(editOpen ? profile.id : null);
 
   // ScrollSpy Implementation
   useEffect(() => {
@@ -149,9 +198,15 @@ export function CustomerHistoryClient({
     : "N/A";
   const customerEmail = profile.email?.trim() || "Sin correo";
   const customerPhone = profile.phone?.trim() || "Sin teléfono";
+  const subscriptionMeta = getSubscriptionHeaderMeta(profile.subscription_status, profile.subscription_end_date);
 
   const lastAssessment = bodyAssessments.length > 0 ? bodyAssessments[0] : null;
-  const latestSubscription = subscriptionHistory[0];
+  const currentSubscription =
+    subscriptionHistory.find((subscription) => subscription.status === "active") ?? subscriptionHistory[0];
+  const latestPayment = paymentHistory[0];
+  const currentWeightLb = kilogramsToPounds(kpis.currentWeight);
+  const initialWeightLb = kilogramsToPounds(kpis.initialWeight);
+  const weightChangeLb = kilogramsToPounds(kpis.weightChange);
   const lastAssessmentSafe = lastAssessment
     ? {
         weight_kg: lastAssessment.weight_kg ?? 0,
@@ -163,11 +218,10 @@ export function CustomerHistoryClient({
         muscle_mass: lastAssessment.muscle_mass ?? null,
         chest_cm: lastAssessment.chest_cm ?? null,
         waist_cm: lastAssessment.waist_cm ?? null,
-        notes: lastAssessment.notes ?? null,
       }
     : null;
 
-  const customerForEdit = {
+  const customerForEditFallback = {
     id: profile.id,
     is_active: profile.is_active,
     email: profile.email,
@@ -177,18 +231,23 @@ export function CustomerHistoryClient({
     gender: profile.gender,
     emergency_contact: null,
     emergency_phone: null,
-    plan_id: null,
-    subscription_start_date: latestSubscription?.start_date ?? null,
-    subscription_end_date: latestSubscription?.end_date ?? null,
-    discount_amount: latestSubscription?.discount_amount ?? 0,
-    final_price: latestSubscription ? latestSubscription.price - latestSubscription.discount_amount : 0,
-    payment_method: "cash",
+    plan_id: currentSubscription?.plan_id ?? null,
+    subscription_start_date: currentSubscription?.start_date ?? null,
+    subscription_end_date: currentSubscription?.end_date ?? null,
+    discount_amount: currentSubscription?.discount_amount ?? 0,
+    final_price: currentSubscription ? currentSubscription.price - currentSubscription.discount_amount : 0,
+    payment_method:
+      latestPayment?.payment_method === "cash" ||
+      latestPayment?.payment_method === "card" ||
+      latestPayment?.payment_method === "transfer"
+        ? latestPayment.payment_method
+        : "cash",
     weight_kg: lastAssessment?.weight_kg ?? null,
     height_cm: lastAssessment?.height_cm ?? null,
-    injuries: lastAssessment?.notes ?? null,
+    injuries: profile.injuries ?? null,
     body_type: lastAssessment?.body_type ?? null,
     diet_type: lastAssessment?.diet_type ?? null,
-    activity_level: lastAssessment?.activity_level ?? null,
+    activity_level: routineWorkspace.trainingProfile?.activity_level ?? lastAssessment?.activity_level ?? null,
     body_fat_percentage: lastAssessment?.body_fat_percentage ?? null,
     muscle_mass_kg: lastAssessment?.muscle_mass ?? null,
     chest: lastAssessment?.chest_cm ?? null,
@@ -198,14 +257,14 @@ export function CustomerHistoryClient({
     arm_left: null,
     leg_right: null,
     leg_left: null,
-    notes: lastAssessment?.notes ?? null,
+    medical_notes: profile.medical_notes ?? null,
     primary_goal: routineWorkspace.trainingProfile?.primary_goal ?? null,
     secondary_goal: routineWorkspace.trainingProfile?.secondary_goal ?? null,
     focus_areas: routineWorkspace.trainingProfile?.focus_areas ?? [],
     experience_level: routineWorkspace.trainingProfile?.experience_level ?? null,
     days_per_week: routineWorkspace.trainingProfile?.days_per_week ?? null,
     session_minutes: routineWorkspace.trainingProfile?.session_minutes ?? null,
-    training_location: routineWorkspace.trainingProfile?.training_location ?? null,
+    training_location: routineWorkspace.trainingProfile?.training_location ?? "gym",
     equipment_available: routineWorkspace.trainingProfile?.equipment_available ?? [],
     cardio_preference: routineWorkspace.trainingProfile?.cardio_preference ?? null,
     exercise_preferences: routineWorkspace.trainingProfile?.exercise_preferences ?? null,
@@ -216,6 +275,16 @@ export function CustomerHistoryClient({
     medical_clearance_notes: routineWorkspace.trainingProfile?.medical_clearance_notes ?? null,
     training_profile_status: routineWorkspace.trainingProfileStatus,
   };
+  const customerForEdit = customerDetails
+    ? {
+        ...customerForEditFallback,
+        ...customerDetails,
+        full_name: customerDetails.full_name || profile.full_name,
+        email: customerDetails.email || profile.email,
+        phone: customerDetails.phone || profile.phone,
+        is_active: customerDetails.is_active ?? profile.is_active,
+      }
+    : null;
 
   const handleToggleCustomerStatus = async () => {
     if (isDeactivating) return;
@@ -240,6 +309,8 @@ export function CustomerHistoryClient({
         }
       } else if (deviceSynced === false) {
         toast.warning("Cliente reactivado en el sistema, pero falló el envío al reloj.");
+      } else if (deviceSync?.action === "disable") {
+        toast.success("Cliente reactivado, pero se mantuvo bloqueado en el reloj porque no tiene una suscripción activa.");
       } else {
         toast.success("Cliente reactivado y habilitado en el reloj.");
       }
@@ -284,6 +355,7 @@ export function CustomerHistoryClient({
     if (element && viewport) {
       isScrollingRef.current = true;
       setActiveSection(id);
+      window.history.replaceState(null, "", `#${id}`);
 
       const viewportRect = viewport.getBoundingClientRect();
       const elementRect = element.getBoundingClientRect();
@@ -304,6 +376,39 @@ export function CustomerHistoryClient({
     }
   };
 
+  useEffect(() => {
+    const targetId = window.location.hash.replace("#", "");
+    const validSections = new Set(["overview", "routine", "subscriptions", "payments", "access", "body"]);
+
+    if (!validSections.has(targetId)) return;
+
+    const timeoutId = window.setTimeout(() => {
+      const container = document.getElementById("customer-content-scroll");
+      const viewport = container?.querySelector("[data-radix-scroll-area-viewport]");
+      const element = document.getElementById(targetId);
+
+      if (!element || !viewport) return;
+
+      isScrollingRef.current = true;
+      setActiveSection(targetId);
+
+      const viewportRect = viewport.getBoundingClientRect();
+      const elementRect = element.getBoundingClientRect();
+      const relativeTop = elementRect.top - viewportRect.top;
+
+      viewport.scrollTo({
+        top: viewport.scrollTop + relativeTop - 12,
+        behavior: "auto",
+      });
+
+      window.setTimeout(() => {
+        isScrollingRef.current = false;
+      }, 250);
+    }, 150);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
   // ScrollSpy simpler implementation could go here, but omitted for brevity/performance
 
   return (
@@ -315,51 +420,18 @@ export function CustomerHistoryClient({
         loading={isDeactivating}
         title={profile.is_active ? "¿Desactivar cliente?" : "¿Reactivar cliente?"}
         description={
-          <div className="space-y-2 mt-2">
-            <p>
-              {profile.is_active ? (
-                <>
-                  El cliente <span className="font-semibold text-foreground">{profile.full_name}</span> pasará a estado
-                  inactivo y el reloj ya no permitirá su ingreso.
-                </>
-              ) : (
-                <>
-                  El cliente <span className="font-semibold text-foreground">{profile.full_name}</span> volverá a
-                  estado activo y se habilitará nuevamente en el reloj.
-                </>
-              )}
-            </p>
-            <div className="rounded-md bg-muted p-3 text-sm">
-              <div className="grid grid-cols-3 gap-2 items-center">
-                <span className="font-medium">Estado:</span>
-                <span className="col-span-2">
-                  <Badge variant={profile.is_active ? "success" : "secondary"}>
-                    {profile.is_active ? "Activo" : "Inactivo"}
-                  </Badge>
-                </span>
-
-                <span className="font-medium">Suscripción:</span>
-                <span className="col-span-2">
-                  <SubscriptionStatusBadge status={profile.subscription_status} endDate={profile.subscription_end_date} />
-                </span>
-
-                <span className="font-medium">Teléfono:</span>
-                <span className="col-span-2 text-muted-foreground">{profile.phone || "N/A"}</span>
-
-                <span className="font-medium">Vencimiento:</span>
-                <span className="col-span-2 text-muted-foreground">
-                  {profile.subscription_end_date ? new Date(profile.subscription_end_date).toLocaleDateString("es-ES") : "N/A"}
-                </span>
-              </div>
-            </div>
-            <p className="text-sm text-muted-foreground mt-2">
-              {profile.is_active
-                ? "Podrás reactivarlo más tarde y recuperar su acceso."
-                : "Se volverá a sincronizar su acceso con el reloj."}
-            </p>
-          </div>
+          <CustomerStatusActionSummary
+            customerName={profile.full_name}
+            isActive={profile.is_active === true}
+            phone={profile.phone}
+            planName={currentSubscription?.plan_name ?? null}
+            subscriptionStatus={profile.subscription_status}
+            subscriptionEndDate={profile.subscription_end_date}
+          />
         }
         confirmText={profile.is_active ? "Desactivar" : "Reactivar"}
+        confirmVariant={profile.is_active ? "destructive" : "default"}
+        contentClassName="sm:max-w-2xl"
       />
 
       <AlertModal
@@ -391,62 +463,54 @@ export function CustomerHistoryClient({
         {/* Profile Header */}
         <div className="flex flex-col gap-4 p-4 sm:p-5 lg:p-6">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex items-start gap-4 flex-1 min-w-0">
+            <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
               <div className="relative group">
-                <Avatar className="h-16 w-16 sm:h-[72px] sm:w-[72px] border-4 border-background shadow-lg scale-100 group-hover:scale-105 transition-transform duration-300">
+                <Avatar className="h-14 w-14 sm:h-16 sm:w-16 border-4 border-background shadow-lg scale-100 group-hover:scale-105 transition-transform duration-300">
                   <AvatarImage src={profile.avatar_url || ""} alt={profile.full_name} />
-                  <AvatarFallback className="text-xl font-black bg-gradient-to-br from-primary to-primary/60 text-primary-foreground">
+                  <AvatarFallback className="text-lg font-black bg-gradient-to-br from-primary to-primary/60 text-primary-foreground">
                     {initials}
                   </AvatarFallback>
                 </Avatar>
                 {profile.is_active && (
                   <div
-                    className="absolute bottom-0.5 right-0.5 h-4 w-4 bg-green-500 border-2 border-background rounded-full shadow-lg"
+                    className="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 bg-green-500 border-2 border-background rounded-full shadow-lg"
                     title="Cliente Activo"
                   />
                 )}
               </div>
 
-              <div className="min-w-0 flex-1 space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="min-w-0 truncate text-2xl font-black tracking-tight sm:text-[2rem]">
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
+                  <h1 className="min-w-0 truncate text-xl font-black tracking-tight leading-none sm:text-2xl">
                     {profile.full_name}
                   </h1>
-                  <Badge
-                    variant={profile.is_active ? "success" : "secondary"}
-                    className="h-6 rounded-full px-3 font-bold uppercase tracking-tighter text-[10px]"
-                  >
-                    {profile.is_active ? "Activo" : "Inactivo"}
-                  </Badge>
-                  <SubscriptionStatusBadge
-                    status={profile.subscription_status}
-                    endDate={profile.subscription_end_date}
-                    className="h-6 rounded-full px-3 font-bold uppercase tracking-tighter text-[10px]"
-                  />
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                    <HeaderStatusText
+                      tone={profile.is_active ? "success" : "muted"}
+                      label={profile.is_active ? "Cliente activo" : "Cliente inactivo"}
+                    />
+                    <HeaderStatusText tone={subscriptionMeta.tone} label={subscriptionMeta.label} />
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  <HeaderMetaItem
-                    icon={<IconMail className="h-3.5 w-3.5" />}
-                    label={customerEmail}
-                    className="min-w-0 flex-[1_1_240px]"
-                  />
-                  <HeaderMetaItem
-                    icon={<IconPhone className="h-3.5 w-3.5" />}
-                    label={customerPhone}
-                    className="min-w-[180px] flex-[0_1_auto]"
-                  />
-                  <HeaderMetaItem
+                <div className="space-y-1.5 text-sm text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <HeaderInlineMeta
+                      icon={<IconMail className="h-3.5 w-3.5" />}
+                      label={customerEmail}
+                      className="min-w-0 max-w-full flex-[0_1_auto]"
+                    />
+                    <HeaderSeparator />
+                    <HeaderInlineMeta
+                      icon={<IconPhone className="h-3.5 w-3.5" />}
+                      label={customerPhone}
+                      className="min-w-[160px] flex-[0_1_auto]"
+                    />
+                  </div>
+                  <HeaderInlineMeta
                     icon={<IconCalendarStats className="h-3.5 w-3.5" />}
                     label={`Miembro ${memberSinceFormatted}`}
-                    className="min-w-[220px] flex-[0_1_auto]"
                   />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.24em] text-muted-foreground/70">
-                  <span>Perfil del cliente</span>
-                  <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                  <span>Resumen rápido</span>
                 </div>
               </div>
             </div>
@@ -587,17 +651,21 @@ export function CustomerHistoryClient({
               />
               <KPICard
                 title="Peso Actual"
-                value={kpis.currentWeight ? `${kpis.currentWeight} kg` : "N/D"}
+                value={currentWeightLb !== null && currentWeightLb !== undefined ? `${currentWeightLb} lb` : "N/D"}
                 icon={<IconScale className="h-6 w-6" />}
-                description={kpis.initialWeight ? `Inicial: ${kpis.initialWeight} kg` : "Sin registro inicial"}
+                description={
+                  initialWeightLb !== null && initialWeightLb !== undefined
+                    ? `Inicial: ${initialWeightLb} lb`
+                    : "Sin registro inicial"
+                }
                 trend="Salud"
                 variant="purple"
               />
               <KPICard
                 title="Cambio de Peso"
                 value={
-                  kpis.weightChange !== null && kpis.weightChange !== undefined
-                    ? `${kpis.weightChange > 0 ? "+" : ""}${kpis.weightChange.toFixed(1)} kg`
+                  weightChangeLb !== null && weightChangeLb !== undefined
+                    ? `${weightChangeLb > 0 ? "+" : ""}${weightChangeLb.toFixed(1)} lb`
                     : "N/A"
                 }
                 icon={
@@ -697,28 +765,33 @@ function NavTab({
   );
 }
 
-function HeaderMetaItem({
-  icon,
-  label,
-  className,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  className?: string;
-}) {
+function HeaderStatusText({ tone, label }: { tone: "success" | "warning" | "danger" | "muted"; label: string }) {
+  const tones = {
+    success: "text-emerald-400/90",
+    warning: "text-amber-400/90",
+    danger: "text-rose-400/90",
+    muted: "text-muted-foreground",
+  };
+
   return (
-    <div
-      className={cn(
-        "inline-flex h-9 items-center gap-2 rounded-full border border-border/60 bg-muted/35 px-3 text-sm text-muted-foreground",
-        className,
-      )}
-    >
-      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-background/80 text-foreground/75">
-        {icon}
-      </span>
+    <span className={cn("inline-flex items-center gap-2 whitespace-nowrap", tones[tone])}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      <span className="text-xs font-medium tracking-wide">{label}</span>
+    </span>
+  );
+}
+
+function HeaderInlineMeta({ icon, label, className }: { icon: React.ReactNode; label: string; className?: string }) {
+  return (
+    <div className={cn("inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground", className)}>
+      <span className="text-foreground/65">{icon}</span>
       <span className="min-w-0 truncate font-medium">{label}</span>
     </div>
   );
+}
+
+function HeaderSeparator() {
+  return <span className="hidden h-1 w-1 rounded-full bg-muted-foreground/30 sm:inline-block" aria-hidden="true" />;
 }
 
 interface KPICardProps {

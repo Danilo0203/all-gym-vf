@@ -6,6 +6,13 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserAccessContext } from "@/lib/auth/authorization";
 import { normalizeExerciseCatalogItem, mapProviderExerciseToCatalogPayload } from "@/lib/training/catalog";
+import {
+  buildExerciseReplacementGroups,
+  getExerciseDisplayName,
+  buildExerciseSearchVariants,
+  normalizeExerciseSearchText,
+  searchExerciseCatalogItems,
+} from "@/lib/training/exercise-recommendations";
 import { buildRoutineProposal, ROUTINE_ENGINE_VERSION } from "@/lib/training/routine-engine";
 import {
   getMissingTrainingProfileRequirements,
@@ -14,9 +21,12 @@ import {
 } from "@/lib/training/profile";
 import type {
   CustomerRoutineWorkspace,
+  ExerciseCatalogItem,
+  ExerciseReplacementGroup,
   NutritionContext,
   ProviderExerciseSummary,
   RoutineDetailRecord,
+  RoutineReplacementContext,
   RoutineRecord,
   RoutineProposal,
   TrainingProfileInput,
@@ -26,6 +36,317 @@ import type {
 type AdminSupabaseClient = any;
 
 const EXERCISE_CATALOG_FUNCTION = "exercise-catalog-provider";
+const EXERCISEDB_DIRECT_HOST = "exercisedb.p.rapidapi.com";
+const EXERCISEDB_PUBLIC_V1_BASE_URL = "https://www.exercisedb.dev";
+const PUBLIC_EXERCISE_MEDIA_CACHE = new Map<string, Promise<{ imageUrl: string | null; videoUrl: string | null }>>();
+const EXERCISE_PROVIDER_SEARCH_DEFAULT_LIMIT = 12;
+const EXERCISE_PROVIDER_SEARCH_MAX_LIMIT = 24;
+const EXERCISE_PROVIDER_SEARCH_MAX_ROUNDS = 8;
+const EXERCISE_PROVIDER_TARGET_TERMS = new Set([
+  "abductors",
+  "abs",
+  "adductors",
+  "biceps",
+  "calf",
+  "calves",
+  "core",
+  "forearms",
+  "glute",
+  "glutes",
+  "hamstrings",
+  "lats",
+  "lower back",
+  "pectorals",
+  "quads",
+  "quadriceps",
+  "shoulders",
+  "traps",
+  "triceps",
+]);
+const EXERCISE_PROVIDER_BODY_PART_TERMS = new Set([
+  "back",
+  "cardio",
+  "chest",
+  "lower arms",
+  "lower legs",
+  "neck",
+  "shoulders",
+  "upper arms",
+  "upper legs",
+  "waist",
+]);
+const EXERCISE_PROVIDER_EQUIPMENT_TERMS = new Set([
+  "assisted",
+  "band",
+  "barbell",
+  "body weight",
+  "bosu ball",
+  "cable",
+  "dumbbell",
+  "elliptical machine",
+  "ez barbell",
+  "hammer",
+  "kettlebell",
+  "leverage machine",
+  "medicine ball",
+  "olympic barbell",
+  "resistance band",
+  "roller",
+  "rope",
+  "skierg machine",
+  "sled machine",
+  "smith machine",
+  "stability ball",
+  "stationary bike",
+  "stepmill machine",
+  "tire",
+  "trap bar",
+  "upper body ergometer",
+  "weighted",
+  "wheel roller",
+]);
+
+function isBrokenExerciseMediaUrl(url: string | null | undefined) {
+  if (!url) return false;
+  const normalizedUrl = url.trim().toLowerCase();
+  return normalizedUrl === "" || normalizedUrl === "null" || normalizedUrl === "undefined";
+}
+
+function normalizeDirectProviderSummary(item: Record<string, unknown>) {
+  return {
+    exerciseId:
+      typeof item.exerciseId === "string"
+        ? item.exerciseId
+        : typeof item.id === "string"
+          ? item.id
+          : "",
+    name: typeof item.name === "string" ? item.name : "Exercise",
+    imageUrl:
+      typeof item.imageUrl === "string"
+        ? item.imageUrl
+        : typeof item.gifUrl === "string"
+          ? item.gifUrl
+          : null,
+  };
+}
+
+function normalizeDirectProviderDetail(item: Record<string, unknown>) {
+  const exerciseId =
+    typeof item.exerciseId === "string"
+      ? item.exerciseId
+      : typeof item.id === "string"
+        ? item.id
+        : "";
+  const bodyPart = typeof item.bodyPart === "string" ? item.bodyPart : null;
+  const equipment = typeof item.equipment === "string" ? item.equipment : null;
+  const target = typeof item.target === "string" ? item.target : null;
+  const imageUrl =
+    typeof item.imageUrl === "string"
+      ? item.imageUrl
+      : typeof item.gifUrl === "string"
+        ? item.gifUrl
+        : null;
+
+  return {
+    exerciseId,
+    name: typeof item.name === "string" ? item.name : "Exercise",
+    imageUrl,
+    bodyParts: bodyPart ? [bodyPart] : [],
+    equipments: equipment ? [equipment] : [],
+    targetMuscles: target ? [target] : [],
+    secondaryMuscles: Array.isArray(item.secondaryMuscles) ? item.secondaryMuscles : [],
+    instructions: Array.isArray(item.instructions) ? item.instructions : [],
+    rawPayload: item,
+  };
+}
+
+function resolveDirectProviderExerciseId(body: Record<string, unknown>) {
+  if (typeof body.exerciseId === "string" && body.exerciseId.trim()) {
+    return body.exerciseId.trim();
+  }
+
+  const exercise = body.exercise;
+  if (!exercise || typeof exercise !== "object") return null;
+  const normalizedExercise = exercise as Record<string, unknown>;
+
+  if (typeof normalizedExercise.exerciseId === "string" && normalizedExercise.exerciseId.trim()) {
+    return normalizedExercise.exerciseId.trim();
+  }
+
+  if (typeof normalizedExercise.id === "string" && normalizedExercise.id.trim()) {
+    return normalizedExercise.id.trim();
+  }
+
+  if (typeof normalizedExercise.provider_item_id === "string" && normalizedExercise.provider_item_id.trim()) {
+    return normalizedExercise.provider_item_id.trim();
+  }
+
+  return null;
+}
+
+async function fetchExerciseProviderDirect(path: string, searchParams?: Record<string, string | undefined>) {
+  const rapidApiKey = process.env.EXERCISEDB_RAPIDAPI_KEY?.trim();
+  if (!rapidApiKey) {
+    throw new Error("Falta EXERCISEDB_RAPIDAPI_KEY en el entorno del servidor.");
+  }
+
+  const url = new URL(path, `https://${EXERCISEDB_DIRECT_HOST}`);
+  for (const [key, value] of Object.entries(searchParams || {})) {
+    if (value && value.trim()) {
+      url.searchParams.set(key, value.trim());
+    }
+  }
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      "X-RapidAPI-Key": rapidApiKey,
+      "X-RapidAPI-Host": EXERCISEDB_DIRECT_HOST,
+    },
+    cache: "no-store",
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const providerMessage =
+      payload?.error?.message || payload?.message || payload?.error || `ExerciseDB request failed with ${response.status}`;
+    throw new Error(providerMessage);
+  }
+
+  return payload;
+}
+
+async function searchProviderDirectByPath(
+  path: string,
+  merged: Map<string, ReturnType<typeof normalizeDirectProviderSummary>>,
+  searchParams?: Record<string, string | undefined>,
+) {
+  try {
+    const payload = await fetchExerciseProviderDirect(path, searchParams);
+
+    let added = 0;
+    for (const item of Array.isArray(payload) ? payload : []) {
+      const normalized = normalizeDirectProviderSummary((item || {}) as Record<string, unknown>);
+      if (normalized.exerciseId && !merged.has(normalized.exerciseId)) {
+        merged.set(normalized.exerciseId, normalized);
+        added += 1;
+      }
+    }
+
+    return added;
+  } catch {
+    // Ignore endpoint misses so broader search variants can continue.
+    return 0;
+  }
+}
+
+function clampProviderSearchLimit(value: unknown) {
+  const numericLimit = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numericLimit)) return EXERCISE_PROVIDER_SEARCH_DEFAULT_LIMIT;
+  return Math.min(Math.max(Math.trunc(numericLimit), 1), EXERCISE_PROVIDER_SEARCH_MAX_LIMIT);
+}
+
+function clampProviderSearchOffset(value: unknown) {
+  const numericOffset = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numericOffset)) return 0;
+  return Math.max(0, Math.trunc(numericOffset));
+}
+
+function buildProviderSearchPaths(query: string, rawVariants?: unknown) {
+  const variantsFromBody = Array.isArray(rawVariants)
+    ? rawVariants.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : [];
+  const variants = uniqueStrings([query, ...variantsFromBody, ...buildExerciseSearchVariants(query)]).slice(0, 8);
+  const paths: string[] = [];
+
+  const addPath = (path: string) => {
+    if (!paths.includes(path)) {
+      paths.push(path);
+    }
+  };
+
+  for (const variant of variants) {
+    addPath(`/exercises/name/${encodeURIComponent(variant)}`);
+  }
+
+  for (const variant of variants) {
+    if (EXERCISE_PROVIDER_TARGET_TERMS.has(variant)) {
+      addPath(`/exercises/target/${encodeURIComponent(variant)}`);
+    }
+
+    if (EXERCISE_PROVIDER_BODY_PART_TERMS.has(variant)) {
+      addPath(`/exercises/bodyPart/${encodeURIComponent(variant)}`);
+    }
+
+    if (EXERCISE_PROVIDER_EQUIPMENT_TERMS.has(variant)) {
+      addPath(`/exercises/equipment/${encodeURIComponent(variant)}`);
+    }
+  }
+
+  return paths;
+}
+
+async function searchExerciseProviderDirectPage(params: {
+  query: string;
+  limit?: unknown;
+  offset?: unknown;
+  searchVariants?: unknown;
+}) {
+  const query = params.query.trim();
+  const limit = clampProviderSearchLimit(params.limit);
+  const offset = clampProviderSearchOffset(params.offset);
+
+  if (!query) {
+    return {
+      success: true as const,
+      data: [] as ProviderExerciseSummary[],
+      offset,
+      limit,
+      hasMore: false,
+      nextOffset: null as number | null,
+    };
+  }
+
+  const merged = new Map<string, ReturnType<typeof normalizeDirectProviderSummary>>();
+  const searchPaths = buildProviderSearchPaths(query, params.searchVariants);
+  const requiredCount = offset + limit + 1;
+  const chunkSize = Math.max(limit, EXERCISE_PROVIDER_SEARCH_DEFAULT_LIMIT);
+  let exhausted = false;
+
+  for (let round = 0; round < EXERCISE_PROVIDER_SEARCH_MAX_ROUNDS && merged.size < requiredCount; round += 1) {
+    const roundOffset = round * chunkSize;
+    let addedThisRound = 0;
+
+    for (const path of searchPaths) {
+      addedThisRound += await searchProviderDirectByPath(path, merged, {
+        limit: String(chunkSize),
+        offset: String(roundOffset),
+      });
+
+      if (merged.size >= requiredCount) {
+        break;
+      }
+    }
+
+    if (addedThisRound === 0) {
+      exhausted = true;
+      break;
+    }
+  }
+
+  const items = Array.from(merged.values());
+  const data = items.slice(offset, offset + limit) as ProviderExerciseSummary[];
+  const hasMore = items.length > offset + limit || (!exhausted && data.length === limit);
+
+  return {
+    success: true as const,
+    data,
+    offset,
+    limit,
+    hasMore,
+    nextOffset: hasMore ? offset + limit : null,
+  };
+}
 
 function mapTrainingProfileRow(row: Record<string, unknown> | null): TrainingProfileRecord | null {
   if (!row || typeof row.id !== "string" || typeof row.user_id !== "string") return null;
@@ -93,6 +414,16 @@ function mapRoutineRow(row: Record<string, unknown>): RoutineRecord {
 }
 
 function mapRoutineDetailRow(row: Record<string, unknown>): RoutineDetailRecord {
+  const exercise = row.exercise && typeof row.exercise === "object" ? (row.exercise as Record<string, unknown>) : null;
+  const linkedExerciseName =
+    typeof exercise?.display_name_es === "string"
+      ? exercise.display_name_es
+      : typeof exercise?.display_name === "string"
+        ? exercise.display_name
+        : typeof exercise?.name === "string"
+          ? exercise.name
+          : null;
+
   return {
     id: Number(row.id),
     routine_id: String(row.routine_id),
@@ -106,7 +437,10 @@ function mapRoutineDetailRow(row: Record<string, unknown>): RoutineDetailRecord 
     duration_minutes: typeof row.duration_minutes === "number" ? row.duration_minutes : null,
     target_rir: typeof row.target_rir === "number" ? row.target_rir : null,
     notes: typeof row.notes === "string" ? row.notes : null,
-    exercise_name_snapshot: typeof row.exercise_name_snapshot === "string" ? row.exercise_name_snapshot : null,
+    exercise_name_snapshot:
+      linkedExerciseName || (typeof row.exercise_name_snapshot === "string" ? row.exercise_name_snapshot : null),
+    exercise_image_url: typeof exercise?.image_url === "string" ? exercise.image_url : null,
+    exercise_video_url: typeof exercise?.video_url === "string" ? exercise.video_url : null,
   };
 }
 
@@ -145,17 +479,142 @@ async function getNutritionContextForUser(adminClient: AdminSupabaseClient, user
   };
 }
 
-async function listExerciseCatalog(adminClient: AdminSupabaseClient) {
+async function listExerciseCatalog(adminClient: AdminSupabaseClient): Promise<ExerciseCatalogItem[]> {
   const { data, error } = await adminClient
     .from("exercises")
     .select(
-      "id, slug, name, display_name, display_name_es, provider, provider_item_id, body_parts, target_muscles, secondary_muscles, equipments, exercise_type, instructions, tips, keywords, variations, image_url, video_url, description, raw_payload, last_synced_at, is_active",
+      "id, slug, name, display_name, display_name_es, provider, provider_item_id, is_favorite, is_preview_hidden, body_parts, target_muscles, secondary_muscles, equipments, exercise_type, instructions, tips, keywords, variations, image_url, video_url, description, raw_payload, last_synced_at, is_active",
     )
     .eq("is_active", true)
     .order("display_name", { ascending: true });
 
   if (error) throw error;
   return (data || []).map((row: Record<string, unknown>) => normalizeExerciseCatalogItem(row));
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter(Boolean) as string[]));
+}
+
+async function fetchPublicExerciseMedia(query: string) {
+  const cacheKey = normalizeExerciseSearchText(query);
+  if (!cacheKey) {
+    return { imageUrl: null, videoUrl: null };
+  }
+
+  const cached = PUBLIC_EXERCISE_MEDIA_CACHE.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const request = (async () => {
+    const variants = uniqueStrings([query, ...buildExerciseSearchVariants(query)]).slice(0, 8);
+
+    for (const variant of variants) {
+      try {
+        const url = new URL("/api/v1/exercises/search", EXERCISEDB_PUBLIC_V1_BASE_URL);
+        url.searchParams.set("q", variant);
+        url.searchParams.set("limit", "5");
+        url.searchParams.set("threshold", "0.25");
+
+        const response = await fetch(url.toString(), {
+          cache: "force-cache",
+          next: { revalidate: 60 * 60 * 24 },
+        });
+
+        if (!response.ok) {
+          continue;
+        }
+
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              data?: Array<{
+                name?: string;
+                gifUrl?: string;
+              }>;
+            }
+          | null;
+
+        const results = Array.isArray(payload?.data) ? payload.data : [];
+        const match = results.find((item) => typeof item.gifUrl === "string" && item.gifUrl.trim());
+
+        if (match?.gifUrl) {
+          return {
+            imageUrl: match.gifUrl,
+            videoUrl: null,
+          };
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    return {
+      imageUrl: null,
+      videoUrl: null,
+    };
+  })();
+
+  PUBLIC_EXERCISE_MEDIA_CACHE.set(cacheKey, request);
+  return request;
+}
+
+async function hydrateRoutineDetailVisuals(details: RoutineDetailRecord[], catalog: ExerciseCatalogItem[]) {
+  const mediaCatalog = catalog.filter((exercise) => Boolean(exercise.image_url) && !isBrokenExerciseMediaUrl(exercise.image_url));
+
+  return Promise.all(
+    details.map(async (detail) => {
+      const hasUsableMedia = Boolean(detail.exercise_image_url) && !isBrokenExerciseMediaUrl(detail.exercise_image_url);
+      if (hasUsableMedia || !detail.exercise_name_snapshot) {
+        return detail;
+      }
+
+      const localMatches = searchExerciseCatalogItems(catalog, {
+        query: detail.exercise_name_snapshot,
+        limit: 3,
+      });
+
+      const localMediaMatch =
+        mediaCatalog.find((exercise) => localMatches.some((candidate) => candidate.id === exercise.id)) || null;
+
+      if (localMediaMatch?.image_url) {
+        return {
+          ...detail,
+          exercise_image_url: localMediaMatch.image_url,
+          exercise_video_url: detail.exercise_video_url || localMediaMatch.video_url,
+        };
+      }
+
+      const candidateQueries = uniqueStrings([
+        ...localMatches.map((exercise) => getExerciseDisplayName(exercise)),
+        detail.exercise_name_snapshot,
+        ...buildExerciseSearchVariants(detail.exercise_name_snapshot),
+      ]);
+      const fallbackQuery = candidateQueries[0];
+      if (!fallbackQuery) {
+        return {
+          ...detail,
+          exercise_image_url: null,
+          exercise_video_url: null,
+        };
+      }
+
+      const publicMedia = await fetchPublicExerciseMedia(fallbackQuery);
+      if (!publicMedia.imageUrl) {
+        return {
+          ...detail,
+          exercise_image_url: null,
+          exercise_video_url: null,
+        };
+      }
+
+      return {
+        ...detail,
+        exercise_image_url: publicMedia.imageUrl,
+        exercise_video_url: publicMedia.videoUrl,
+      };
+    }),
+  );
 }
 
 async function archiveDraftsAndPending(adminClient: AdminSupabaseClient, userId: string) {
@@ -443,38 +902,41 @@ async function callExerciseCatalogFunction(body: Record<string, unknown>) {
     throw new Error("No autorizado");
   }
 
+  if (process.env.EXERCISEDB_RAPIDAPI_KEY?.trim()) {
+    const operation = typeof body.operation === "string" ? body.operation : "";
+
+    if (operation === "search") {
+      const query = typeof body.query === "string" ? body.query.trim() : "";
+      return searchExerciseProviderDirectPage({
+        query,
+        limit: body.limit,
+        offset: body.offset,
+        searchVariants: body.searchVariants,
+      });
+    }
+
+    const exerciseId = resolveDirectProviderExerciseId(body);
+    if (!exerciseId) {
+      throw new Error("exerciseId es obligatorio para importar o refrescar.");
+    }
+
+    const payload = await fetchExerciseProviderDirect(`/exercises/exercise/${exerciseId}`);
+    return {
+      success: true,
+      data: normalizeDirectProviderDetail((payload || {}) as Record<string, unknown>),
+    };
+  }
+
   const supabase = await createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session?.access_token) {
-    throw new Error("Sesión inválida para acceder al proveedor de ejercicios.");
-  }
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
-
-  if (!supabaseUrl || !publishableKey) {
-    throw new Error("Falta configuración de Supabase.");
-  }
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/${EXERCISE_CATALOG_FUNCTION}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: publishableKey,
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify(body),
+  const { data, error } = await supabase.functions.invoke(EXERCISE_CATALOG_FUNCTION, {
+    body,
   });
 
-  const result = await response.json();
-  if (!response.ok) {
-    throw new Error(result?.error || "No se pudo conectar con ExerciseDB.");
+  if (error) {
+    throw new Error(error.message || "No se pudo conectar con ExerciseDB.");
   }
 
-  return result;
+  return data;
 }
 
 export async function upsertTrainingProfile(userId: string, input: TrainingProfileInput) {
@@ -551,6 +1013,8 @@ export async function approveRoutineDraft(routineId: string) {
 
   revalidatePath(`/panel/clientes/${routine.user_id}`);
   revalidatePath(`/panel/clientes/${routine.user_id}/history`);
+  revalidatePath(`/panel/clientes/${routine.user_id}/rutina/borrador`);
+  revalidatePath(`/panel/clientes/${routine.user_id}/rutina/activa`);
 
   return { success: true };
 }
@@ -577,6 +1041,7 @@ export async function archiveRoutine(routineId: string) {
 
   revalidatePath(`/panel/clientes/${routine.user_id}`);
   revalidatePath(`/panel/clientes/${routine.user_id}/history`);
+  revalidatePath(`/panel/clientes/${routine.user_id}/rutina/activa`);
 
   return { success: true };
 }
@@ -664,6 +1129,58 @@ export async function replaceRoutineExercise(detailId: number, exerciseId: numbe
   return { success: true };
 }
 
+export async function getRoutineExerciseReplacementOptions(detailId: number): Promise<{
+  success: true;
+  data: {
+    context: RoutineReplacementContext;
+    groups: ExerciseReplacementGroup[];
+  };
+}> {
+  const { adminClient } = await requireAdminAccess();
+
+  const { data: detailRow, error: detailError } = await adminClient
+    .from("routine_details")
+    .select("*, routines!inner(id, user_id, status)")
+    .eq("id", detailId)
+    .single();
+
+  if (detailError || !detailRow) {
+    throw new Error("No se encontró el detalle de rutina.");
+  }
+
+  const routine = Array.isArray(detailRow.routines) ? detailRow.routines[0] : detailRow.routines;
+  if (!routine?.user_id || routine.status !== "draft") {
+    throw new Error("Solo puedes revisar sugerencias en una rutina en borrador.");
+  }
+
+  const detail = mapRoutineDetailRow(detailRow as Record<string, unknown>);
+  const [trainingProfile, catalog] = await Promise.all([
+    fetchTrainingProfileInternal(adminClient, routine.user_id),
+    listExerciseCatalog(adminClient),
+  ]);
+
+  const currentExercise =
+    detail.exercise_id && Number.isFinite(detail.exercise_id)
+      ? catalog.find((exercise) => exercise.id === detail.exercise_id) || null
+      : null;
+
+  const replacement = buildExerciseReplacementGroups({
+    catalog,
+    detail,
+    currentExercise,
+    trainingProfile,
+    limitPerGroup: 6,
+  });
+
+  return {
+    success: true,
+    data: {
+      context: replacement.context,
+      groups: replacement.groups,
+    },
+  };
+}
+
 export async function searchExerciseCatalog(filters: {
   query?: string;
   bodyPart?: string;
@@ -672,58 +1189,45 @@ export async function searchExerciseCatalog(filters: {
   limit?: number;
 }) {
   const { adminClient } = await requireAdminAccess();
-  const limit = Math.min(Math.max(filters.limit ?? 20, 1), 50);
-
-  let query = adminClient
-    .from("exercises")
-    .select(
-      "id, slug, name, display_name, display_name_es, provider, provider_item_id, body_parts, target_muscles, secondary_muscles, equipments, exercise_type, instructions, tips, keywords, variations, image_url, video_url, description, raw_payload, last_synced_at, is_active",
-    )
-    .eq("is_active", true)
-    .limit(limit)
-    .order("display_name", { ascending: true });
-
-  if (filters.query?.trim()) {
-    const escapedQuery = filters.query.trim().replaceAll(",", " ");
-    query = query.or(
-      `display_name.ilike.%${escapedQuery}%,display_name_es.ilike.%${escapedQuery}%,name.ilike.%${escapedQuery}%`,
-    );
-  }
-
-  if (filters.bodyPart) {
-    query = query.contains("body_parts", [filters.bodyPart]);
-  }
-
-  if (filters.targetMuscle) {
-    query = query.contains("target_muscles", [filters.targetMuscle]);
-  }
-
-  if (filters.equipment) {
-    query = query.contains("equipments", [filters.equipment]);
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
+  const catalog = await listExerciseCatalog(adminClient);
 
   return {
     success: true,
-    data: (data || []).map((row) => normalizeExerciseCatalogItem(row as Record<string, unknown>)),
+    data: searchExerciseCatalogItems(catalog, filters),
   };
 }
 
-export async function searchExerciseProvider(query: string) {
+export async function searchExerciseProvider(
+  input: string | { query: string; limit?: number; offset?: number },
+) {
+  const query = typeof input === "string" ? input : input.query;
+  const limit = typeof input === "string" ? undefined : input.limit;
+  const offset = typeof input === "string" ? undefined : input.offset;
   const result = await callExerciseCatalogFunction({
     operation: "search",
     query,
+    limit,
+    offset,
+    searchVariants: buildExerciseSearchVariants(query),
   });
 
   return {
     success: true,
     data: (Array.isArray(result?.data) ? result.data : []).map((item: Record<string, unknown>) => ({
-      exerciseId: typeof item?.exerciseId === "string" ? item.exerciseId : "",
+      exerciseId:
+        typeof item?.exerciseId === "string" ? item.exerciseId : typeof item?.id === "string" ? item.id : "",
       name: typeof item?.name === "string" ? item.name : "Exercise",
-      imageUrl: typeof item?.imageUrl === "string" ? item.imageUrl : null,
+      imageUrl:
+        typeof item?.imageUrl === "string"
+          ? item.imageUrl
+        : typeof item?.gifUrl === "string"
+            ? item.gifUrl
+            : null,
     })) as ProviderExerciseSummary[],
+    hasMore: result?.hasMore === true,
+    nextOffset: typeof result?.nextOffset === "number" ? result.nextOffset : null,
+    limit: typeof result?.limit === "number" ? result.limit : clampProviderSearchLimit(limit),
+    offset: typeof result?.offset === "number" ? result.offset : clampProviderSearchOffset(offset),
   };
 }
 
@@ -740,7 +1244,7 @@ export async function importExerciseFromProvider(rawExercise: Record<string, unk
     .from("exercises")
     .upsert(payload, { onConflict: "slug" })
     .select(
-      "id, slug, name, display_name, display_name_es, provider, provider_item_id, body_parts, target_muscles, secondary_muscles, equipments, exercise_type, instructions, tips, keywords, variations, image_url, video_url, description, raw_payload, last_synced_at, is_active",
+      "id, slug, name, display_name, display_name_es, provider, provider_item_id, is_favorite, is_preview_hidden, body_parts, target_muscles, secondary_muscles, equipments, exercise_type, instructions, tips, keywords, variations, image_url, video_url, description, raw_payload, last_synced_at, is_active",
     )
     .single();
 
@@ -869,7 +1373,7 @@ export async function getCustomerRoutineWorkspace(customerId: string): Promise<C
   if (detailsRoutineIds.length > 0) {
     const { data: details, error: detailsError } = await adminClient
       .from("routine_details")
-      .select("*")
+      .select("*, exercise:exercises(id, name, display_name, display_name_es, image_url, video_url)")
       .in("routine_id", detailsRoutineIds)
       .order("day_of_week", { ascending: true })
       .order("exercise_order", { ascending: true })
@@ -877,8 +1381,19 @@ export async function getCustomerRoutineWorkspace(customerId: string): Promise<C
 
     if (detailsError) throw detailsError;
 
-    detailsByRoutineId = (details || []).reduce<Record<string, RoutineDetailRecord[]>>((accumulator, row) => {
-      const mapped = mapRoutineDetailRow(row as Record<string, unknown>);
+    let mappedDetails = (details || []).map((row) => mapRoutineDetailRow(row as Record<string, unknown>));
+
+    if (
+      mappedDetails.some(
+        (detail) =>
+          (!detail.exercise_image_url || isBrokenExerciseMediaUrl(detail.exercise_image_url)) &&
+          detail.exercise_name_snapshot,
+      )
+    ) {
+      mappedDetails = await hydrateRoutineDetailVisuals(mappedDetails, await listExerciseCatalog(adminClient));
+    }
+
+    detailsByRoutineId = mappedDetails.reduce<Record<string, RoutineDetailRecord[]>>((accumulator, mapped) => {
       accumulator[mapped.routine_id] = accumulator[mapped.routine_id] || [];
       accumulator[mapped.routine_id].push(mapped);
       return accumulator;

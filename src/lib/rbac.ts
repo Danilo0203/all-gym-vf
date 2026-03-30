@@ -80,7 +80,7 @@ export function isClient(userRole: UserRole): boolean {
  */
 export function getAccessibleRoutes(userRole: UserRole): string[] {
   return Object.entries(ROUTE_PERMISSIONS)
-    .filter(([_, roles]) => roles.includes(userRole))
+    .filter(([, roles]) => roles.includes(userRole))
     .map(([route]) => route);
 }
 
@@ -154,10 +154,9 @@ export function canPerformAction(
 /**
  * Get a user-friendly error message for unauthorized access
  * @param userRole - The user's role
- * @param route - The route they tried to access
  * @returns Error message
  */
-export function getUnauthorizedMessage(userRole: UserRole, route: string): string {
+export function getUnauthorizedMessage(userRole: UserRole): string {
   return `No tienes permisos para acceder a esta página. Tu rol actual es "${userRole}". Contacta a un administrador si crees que esto es un error.`;
 }
 

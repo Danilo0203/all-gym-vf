@@ -1,11 +1,9 @@
-import { getMissingTrainingProfileRequirements, normalizeTextArray, normalizeTrainingProfileInput } from "@/lib/training/profile";
+import { getMissingTrainingProfileRequirements, normalizeTrainingProfileInput } from "@/lib/training/profile";
+import { getExerciseDisplayName, isExerciseCompatibleForProfile, scoreExerciseForIntent } from "@/lib/training/exercise-recommendations";
 import type {
   CardioPreference,
-  EquipmentOption,
   ExerciseCatalogItem,
-  FocusArea,
   PrimaryGoal,
-  RestrictedMovement,
   RoutineBlockType,
   RoutineProposal,
   RoutineProposalDay,
@@ -197,138 +195,6 @@ const DAY_TEMPLATES: Record<number, DayTemplate[]> = {
   ],
 };
 
-const RESTRICTION_MATCHERS: Record<RestrictedMovement, string[]> = {
-  deep_knee_flexion: ["squat", "press", "lunge", "split squat"],
-  overhead_pressing: ["overhead", "shoulder press", "military press"],
-  loaded_spinal_flexion: ["crunch", "sit up", "good morning"],
-  high_impact: ["jump", "plyo", "high impact"],
-  horizontal_pressing: ["push-up", "bench", "chest press", "incline"],
-  vertical_pulling: ["pull-up", "pulldown", "chin up"],
-  hip_hinge: ["deadlift", "thrust", "bridge", "hinge"],
-  unilateral_lower_body: ["lunge", "split squat", "step up"],
-};
-
-const FOCUS_AREA_MATCHERS: Record<FocusArea, string[]> = {
-  upper_body: ["chest", "shoulders", "back", "upper arms"],
-  lower_body: ["lower legs", "upper legs", "quadriceps", "hamstrings"],
-  glutes: ["glutes"],
-  core: ["core", "waist"],
-  chest: ["chest", "pectorals"],
-  back: ["back", "lats", "mid back"],
-  shoulders: ["shoulders", "delts"],
-  arms: ["upper arms", "biceps", "triceps"],
-  conditioning: ["cardio", "conditioning"],
-};
-
-const COMPLEXITY_KEYWORDS = ["barbell", "pull-up", "romanian deadlift", "jump rope"];
-
-function normalizeSet(values?: string[] | null) {
-  return new Set((values || []).map((item) => item.toLowerCase().trim()).filter(Boolean));
-}
-
-function exerciseSearchText(exercise: ExerciseCatalogItem) {
-  return [
-    exercise.name,
-    exercise.display_name,
-    exercise.display_name_es,
-    ...(exercise.keywords || []),
-    ...(exercise.target_muscles || []),
-    ...(exercise.body_parts || []),
-    ...(exercise.equipments || []),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-function getResolvedEquipment(
-  equipment: EquipmentOption[] | undefined,
-  trainingLocation: TrainingProfileInput["training_location"],
-): EquipmentOption[] {
-  const normalized = normalizeTextArray(equipment) as EquipmentOption[];
-  if (normalized.length > 0) return normalized;
-  if (trainingLocation === "gym") return ["full_gym"];
-  return ["body_weight"];
-}
-
-function isEquipmentCompatible(exercise: ExerciseCatalogItem, availableEquipment: EquipmentOption[], trainingLocation: TrainingProfileInput["training_location"]) {
-  const exerciseEquipment = normalizeSet(exercise.equipments);
-  if (trainingLocation === "gym" && availableEquipment.includes("full_gym")) return true;
-  if (exerciseEquipment.size === 0) return true;
-  if (exerciseEquipment.has("body weight") || exerciseEquipment.has("bodyweight")) return true;
-
-  const normalizedAvailable = new Set(
-    availableEquipment.map((item) =>
-      item === "body_weight" ? "body weight" : item === "machine" ? "machine" : item.toLowerCase().replaceAll("_", " "),
-    ),
-  );
-
-  for (const equipment of exerciseEquipment) {
-    if (normalizedAvailable.has(equipment)) return true;
-  }
-
-  return false;
-}
-
-function isExerciseCompatible(exercise: ExerciseCatalogItem, profile: ReturnType<typeof normalizeTrainingProfileInput>) {
-  if (!exercise.is_active) return false;
-  if (!isEquipmentCompatible(exercise, getResolvedEquipment(profile.equipment_available as EquipmentOption[], profile.training_location), profile.training_location)) {
-    return false;
-  }
-
-  const searchable = exerciseSearchText(exercise);
-  for (const restriction of normalizeTextArray(profile.restricted_movements) as RestrictedMovement[]) {
-    const patterns = RESTRICTION_MATCHERS[restriction] || [];
-    if (patterns.some((pattern) => searchable.includes(pattern))) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function scoreExercise(exercise: ExerciseCatalogItem, slot: ExerciseSlot, profile: ReturnType<typeof normalizeTrainingProfileInput>) {
-  let score = 0;
-  const searchText = exerciseSearchText(exercise);
-  const targetMuscles = normalizeSet(exercise.target_muscles);
-  const bodyParts = normalizeSet(exercise.body_parts);
-
-  for (const target of slot.targetMuscles || []) {
-    if (targetMuscles.has(target.toLowerCase())) score += 6;
-    if (searchText.includes(target.toLowerCase())) score += 2;
-  }
-
-  for (const bodyPart of slot.bodyParts || []) {
-    if (bodyParts.has(bodyPart.toLowerCase())) score += 5;
-    if (searchText.includes(bodyPart.toLowerCase())) score += 1;
-  }
-
-  for (const keyword of slot.keywords || []) {
-    if (searchText.includes(keyword.toLowerCase())) score += 3;
-  }
-
-  if (slot.exerciseTypes?.length && slot.exerciseTypes.includes(exercise.exercise_type || "")) {
-    score += 2;
-  }
-
-  for (const focusArea of normalizeTextArray(profile.focus_areas) as FocusArea[]) {
-    const matchers = FOCUS_AREA_MATCHERS[focusArea] || [];
-    if (matchers.some((matcher) => searchText.includes(matcher))) {
-      score += 2;
-    }
-  }
-
-  if (profile.experience_level === "beginner" && COMPLEXITY_KEYWORDS.some((keyword) => searchText.includes(keyword))) {
-    score -= 4;
-  }
-
-  if (exercise.provider === "starter_pack") {
-    score += 1;
-  }
-
-  return score;
-}
-
 function getCardioMinutes(goal: PrimaryGoal, preference: CardioPreference, sessionMinutes: number) {
   if (preference === "none") return 0;
 
@@ -427,13 +293,13 @@ function selectExerciseForSlot(
   usedExerciseIds: Set<number>,
 ) {
   const candidates = exercises
-    .filter((exercise) => isExerciseCompatible(exercise, profile))
+    .filter((exercise) => isExerciseCompatibleForProfile(exercise, profile))
     .filter((exercise) => !usedExerciseIds.has(exercise.id))
-    .map((exercise) => ({ exercise, score: scoreExercise(exercise, slot, profile) }))
+    .map((exercise) => ({ exercise, score: scoreExerciseForIntent(exercise, slot, profile) }))
     .filter(({ score }) => score > 0)
     .sort((left, right) => {
       if (right.score !== left.score) return right.score - left.score;
-      return (left.exercise.display_name || left.exercise.name).localeCompare(right.exercise.display_name || right.exercise.name);
+      return getExerciseDisplayName(left.exercise).localeCompare(getExerciseDisplayName(right.exercise), "es");
     });
 
   return candidates[0]?.exercise ?? null;
@@ -473,11 +339,11 @@ function buildDay(
 
     usedExerciseIds.add(selectedExercise.id);
     const prescription = getPrescription(goal, slot.blockType);
-    proposalExercises.push({
-      exerciseId: selectedExercise.id,
-      exerciseName: selectedExercise.display_name_es || selectedExercise.display_name || selectedExercise.name,
-      exerciseOrder: order,
-      blockType: slot.blockType,
+      proposalExercises.push({
+        exerciseId: selectedExercise.id,
+        exerciseName: getExerciseDisplayName(selectedExercise),
+        exerciseOrder: order,
+        blockType: slot.blockType,
       sets: prescription.sets,
       reps: prescription.reps,
       restSeconds: prescription.restSeconds,

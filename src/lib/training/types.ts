@@ -87,6 +87,8 @@ export interface ExerciseCatalogItem {
   display_name_es: string | null;
   provider: string | null;
   provider_item_id: string | null;
+  is_favorite: boolean;
+  is_preview_hidden: boolean;
   body_parts: string[];
   target_muscles: string[];
   secondary_muscles: string[];
@@ -108,6 +110,24 @@ export interface ProviderExerciseSummary {
   exerciseId: string;
   name: string;
   imageUrl: string | null;
+}
+
+export interface ExerciseReplacementOption {
+  id: number;
+  name: string;
+  imageUrl: string | null;
+  bodyParts: string[];
+  targetMuscles: string[];
+  equipments: string[];
+  reason: string;
+  score: number;
+}
+
+export interface ExerciseReplacementGroup {
+  key: string;
+  title: string;
+  description?: string;
+  options: ExerciseReplacementOption[];
 }
 
 export interface RoutineProposalExercise {
@@ -159,6 +179,21 @@ export interface RoutineDetailRecord {
   target_rir: number | null;
   notes: string | null;
   exercise_name_snapshot: string | null;
+  exercise_image_url: string | null;
+  exercise_video_url: string | null;
+}
+
+export interface RoutineReplacementContext {
+  detailId: number;
+  routineId: string;
+  blockType: RoutineBlockType;
+  dayOfWeek: number;
+  currentExerciseId: number | null;
+  currentExerciseName: string;
+  targetMuscles: string[];
+  bodyParts: string[];
+  equipments: string[];
+  keywords: string[];
 }
 
 export interface RoutineRecord {

@@ -48,7 +48,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
           toast.error("Acceso denegado. No tienes permisos de administrador.");
         }
       }
-    } catch (error) {
+    } catch {
       toast.error("Error al iniciar sesión");
     } finally {
       setIsLoading(false);
@@ -74,7 +74,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
         toast.error("Error con Google: " + error.message);
         setIsLoading(false);
       }
-    } catch (error) {
+    } catch {
       toast.error("Error al iniciar sesión con Google");
       setIsLoading(false);
     }

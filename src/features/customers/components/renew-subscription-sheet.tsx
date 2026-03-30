@@ -102,7 +102,6 @@ interface RenewSubscriptionSheetProps {
     chest_cm?: number | null;
     waist_cm?: number | null;
     injuries?: string;
-    notes?: string | null;
   } | null;
   trigger?: React.ReactNode;
   open?: boolean;
@@ -287,8 +286,8 @@ export function RenewSubscriptionSheet({
                   <div className="grid grid-cols-2 gap-4">
                     <FormInputGroup
                       control={form.control}
-                      name="weight_kg"
-                      label="Peso (kg)"
+                      name="weight_lb"
+                      label="Peso (lb)"
                       type="number"
                       icon={<IconScale className="h-4 w-4" />}
                     />
@@ -371,12 +370,6 @@ export function RenewSubscriptionSheet({
                     name="injuries"
                     label="Observaciones / Lesiones"
                     placeholder="Describe cualquier lesión o condición física relevante..."
-                  />
-                  <FormTextarea
-                    control={form.control}
-                    name="notes"
-                    label="Notas nutrición/rutina"
-                    placeholder="Notas adicionales para cálculo y rutina..."
                   />
 
                   {calculationPreview && (

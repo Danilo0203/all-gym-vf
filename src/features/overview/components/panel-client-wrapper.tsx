@@ -1,7 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { DashboardPeriodSelector } from './period-selector';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -67,11 +65,10 @@ function TableSkeleton() {
 
 interface DashboardHeaderProps {
   periodLabel: string;
-  isLoading: boolean;
   onLoadingChange: (isLoading: boolean) => void;
 }
 
-export function DashboardHeader({ periodLabel, isLoading, onLoadingChange }: DashboardHeaderProps) {
+export function DashboardHeader({ periodLabel, onLoadingChange }: DashboardHeaderProps) {
   return (
     <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
       <div className='flex flex-col gap-1'>
@@ -130,22 +127,4 @@ export function DashboardContentWrapper({ children, isLoading }: DashboardConten
   }
 
   return <>{children}</>;
-}
-
-// Custom hook to manage loading state based on URL changes
-export function useDashboardLoading() {
-  const searchParams = useSearchParams();
-  const [isLoading, setIsLoading] = useState(false);
-  const [lastParams, setLastParams] = useState<string>('');
-  
-  // Track URL changes to reset loading state
-  useEffect(() => {
-    const currentParams = searchParams.toString();
-    if (lastParams !== currentParams) {
-      setLastParams(currentParams);
-      setIsLoading(false);
-    }
-  }, [searchParams, lastParams]);
-  
-  return { isLoading, setIsLoading };
 }

@@ -11,8 +11,8 @@ import {
 import { cn } from '@/lib/utils';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, parseISO, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, Loader2 } from 'lucide-react';
-import { useState, useCallback, useTransition, useEffect } from 'react';
+import { CalendarIcon } from 'lucide-react';
+import { useState, useCallback, useTransition } from 'react';
 import { DateRange } from 'react-day-picker';
 
 type PresetKey = 'week' | 'month' | 'last_month' | 'year' | 'custom';
@@ -78,18 +78,17 @@ export function DashboardPeriodSelector({ onLoadingChange }: DashboardPeriodSele
   const customTo = searchParams.get('to');
   
   const [isCustomOpen, setIsCustomOpen] = useState(false);
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [selectionCount, setSelectionCount] = useState(0);
-
-  // Sync dateRange state with URL params when they change
-  useEffect(() => {
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     if (currentPreset === 'custom' && customFrom && customTo) {
-      setDateRange({
+      return {
         from: parseDateString(customFrom),
         to: parseDateString(customTo),
-      });
+      };
     }
-  }, [currentPreset, customFrom, customTo]);
+
+    return undefined;
+  });
+  const [selectionCount, setSelectionCount] = useState(0);
 
   const handlePresetClick = useCallback((preset: Preset) => {
     const range = preset.getRange();

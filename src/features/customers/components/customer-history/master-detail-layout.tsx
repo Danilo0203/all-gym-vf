@@ -14,7 +14,7 @@ interface MasterDetailLayoutProps {
 }
 
 export function MasterDetailLayout({ children, customers }: MasterDetailLayoutProps) {
-  const { setOpen, open: sidebarOpen, isMobile } = useSidebar();
+  const { setOpen, isMobile } = useSidebar();
   const [isListCollapsed, setIsListCollapsed] = useState(false);
   const hasCollapsedOnMount = useRef(false);
 

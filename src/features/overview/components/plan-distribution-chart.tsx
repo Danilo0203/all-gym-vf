@@ -2,11 +2,15 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Cell, Pie, PieChart, ResponsiveContainer, Legend, Tooltip } from "recharts";
+import type { PieLabelRenderProps, TooltipContentProps } from "recharts";
 import type { PlanDistribution } from "../actions/panel-actions";
 
 interface PlanDistributionChartProps {
   data: PlanDistribution[];
 }
+
+type ChartValue = number | string | ReadonlyArray<number | string>;
+type ChartName = number | string;
 
 export function PlanDistributionChart({ data }: PlanDistributionChartProps) {
   if (data.length === 0) {
@@ -32,7 +36,7 @@ export function PlanDistributionChart({ data }: PlanDistributionChartProps) {
         <ResponsiveContainer width="100%" height={220}>
           <PieChart>
             <Pie
-              data={data as any}
+              data={data}
               cx="50%"
               cy="50%"
               innerRadius={50}
@@ -41,23 +45,24 @@ export function PlanDistributionChart({ data }: PlanDistributionChartProps) {
               paddingAngle={3}
               dataKey="count"
               nameKey="name"
-              label={(props: any) => {
+              label={(props: PieLabelRenderProps) => {
                 const { cx, cy, midAngle, outerRadius, payload } = props;
+                const item = payload as PlanDistribution;
                 const RADIAN = Math.PI / 180;
-                const radius = outerRadius + 25;
-                const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                const radius = (outerRadius ?? 0) + 25;
+                const x = (cx ?? 0) + radius * Math.cos(-((midAngle ?? 0) * RADIAN));
+                const y = (cy ?? 0) + radius * Math.sin(-((midAngle ?? 0) * RADIAN));
 
                 return (
                   <text
                     x={x}
                     y={y}
                     fill="var(--foreground)"
-                    textAnchor={x > cx ? "start" : "end"}
+                    textAnchor={x > (cx ?? 0) ? "start" : "end"}
                     dominantBaseline="central"
                     className="text-[10px] font-bold tracking-tighter"
                   >
-                    {`${payload.percentage}%`}
+                    {`${item.percentage}%`}
                   </text>
                 );
               }}
@@ -70,9 +75,9 @@ export function PlanDistributionChart({ data }: PlanDistributionChartProps) {
               ))}
             </Pie>
             <Tooltip
-              content={({ active, payload }) => {
+              content={({ active, payload }: TooltipContentProps<ChartValue, ChartName>) => {
                 if (active && payload && payload.length) {
-                  const item = payload[0].payload;
+                  const item = payload[0].payload as PlanDistribution;
                   return (
                     <div className="rounded-xl border border-border bg-card/95 backdrop-blur-md p-3 shadow-2xl">
                       <p className="font-black mb-1.5 text-xs tracking-wider uppercase opacity-70">{item.name}</p>

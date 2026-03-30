@@ -1,7 +1,6 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -19,6 +18,7 @@ import {
 import type { BodyAssessmentEntry } from "../../../actions/customer-history-actions";
 import { WeightChart } from "./weight-chart";
 import { cn } from "@/lib/utils";
+import { kilogramsToPounds } from "@/lib/fitness/measurements";
 
 interface BodyAssessmentTabProps {
   bodyAssessments: BodyAssessmentEntry[];
@@ -40,9 +40,12 @@ export function BodyAssessmentTab({ bodyAssessments }: BodyAssessmentTabProps) {
   // Calcular cambios respecto a la medición anterior
   const assessmentsWithChange = bodyAssessments.map((assessment, idx) => {
     const prev = bodyAssessments[idx + 1]; // anterior en orden cronológico inverso
+    const currentWeightLb = kilogramsToPounds(assessment.weight_kg);
+    const previousWeightLb = kilogramsToPounds(prev?.weight_kg ?? null);
     return {
       ...assessment,
-      weightChange: prev?.weight_kg && assessment.weight_kg ? assessment.weight_kg - prev.weight_kg : null,
+      weight_lb: currentWeightLb,
+      weightChange: previousWeightLb !== null && currentWeightLb !== null ? currentWeightLb - previousWeightLb : null,
     };
   });
 
@@ -71,8 +74,8 @@ export function BodyAssessmentTab({ bodyAssessments }: BodyAssessmentTabProps) {
                   <div className="flex flex-col">
                     <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Peso</span>
                     <span className="text-3xl font-bold tracking-tight">
-                      {bodyAssessments[0].weight_kg}{" "}
-                      <span className="text-sm font-normal text-muted-foreground">kg</span>
+                      {kilogramsToPounds(bodyAssessments[0].weight_kg) ?? "-"}{" "}
+                      <span className="text-sm font-normal text-muted-foreground">lb</span>
                     </span>
                   </div>
                   {assessmentsWithChange[0].weightChange !== null && (
@@ -93,10 +96,11 @@ export function BodyAssessmentTab({ bodyAssessments }: BodyAssessmentTabProps) {
                       ) : (
                         <IconMinus className="h-3.5 w-3.5" />
                       )}
-                      <span>
-                        {assessmentsWithChange[0].weightChange > 0 ? "+" : ""}
-                        {assessmentsWithChange[0].weightChange.toFixed(1)}
-                      </span>
+                        <span>
+                          {assessmentsWithChange[0].weightChange > 0 ? "+" : ""}
+                          {assessmentsWithChange[0].weightChange.toFixed(1)}
+                          {" "}lb
+                        </span>
                     </div>
                   )}
                 </div>
@@ -222,8 +226,8 @@ export function BodyAssessmentTab({ bodyAssessments }: BodyAssessmentTabProps) {
                       <div className="flex flex-col">
                         <span className="text-[11px] font-bold text-muted-foreground uppercase">Peso Corporal</span>
                         <div className="flex items-baseline gap-2">
-                          <span className="text-5xl font-black tracking-tight">{assessment.weight_kg ?? "-"}</span>
-                          <span className="text-lg font-bold text-muted-foreground">kg</span>
+                          <span className="text-5xl font-black tracking-tight">{assessment.weight_lb ?? "-"}</span>
+                          <span className="text-lg font-bold text-muted-foreground">lb</span>
                         </div>
                       </div>
 
@@ -259,7 +263,7 @@ export function BodyAssessmentTab({ bodyAssessments }: BodyAssessmentTabProps) {
                               <IconMinus className="h-4 w-4" />
                             )}
                             {assessment.weightChange > 0 ? "+" : ""}
-                            {assessment.weightChange.toFixed(1)}
+                            {assessment.weightChange.toFixed(1)} lb
                           </div>
                         </div>
                       )}

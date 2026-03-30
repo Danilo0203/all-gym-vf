@@ -43,8 +43,6 @@ import {
   FOCUS_AREA_OPTIONS,
   PRIMARY_GOAL_OPTIONS,
   RESTRICTED_MOVEMENT_OPTIONS,
-  SESSION_MINUTES_OPTIONS,
-  TRAINING_LOCATION_OPTIONS,
 } from "@/lib/training/options";
 import { CustomerData, useHookFormCustomerSheet } from "../hooks/use-hook-form-customers";
 export type { CustomerData } from "../hooks/use-hook-form-customers";
@@ -146,6 +144,8 @@ export function CustomerFormSheet({
       <IconPlus className="mr-2 h-4 w-4" /> Nuevo Cliente
     </Button>
   );
+  const parqRequiresAttention = form.watch("parq_requires_attention");
+  const showAttentionDetails = parqRequiresAttention === "yes";
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -537,8 +537,7 @@ export function CustomerFormSheet({
                     <div className="space-y-1">
                       <h5 className="text-sm font-semibold">Salud y restricciones</h5>
                       <p className="text-xs text-muted-foreground">
-                        Captura lo que cambia la prescripción: dolor actual, movimientos que se deben evitar y si
-                        necesita revisión previa.
+                        Captura si necesita atención especial antes de entrenar y qué movimientos conviene limitar.
                       </p>
                     </div>
                     <FormRadioGroup
@@ -551,26 +550,31 @@ export function CustomerFormSheet({
                       ]}
                       orientation="vertical"
                     />
-                    <FormTextarea
-                      control={form.control}
-                      name="injuries_or_pain"
-                      label="Dolor actual, lesión o molestia"
-                      placeholder="Ejemplo: molestia en rodilla derecha al hacer sentadillas profundas."
-                      config={{ rows: 3, maxLength: 240 }}
-                    />
+                    {showAttentionDetails ? (
+                      <>
+                        <FormTextarea
+                          control={form.control}
+                          name="injuries_or_pain"
+                          label="¿Por qué requiere atención?"
+                          placeholder="Ejemplo: molestia en rodilla derecha al hacer sentadillas profundas."
+                          config={{ rows: 3, maxLength: 240 }}
+                        />
+                        <FormTextarea
+                          control={form.control}
+                          name="medical_clearance_notes"
+                          label="Notas de autorización médica"
+                          placeholder="Opcional. Indicaciones médicas, observaciones o restricciones clínicas."
+                          config={{ rows: 3, maxLength: 240 }}
+                        />
+                      </>
+                    ) : null}
                     <FormCheckboxGroup
                       control={form.control}
                       name="restricted_movements"
                       label="Movimientos a evitar o limitar"
                       options={RESTRICTED_MOVEMENT_OPTIONS}
+                      showBadges={false}
                       columns={2}
-                    />
-                    <FormTextarea
-                      control={form.control}
-                      name="medical_clearance_notes"
-                      label="Notas de autorización médica"
-                      placeholder="Opcional. Indicaciones médicas, observaciones o restricciones clínicas."
-                      config={{ rows: 3, maxLength: 240 }}
                     />
                   </div>
 
@@ -578,7 +582,7 @@ export function CustomerFormSheet({
                     <div className="space-y-1">
                       <h5 className="text-sm font-semibold">Perfil de entrenamiento</h5>
                       <p className="text-xs text-muted-foreground">
-                        Esto define frecuencia, duración, contexto real y el tipo de ejercicios que sí puede hacer.
+                        Esto define frecuencia, duración y el tipo de ejercicios que sí puede hacer.
                       </p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -591,24 +595,10 @@ export function CustomerFormSheet({
                       />
                       <FormSelect
                         control={form.control}
-                        name="training_location"
-                        label="¿Dónde entrena?"
-                        placeholder="Seleccionar..."
-                        options={TRAINING_LOCATION_OPTIONS}
-                      />
-                      <FormSelect
-                        control={form.control}
                         name="days_per_week"
                         label="Días por semana"
                         placeholder="Seleccionar..."
                         options={DAYS_PER_WEEK_OPTIONS}
-                      />
-                      <FormSelect
-                        control={form.control}
-                        name="session_minutes"
-                        label="Duración por sesión"
-                        placeholder="Seleccionar..."
-                        options={SESSION_MINUTES_OPTIONS}
                       />
                       <FormSelect
                         control={form.control}
@@ -624,6 +614,34 @@ export function CustomerFormSheet({
                         ]}
                       />
                     </div>
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <h6 className="text-sm font-medium">Duración por sesión</h6>
+                        <p className="text-xs text-muted-foreground">
+                          Define la sesión con más libertad usando horas y minutos.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormInputGroup
+                          control={form.control}
+                          name="session_hours"
+                          label="Horas"
+                          type="number"
+                          min={0}
+                          max={8}
+                          placeholder="1"
+                        />
+                        <FormInputGroup
+                          control={form.control}
+                          name="session_minutes_extra"
+                          label="Minutos"
+                          type="number"
+                          min={0}
+                          max={59}
+                          placeholder="30"
+                        />
+                      </div>
+                    </div>
                     <FormRadioGroup
                       control={form.control}
                       name="cardio_preference"
@@ -637,6 +655,7 @@ export function CustomerFormSheet({
                       label="Equipo disponible"
                       description="Selecciona lo que realmente tiene a mano el cliente."
                       options={EQUIPMENT_OPTIONS}
+                      showBadges={false}
                       columns={3}
                     />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -668,11 +687,11 @@ export function CustomerFormSheet({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormInputGroup
                         control={form.control}
-                        name="weight_kg"
-                        label="Peso (kg)"
+                        name="weight_lb"
+                        label="Peso (lb)"
                         type="number"
                         icon={<IconScale className="h-4 w-4" />}
-                        placeholder="70"
+                        placeholder="154"
                       />
                       <FormInputGroup
                         control={form.control}
@@ -721,13 +740,6 @@ export function CustomerFormSheet({
                       name="injuries"
                       label="Observaciones generales"
                       placeholder="Notas generales que quieras dejar guardadas en el perfil."
-                      config={{ rows: 3, maxLength: 240 }}
-                    />
-                    <FormTextarea
-                      control={form.control}
-                      name="notes"
-                      label="Notas de seguimiento"
-                      placeholder="Opcional. Contexto extra para nutrición, adherencia o seguimiento."
                       config={{ rows: 3, maxLength: 240 }}
                     />
                   </div>

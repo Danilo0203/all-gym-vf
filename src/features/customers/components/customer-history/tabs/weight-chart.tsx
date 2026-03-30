@@ -9,20 +9,19 @@ import { IconScale } from "@tabler/icons-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { BodyAssessmentEntry } from "../../../actions/customer-history-actions";
+import { kilogramsToPounds } from "@/lib/fitness/measurements";
 
 export const description = "Gráfico interactivo de peso";
 
 const chartConfig = {
   weight: {
-    label: "Peso (kg)",
+    label: "Peso (lb)",
     color: "var(--chart-1)",
   },
 } satisfies ChartConfig;
@@ -41,7 +40,7 @@ export function WeightChart({ data }: WeightChartProps) {
       .sort((a, b) => new Date(a.assessment_date).getTime() - new Date(b.assessment_date).getTime())
       .map((item) => ({
         date: item.assessment_date, // Keep as string ISO
-        weight: item.weight_kg as number,
+        weight: kilogramsToPounds(item.weight_kg as number) as number,
       }));
   }, [data]);
 
@@ -136,14 +135,14 @@ export function WeightChart({ data }: WeightChartProps) {
               opacity={0.5}
               fontSize={11}
               domain={["dataMin - 5", "dataMax + 5"]}
-              tickFormatter={(value) => `${value}kg`}
+              tickFormatter={(value) => `${value} lb`}
             />
             <ChartTooltip
               cursor={{ stroke: "var(--primary)", strokeWidth: 1, strokeDasharray: "4 4" }}
               content={
                 <ChartTooltipContent
                   indicator="dot"
-                  labelFormatter={(value: any) => {
+                  labelFormatter={(value) => {
                     const date = new Date(value);
                     return format(date, "PPP", { locale: es });
                   }}

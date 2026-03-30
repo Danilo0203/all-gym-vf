@@ -100,7 +100,7 @@ export async function updateProfile(data: UpdateProfileData): Promise<{ success:
     }
 
     // Prepare update data
-    const updateData: Record<string, any> = {
+    const updateData: Record<string, string | null> = {
       updated_at: new Date().toISOString(),
     };
 

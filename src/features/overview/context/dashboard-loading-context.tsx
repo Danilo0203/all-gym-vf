@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useTransition, ReactNode } from 'react';
+import { createContext, useContext, useTransition, ReactNode } from 'react';
 
 interface DashboardLoadingContextType {
   isLoading: boolean;

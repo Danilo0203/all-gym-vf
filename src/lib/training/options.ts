@@ -72,7 +72,7 @@ export const RESTRICTED_MOVEMENT_OPTIONS: Array<{ label: string; value: Restrict
   { label: "Trabajo unilateral de pierna", value: "unilateral_lower_body" },
 ];
 
-export const DAYS_PER_WEEK_OPTIONS = [2, 3, 4, 5].map((value) => ({
+export const DAYS_PER_WEEK_OPTIONS = [1, 2, 3, 4, 5, 6, 7].map((value) => ({
   label: `${value} días`,
   value: value.toString(),
 }));

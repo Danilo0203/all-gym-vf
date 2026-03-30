@@ -24,7 +24,7 @@ export function formatBytes(
       : (sizes[i] ?? 'Bytes')
   }`;
 }
-export function exportToCSV(data: any[], filename: string) {
+export function exportToCSV<T extends Record<string, unknown>>(data: T[], filename: string) {
   if (data.length === 0) return;
 
   const headers = Object.keys(data[0]);

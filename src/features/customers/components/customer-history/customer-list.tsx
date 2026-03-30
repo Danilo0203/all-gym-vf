@@ -8,8 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { IconSearch, IconUserPlus } from '@tabler/icons-react'; // Using icons from tabler-icons-react
-import { Button } from '@/components/ui/button'; // Assuming Button component exists
+import { IconSearch } from '@tabler/icons-react';
 
 interface CustomerListProps {
   customers: Customer[];

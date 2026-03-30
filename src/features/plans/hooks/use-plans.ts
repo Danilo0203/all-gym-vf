@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getPlans, createPlan, updatePlan, deletePlan, Plan, CreatePlanData, UpdatePlanData } from '../actions/plan-actions';
+import { getPlans, createPlan, updatePlan, deletePlan, CreatePlanData, UpdatePlanData } from '../actions/plan-actions';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 

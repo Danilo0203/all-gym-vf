@@ -9,7 +9,9 @@ import { addDays } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 import { computeFitnessPlan } from "@/lib/fitness/excel-calculator";
+import { kilogramsToPounds, poundsToKilograms } from "@/lib/fitness/measurements";
 import type { ActivityLevel, BodyType, DietType } from "@/lib/fitness/types";
+import { combineSessionDuration, DEFAULT_EQUIPMENT_AVAILABLE, DEFAULT_TRAINING_LOCATION, splitSessionMinutes } from "@/lib/training/profile-defaults";
 import { usePlans } from "@/features/plans/hooks/use-plans";
 import type { EquipmentOption, FocusArea, PrimaryGoal, RestrictedMovement, TrainingProfileStatus } from "@/lib/training/types";
 import { renewSubscription, type CreateCustomerData } from "../actions/customer-actions";
@@ -29,13 +31,13 @@ const profileCustomerSchema = z.object({
 });
 
 const optionalPositiveNumber = z.preprocess((value) => {
-  if (value === "" || value === null || value === undefined) return undefined;
+  if (value === "" || value === null || value === undefined || Number(value) === 0) return undefined;
   const num = Number(value);
   return Number.isNaN(num) ? value : num;
 }, z.number({ message: "Debe ser un número" }).positive({ message: "Debe ser mayor a 0" }).optional());
 
 const optionalPercentageNumber = z.preprocess((value) => {
-  if (value === "" || value === null || value === undefined) return undefined;
+  if (value === "" || value === null || value === undefined || Number(value) === 0) return undefined;
   const num = Number(value);
   return Number.isNaN(num) ? value : num;
 }, z.number({ message: "Debe ser un número" }).min(1, { message: "Debe ser mayor a 0" }).max(100, { message: "Máximo 100" }).optional());
@@ -78,58 +80,76 @@ const restrictedMovementValues = [
   "unilateral_lower_body",
 ] as const;
 const parqChoiceValues = ["yes", "no"] as const;
-const daysPerWeekValues = ["2", "3", "4", "5"] as const;
-const sessionMinutesValues = ["30", "45", "60", "75", "90"] as const;
+const daysPerWeekValues = ["1", "2", "3", "4", "5", "6", "7"] as const;
 
-const customerSheetSchema = z.object({
-  email: z.string().email({ message: "Email inválido" }),
-  password: z.string().min(6, { message: "Mínimo 6 caracteres" }).optional().or(z.literal("")),
-  full_name: z.string().min(2, { message: "El nombre es obligatorio" }),
-  birth_date: z.date({ message: "La fecha de nacimiento es obligatoria" }),
-  gender: z.enum(["male", "female", "other"], { message: "Selecciona el género" }),
-  phone: z.string().regex(/^\d{8}$/, { message: "El teléfono debe tener exactamente 8 dígitos" }),
-  plan_id: z.string().optional(),
-  final_price: z.number().optional(),
-  discount_amount: z.coerce.number().min(0).default(0),
-  payment_method: z.enum(["cash", "card", "transfer"]).default("cash"),
-  subscription_period: z
-    .object({
-      from: z.date().optional(),
-      to: z.date().optional(),
-    })
-    .optional(),
-  primary_goal: z.enum(primaryGoalValues).optional(),
-  secondary_goal: z.enum(primaryGoalValues).optional(),
-  focus_areas: z.array(z.enum(focusAreaValues)).default([]),
-  experience_level: z.enum(experienceLevelValues).optional(),
-  days_per_week: z.enum(daysPerWeekValues).optional(),
-  session_minutes: z.enum(sessionMinutesValues).optional(),
-  training_location: z.enum(trainingLocationValues).optional(),
-  equipment_available: z.array(z.enum(equipmentOptionValues)).default([]),
-  cardio_preference: z.enum(cardioPreferenceValues).optional(),
-  parq_requires_attention: z.enum(parqChoiceValues).optional(),
-  restricted_movements: z.array(z.enum(restrictedMovementValues)).default([]),
-  exercise_preferences: z.string().optional().or(z.literal("")),
-  exercise_dislikes: z.string().optional().or(z.literal("")),
-  injuries_or_pain: z.string().optional().or(z.literal("")),
-  medical_clearance_notes: z.string().optional().or(z.literal("")),
-  weight_kg: optionalPositiveNumber,
-  height_cm: optionalPositiveNumber,
-  diet_type: z.enum(["hipocalorica", "normocalorica", "hipercalorica"]).optional(),
-  activity_level: z.enum(["sedentario", "1_3_dias", "3_5_dias", "6_7_dias", "2_veces_dia"]).optional(),
-  body_fat_percentage: optionalPercentageNumber,
-  muscle_mass_kg: optionalPositiveNumber,
-  chest: optionalPositiveNumber,
-  waist: optionalPositiveNumber,
-  hip: optionalPositiveNumber,
-  arm_right: optionalPositiveNumber,
-  arm_left: optionalPositiveNumber,
-  leg_right: optionalPositiveNumber,
-  leg_left: optionalPositiveNumber,
-  injuries: z.string().optional().or(z.literal("")),
-  notes: z.string().optional().or(z.literal("")),
-  body_type: z.enum(["ectomorph", "mesomorph", "endomorph"]).optional(),
-});
+const customerSheetSchema = z
+  .object({
+    email: z.string().email({ message: "Email inválido" }),
+    password: z.string().min(6, { message: "Mínimo 6 caracteres" }).optional().or(z.literal("")),
+    full_name: z.string().min(2, { message: "El nombre es obligatorio" }),
+    birth_date: z.date({ message: "La fecha de nacimiento es obligatoria" }),
+    gender: z.enum(["male", "female", "other"], { message: "Selecciona el género" }),
+    phone: z.string().regex(/^\d{8}$/, { message: "El teléfono debe tener exactamente 8 dígitos" }),
+    plan_id: z.string().optional(),
+    final_price: z.number().optional(),
+    discount_amount: z.coerce.number().min(0).default(0),
+    payment_method: z.enum(["cash", "card", "transfer"]).default("cash"),
+    subscription_period: z
+      .object({
+        from: z.date().optional(),
+        to: z.date().optional(),
+      })
+      .optional(),
+    primary_goal: z.enum(primaryGoalValues).optional(),
+    secondary_goal: z.enum(primaryGoalValues).optional(),
+    focus_areas: z.array(z.enum(focusAreaValues)).default([]),
+    experience_level: z.enum(experienceLevelValues).optional(),
+    days_per_week: z.enum(daysPerWeekValues).optional(),
+    session_hours: z.coerce.number().int().min(0).max(8).default(0),
+    session_minutes_extra: z.coerce.number().int().min(0).max(59).default(0),
+    training_location: z.enum(trainingLocationValues).default(DEFAULT_TRAINING_LOCATION),
+    equipment_available: z.array(z.enum(equipmentOptionValues)).default(DEFAULT_EQUIPMENT_AVAILABLE),
+    cardio_preference: z.enum(cardioPreferenceValues).optional(),
+    parq_requires_attention: z.enum(parqChoiceValues).optional(),
+    restricted_movements: z.array(z.enum(restrictedMovementValues)).default([]),
+    exercise_preferences: z.string().optional().or(z.literal("")),
+    exercise_dislikes: z.string().optional().or(z.literal("")),
+    injuries_or_pain: z.string().optional().or(z.literal("")),
+    medical_clearance_notes: z.string().optional().or(z.literal("")),
+    weight_lb: optionalPositiveNumber,
+    height_cm: optionalPositiveNumber,
+    diet_type: z.enum(["hipocalorica", "normocalorica", "hipercalorica"]).optional(),
+    activity_level: z.enum(["sedentario", "1_3_dias", "3_5_dias", "6_7_dias", "2_veces_dia"]).optional(),
+    body_fat_percentage: optionalPercentageNumber,
+    muscle_mass_kg: optionalPositiveNumber,
+    chest: optionalPositiveNumber,
+    waist: optionalPositiveNumber,
+    hip: optionalPositiveNumber,
+    arm_right: optionalPositiveNumber,
+    arm_left: optionalPositiveNumber,
+    leg_right: optionalPositiveNumber,
+    leg_left: optionalPositiveNumber,
+    injuries: z.string().optional().or(z.literal("")),
+    body_type: z.enum(["ectomorph", "mesomorph", "endomorph"]).optional(),
+  })
+  .superRefine((value, ctx) => {
+    const sessionMinutes = combineSessionDuration(value.session_hours, value.session_minutes_extra);
+    if (sessionMinutes !== null && sessionMinutes > 480) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["session_hours"],
+        message: "La duración por sesión no puede superar 8 horas.",
+      });
+    }
+
+    if (value.parq_requires_attention === "yes" && !normalizeTextFieldValue(value.injuries_or_pain)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["injuries_or_pain"],
+        message: "Explica por qué requiere atención antes de entrenar.",
+      });
+    }
+  });
 
 const renewSubscriptionSchema = z.object({
   plan_id: z.string().min(1, "Selecciona un plan"),
@@ -141,7 +161,7 @@ const renewSubscriptionSchema = z.object({
   discount_amount: z.coerce.number().min(0).default(0),
   final_price: z.number(),
   payment_method: z.enum(["cash", "card", "transfer"]),
-  weight_kg: z.coerce.number().positive("El peso debe ser mayor a 0"),
+  weight_lb: z.coerce.number().positive("El peso debe ser mayor a 0"),
   height_cm: z.coerce.number().positive("La estatura debe ser mayor a 0"),
   body_type: z.enum(["ectomorph", "mesomorph", "endomorph"]),
   diet_type: z.enum(["hipocalorica", "normocalorica", "hipercalorica"]),
@@ -156,7 +176,6 @@ const renewSubscriptionSchema = z.object({
   leg_right: z.coerce.number().positive("Ingresa pierna derecha"),
   leg_left: z.coerce.number().positive("Ingresa pierna izquierda"),
   injuries: z.string().optional().or(z.literal("")),
-  notes: z.string().optional().or(z.literal("")),
 });
 
 function toBodyType(value?: string | null): BodyType {
@@ -185,6 +204,11 @@ function parseDatabaseDate(dateString: Date | string | null | undefined): Date |
   }
   const date = new Date(dateString);
   return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function normalizeTextFieldValue(value?: string | null) {
+  if (typeof value !== "string") return "";
+  return value.trim();
 }
 
 export interface ProfileFormData {
@@ -235,7 +259,6 @@ export interface CustomerData {
   arm_left?: number | null;
   leg_right?: number | null;
   leg_left?: number | null;
-  notes?: string | null;
   primary_goal?: PrimaryGoal | null;
   secondary_goal?: PrimaryGoal | null;
   focus_areas?: FocusArea[] | null;
@@ -315,6 +338,8 @@ export function useHookFormCustomerSheet({
 
   const getDefaultValues = useCallback((): CustomerSheetFormValues => {
     if (isEditing && customer) {
+      const sessionDuration = splitSessionMinutes(customer.session_minutes);
+
       return {
         email: customer.email || "",
         password: "",
@@ -331,20 +356,23 @@ export function useHookFormCustomerSheet({
         focus_areas: customer.focus_areas ?? [],
         experience_level: customer.experience_level ?? undefined,
         days_per_week: customer.days_per_week ? customer.days_per_week.toString() as CustomerSheetFormValues["days_per_week"] : undefined,
-        session_minutes:
-          customer.session_minutes ? (customer.session_minutes.toString() as CustomerSheetFormValues["session_minutes"]) : undefined,
-        training_location: customer.training_location ?? undefined,
-        equipment_available: customer.equipment_available ?? [],
+        session_hours: sessionDuration.hours,
+        session_minutes_extra: sessionDuration.minutes,
+        training_location: customer.training_location ?? DEFAULT_TRAINING_LOCATION,
+        equipment_available:
+          customer.equipment_available && customer.equipment_available.length > 0
+            ? customer.equipment_available
+            : DEFAULT_EQUIPMENT_AVAILABLE,
         cardio_preference: customer.cardio_preference ?? undefined,
         parq_requires_attention:
           customer.parq_requires_attention === true ? "yes" : customer.parq_requires_attention === false ? "no" : undefined,
         restricted_movements: customer.restricted_movements ?? [],
         exercise_preferences: customer.exercise_preferences || "",
         exercise_dislikes: customer.exercise_dislikes || "",
-        injuries_or_pain: customer.injuries_or_pain || customer.injuries || "",
+        injuries_or_pain: customer.injuries_or_pain || "",
         medical_clearance_notes: customer.medical_clearance_notes || "",
         injuries: customer.injuries || "",
-        weight_kg: customer.weight_kg ?? undefined,
+        weight_lb: kilogramsToPounds(customer.weight_kg) ?? undefined,
         height_cm: customer.height_cm ?? undefined,
         body_type: (customer.body_type as "ectomorph" | "mesomorph" | "endomorph") || undefined,
         diet_type: (customer.diet_type as "hipocalorica" | "normocalorica" | "hipercalorica") || undefined,
@@ -360,7 +388,6 @@ export function useHookFormCustomerSheet({
         arm_left: customer.arm_left ?? undefined,
         leg_right: customer.leg_right ?? undefined,
         leg_left: customer.leg_left ?? undefined,
-        notes: customer.notes || "",
         subscription_period: {
           from: parseDatabaseDate(customer.subscription_start_date) || new Date(),
           to: parseDatabaseDate(customer.subscription_end_date) || new Date(),
@@ -383,9 +410,10 @@ export function useHookFormCustomerSheet({
       focus_areas: [],
       experience_level: undefined,
       days_per_week: undefined,
-      session_minutes: undefined,
-      training_location: undefined,
-      equipment_available: [],
+      session_hours: 0,
+      session_minutes_extra: 0,
+      training_location: DEFAULT_TRAINING_LOCATION,
+      equipment_available: DEFAULT_EQUIPMENT_AVAILABLE,
       cardio_preference: undefined,
       parq_requires_attention: undefined,
       restricted_movements: [],
@@ -394,7 +422,7 @@ export function useHookFormCustomerSheet({
       injuries_or_pain: "",
       medical_clearance_notes: "",
       injuries: "",
-      weight_kg: undefined,
+      weight_lb: undefined,
       height_cm: undefined,
       diet_type: undefined,
       activity_level: undefined,
@@ -408,7 +436,6 @@ export function useHookFormCustomerSheet({
       leg_right: undefined,
       leg_left: undefined,
       body_type: undefined,
-      notes: "",
       subscription_period: {
         from: new Date(),
         to: new Date(),
@@ -431,7 +458,8 @@ export function useHookFormCustomerSheet({
 
   const watchedPlanId = useWatch({ control: form.control, name: "plan_id" });
   const watchedDiscount = useWatch({ control: form.control, name: "discount_amount" });
-  const watchedWeight = useWatch({ control: form.control, name: "weight_kg" });
+  const watchedParqRequiresAttention = useWatch({ control: form.control, name: "parq_requires_attention" });
+  const watchedWeightLb = useWatch({ control: form.control, name: "weight_lb" });
   const watchedHeight = useWatch({ control: form.control, name: "height_cm" });
   const watchedBodyType = useWatch({ control: form.control, name: "body_type" });
   const watchedDietType = useWatch({ control: form.control, name: "diet_type" });
@@ -439,6 +467,7 @@ export function useHookFormCustomerSheet({
   const watchedBirthDate = useWatch({ control: form.control, name: "birth_date" });
   const watchedGender = useWatch({ control: form.control, name: "gender" });
   const subscriptionPeriod = useWatch({ control: form.control, name: "subscription_period" });
+  const watchedWeightKg = useMemo(() => poundsToKilograms(watchedWeightLb), [watchedWeightLb]);
   const selectedPlanPrice = useMemo(() => {
     const selectedPlan = plans.find((plan) => plan.id.toString() === watchedPlanId);
     return selectedPlan?.price ?? 0;
@@ -477,8 +506,24 @@ export function useHookFormCustomerSheet({
     form.clearErrors("discount_amount");
   }, [selectedPlanPrice, watchedDiscount, form]);
 
+  useEffect(() => {
+    if (watchedParqRequiresAttention !== "no") return;
+
+    form.setValue("injuries_or_pain", "", {
+      shouldDirty: false,
+      shouldTouch: false,
+      shouldValidate: false,
+    });
+    form.setValue("medical_clearance_notes", "", {
+      shouldDirty: false,
+      shouldTouch: false,
+      shouldValidate: false,
+    });
+    form.clearErrors(["injuries_or_pain", "medical_clearance_notes"]);
+  }, [form, watchedParqRequiresAttention]);
+
   const calculationPreview =
-    watchedWeight &&
+    watchedWeightKg &&
     watchedHeight &&
     watchedBodyType &&
     watchedDietType &&
@@ -488,7 +533,7 @@ export function useHookFormCustomerSheet({
       ? computeFitnessPlan({
           birthDate: watchedBirthDate,
           gender: watchedGender,
-          weightKg: watchedWeight,
+          weightKg: watchedWeightKg,
           heightCm: watchedHeight,
           bodyType: watchedBodyType,
           dietType: watchedDietType,
@@ -525,8 +570,8 @@ export function useHookFormCustomerSheet({
         focus_areas: values.focus_areas,
         experience_level: values.experience_level,
         days_per_week: values.days_per_week ? Number(values.days_per_week) : undefined,
-        session_minutes: values.session_minutes ? Number(values.session_minutes) : undefined,
-        training_location: values.training_location,
+        session_minutes: combineSessionDuration(values.session_hours, values.session_minutes_extra) ?? undefined,
+        training_location: DEFAULT_TRAINING_LOCATION,
         equipment_available: values.equipment_available,
         cardio_preference: values.cardio_preference,
         parq_requires_attention:
@@ -536,11 +581,13 @@ export function useHookFormCustomerSheet({
               ? false
               : undefined,
         restricted_movements: values.restricted_movements,
-        exercise_preferences: values.exercise_preferences || undefined,
-        exercise_dislikes: values.exercise_dislikes || undefined,
-        injuries_or_pain: values.injuries_or_pain || undefined,
-        medical_clearance_notes: values.medical_clearance_notes || undefined,
-        weight_kg: values.weight_kg,
+        exercise_preferences: normalizeTextFieldValue(values.exercise_preferences),
+        exercise_dislikes: normalizeTextFieldValue(values.exercise_dislikes),
+        injuries_or_pain:
+          values.parq_requires_attention === "yes" ? normalizeTextFieldValue(values.injuries_or_pain) : "",
+        medical_clearance_notes:
+          values.parq_requires_attention === "yes" ? normalizeTextFieldValue(values.medical_clearance_notes) : "",
+        weight_kg: poundsToKilograms(values.weight_lb) ?? undefined,
         height_cm: values.height_cm,
         diet_type: values.diet_type,
         activity_level: values.activity_level,
@@ -553,8 +600,7 @@ export function useHookFormCustomerSheet({
         arm_left: values.arm_left,
         leg_right: values.leg_right,
         leg_left: values.leg_left,
-        injuries: values.injuries || undefined,
-        notes: values.notes || undefined,
+        injuries: normalizeTextFieldValue(values.injuries),
         body_type: values.body_type,
       };
 
@@ -607,7 +653,6 @@ interface RenewAssessmentData {
   chest_cm?: number | null;
   waist_cm?: number | null;
   injuries?: string;
-  notes?: string | null;
 }
 
 interface UseHookFormRenewSubscriptionParams {
@@ -648,7 +693,7 @@ export function useHookFormRenewSubscription({
       discount_amount: 0,
       final_price: 0,
       payment_method: "cash",
-      weight_kg: lastAssessment?.weight_kg || 0,
+      weight_lb: kilogramsToPounds(lastAssessment?.weight_kg) || 0,
       height_cm: lastAssessment?.height_cm || 0,
       body_type: toBodyType(lastAssessment?.body_type),
       diet_type: toDietType(lastAssessment?.diet_type),
@@ -663,13 +708,12 @@ export function useHookFormRenewSubscription({
       leg_right: 0,
       leg_left: 0,
       injuries: lastAssessment?.injuries || "",
-      notes: lastAssessment?.notes || "",
     },
   });
 
   const watchedPlanId = useWatch({ control: form.control, name: "plan_id" });
   const watchedDiscount = useWatch({ control: form.control, name: "discount_amount" });
-  const watchedWeight = useWatch({ control: form.control, name: "weight_kg" });
+  const watchedWeightLb = useWatch({ control: form.control, name: "weight_lb" });
   const watchedHeight = useWatch({ control: form.control, name: "height_cm" });
   const watchedBodyType = useWatch({ control: form.control, name: "body_type" });
   const watchedDietType = useWatch({ control: form.control, name: "diet_type" });
@@ -678,9 +722,10 @@ export function useHookFormRenewSubscription({
     const selectedPlan = plans.find((plan) => plan.id.toString() === watchedPlanId);
     return selectedPlan?.price ?? 0;
   }, [plans, watchedPlanId]);
+  const watchedWeightKg = useMemo(() => poundsToKilograms(watchedWeightLb), [watchedWeightLb]);
 
   const calculationPreview =
-    watchedWeight &&
+    watchedWeightKg &&
     watchedHeight &&
     watchedBodyType &&
     watchedDietType &&
@@ -690,7 +735,7 @@ export function useHookFormRenewSubscription({
       ? computeFitnessPlan({
           birthDate: new Date(customerBirthDate),
           gender: customerGender,
-          weightKg: watchedWeight,
+          weightKg: watchedWeightKg,
           heightCm: watchedHeight,
           bodyType: watchedBodyType,
           dietType: watchedDietType,
@@ -710,7 +755,7 @@ export function useHookFormRenewSubscription({
       discount_amount: 0,
       final_price: 0,
       payment_method: "cash",
-      weight_kg: lastAssessment?.weight_kg || 0,
+      weight_lb: kilogramsToPounds(lastAssessment?.weight_kg) || 0,
       height_cm: lastAssessment?.height_cm || 0,
       body_type: toBodyType(lastAssessment?.body_type),
       diet_type: toDietType(lastAssessment?.diet_type),
@@ -725,7 +770,6 @@ export function useHookFormRenewSubscription({
       leg_right: 0,
       leg_left: 0,
       injuries: lastAssessment?.injuries || "",
-      notes: lastAssessment?.notes || "",
     });
     userModifiedDatesRef.current = false;
     previousPlanId.current = null;
@@ -767,7 +811,7 @@ export function useHookFormRenewSubscription({
         discount_amount: values.discount_amount,
         amount_paid: values.final_price,
         payment_method: values.payment_method,
-        weight_kg: values.weight_kg,
+        weight_kg: poundsToKilograms(values.weight_lb) ?? 0,
         height_cm: values.height_cm,
         body_type: values.body_type,
         diet_type: values.diet_type,
@@ -782,11 +826,20 @@ export function useHookFormRenewSubscription({
         leg_right: values.leg_right,
         leg_left: values.leg_left,
         injuries: values.injuries,
-        notes: values.notes,
       });
 
       if (result.success) {
-        toast.success("Suscripción renovada exitosamente");
+        const deviceSync =
+          typeof result === "object" && result !== null && "deviceSync" in result ? result.deviceSync : undefined;
+        const deviceSynced = deviceSync?.attempted ? deviceSync.synced === true || deviceSync.queued === true : null;
+
+        if (deviceSynced === false) {
+          toast.warning("Suscripción renovada, pero falló la sincronización con el reloj.");
+        } else if (deviceSynced === true) {
+          toast.success("Suscripción renovada y acceso habilitado en el reloj.");
+        } else {
+          toast.success("Suscripción renovada exitosamente");
+        }
         setOpen(false);
       } else {
         toast.error(result.error || "Error al renovar");

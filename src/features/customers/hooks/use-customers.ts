@@ -18,12 +18,24 @@ export const customersKeys = {
   detail: (id: string) => [...customersKeys.all, "detail", id] as const,
 };
 
+type CustomerMutationResult = {
+  success: boolean;
+  error?: string;
+  deviceSync?: {
+    attempted: boolean;
+    action?: "enable" | "disable" | "delete";
+    synced?: boolean;
+    queued?: boolean;
+  };
+};
+
 export function useCustomer(id: string | null) {
   return useQuery({
     queryKey: customersKeys.detail(id || ""),
     queryFn: () => getCustomerById(id!),
     enabled: !!id, // Solo ejecutar si hay ID
-    staleTime: 5 * 60 * 1000, // 5 minutos de cache
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }
 
@@ -40,11 +52,13 @@ export function useCreateCustomer() {
       return result;
     },
     onSuccess: (result) => {
-      const deviceSync = (result as any)?.deviceSync;
+      const deviceSync = (result as CustomerMutationResult).deviceSync;
       const deviceSynced = deviceSync?.attempted ? deviceSync?.synced === true || deviceSync?.queued === true : null;
 
       if (deviceSynced === false) {
         toast.warning("Cliente creado, pero falló el envío automático al dispositivo.");
+      } else if (deviceSynced === true && deviceSync?.action === "disable") {
+        toast.success("Cliente creado. El reloj quedará bloqueado hasta que tenga una suscripción activa.");
       } else if (deviceSynced === true) {
         toast.success("Cliente creado y sincronizado con el reloj.");
       } else {
@@ -88,12 +102,23 @@ export function useUpdateCustomer() {
       return result;
     },
     onSuccess: (result, variables) => {
-      toast.success("Cliente actualizado exitosamente");
+      const deviceSync = (result as CustomerMutationResult).deviceSync;
+      const deviceSynced = deviceSync?.attempted ? deviceSync?.synced === true || deviceSync?.queued === true : null;
+
+      if (deviceSynced === false) {
+        toast.warning("Cliente actualizado, pero falló la sincronización con el reloj.");
+      } else if (deviceSynced === true && deviceSync?.action === "enable") {
+        toast.success("Cliente actualizado y sincronizado con el reloj.");
+      } else if (deviceSynced === true && deviceSync?.action === "disable") {
+        toast.success("Cliente actualizado. El reloj quedó bloqueado según el estado actual del cliente.");
+      } else {
+        toast.success("Cliente actualizado exitosamente");
+      }
       queryClient.invalidateQueries({ queryKey: customersKeys.detail(variables.id) });
       queryClient.invalidateQueries({ queryKey: customersKeys.lists() });
       router.refresh();
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       console.error(error);
       toast.error(error.message || "Error al actualizar el cliente");
     },
@@ -113,12 +138,21 @@ export function useReactivateCustomer() {
       return result;
     },
     onSuccess: (result, id) => {
-      toast.success("Cliente reactivado exitosamente");
+      const deviceSync = (result as CustomerMutationResult).deviceSync;
+      const deviceSynced = deviceSync?.attempted ? deviceSync?.synced === true || deviceSync?.queued === true : null;
+
+      if (deviceSynced === false) {
+        toast.warning("Cliente reactivado, pero falló la sincronización con el reloj.");
+      } else if (deviceSync?.action === "disable") {
+        toast.success("Cliente reactivado. El reloj seguirá bloqueado hasta que la suscripción esté activa.");
+      } else {
+        toast.success("Cliente reactivado exitosamente");
+      }
       queryClient.invalidateQueries({ queryKey: customersKeys.detail(id) });
       queryClient.invalidateQueries({ queryKey: customersKeys.lists() });
       router.refresh();
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       console.error(error);
       toast.error(error.message || "Error al reactivar cliente");
     },

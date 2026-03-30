@@ -1,9 +1,10 @@
 import PageContainer from "@/components/layout/page-container";
 import { Heading } from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
-import { SeedCatalogButton } from "@/features/customers/components/seed-catalog-button";
+import { ExerciseCatalogManager } from "@/features/exercises/components/exercise-catalog-manager";
 import { getUserAccessContext } from "@/lib/auth/authorization";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeExerciseCatalogItem } from "@/lib/training/catalog";
 import { redirect } from "next/navigation";
 
 export const metadata = {
@@ -21,27 +22,25 @@ export default async function ExercisesPage() {
   }
 
   const adminClient = createAdminClient();
-  const { count } = await adminClient
+  const { data, count } = await adminClient
     .from("exercises")
-    .select("*", { count: "exact", head: true });
+    .select(
+      "id, slug, name, display_name, display_name_es, provider, body_parts, target_muscles, equipments, image_url, is_active, is_favorite, is_preview_hidden",
+      { count: "exact" },
+    )
+    .eq("is_active", true)
+    .order("display_name", { ascending: true, nullsFirst: false })
+    .order("name", { ascending: true, nullsFirst: false });
+
+  const exercises = (data ?? []).map((row) => normalizeExerciseCatalogItem(row as Record<string, unknown>));
 
   return (
     <PageContainer>
       <div className="flex items-start justify-between">
-        <Heading title="Ejercicios" description="Gestiona el catálogo de ejercicios de ExerciseDB." />
+        <Heading title="Ejercicios" description="Gestiona el catálogo local de ejercicios, imágenes y altas manuales." />
       </div>
       <Separator className="my-4" />
-      <div className="space-y-6">
-        <div className="rounded-lg border p-6">
-          <h3 className="text-lg font-medium">Estado del Catálogo Local</h3>
-          <p className="text-sm text-muted-foreground mt-2">
-            Actualmente hay <strong>{count ?? 0}</strong> ejercicios importados en la base local.
-          </p>
-          <div className="mt-4">
-            <SeedCatalogButton />
-          </div>
-        </div>
-      </div>
+      <ExerciseCatalogManager exercises={exercises} totalCount={count ?? exercises.length} />
     </PageContainer>
   );
 }

@@ -8,7 +8,7 @@ interface CustomerLayoutProps {
 }
 
 export default async function CustomerDetailLayout({ children, params }: CustomerLayoutProps) {
-  const { customerId } = await params;
+  await params;
   const supabase = await createClient();
 
   // Fetch all customers for the list (optimized query)

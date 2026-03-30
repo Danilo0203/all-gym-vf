@@ -19,12 +19,12 @@ export interface DashboardKPIs {
   transferAmount: number;
 }
 
-export interface RevenueByMonth {
+export interface RevenueByMonth extends Record<string, string | number> {
   month: string;
   revenue: number;
 }
 
-export interface PlanDistribution {
+export interface PlanDistribution extends Record<string, string | number> {
   name: string;
   count: number;
   percentage: number;
@@ -62,13 +62,13 @@ export interface InactiveCustomer {
   days_inactive: number;
 }
 
-export interface SubscriptionsFlow {
+export interface SubscriptionsFlow extends Record<string, string | number> {
   month: string;
   newSubs: number;
   cancelled: number;
 }
 
-export interface PaymentMethodDistribution {
+export interface PaymentMethodDistribution extends Record<string, string | number> {
   method: string;
   amount: number;
   count: number;
@@ -79,6 +79,51 @@ export interface PaymentMethodDistribution {
 export interface DashboardDateRange {
   from: string; // ISO date string (YYYY-MM-DD)
   to: string; // ISO date string (YYYY-MM-DD)
+}
+
+type MaybeRelation<T> = T | T[] | null;
+type PlanRelation = MaybeRelation<{ name: string | null }>;
+
+interface PlanDistributionRow {
+  plans: PlanRelation;
+}
+
+interface RecentPaymentRow {
+  id: number;
+  user_id: string;
+  amount_paid: number | string | null;
+  method: RecentPayment["method"];
+  payment_date: string;
+  subscriptions: MaybeRelation<{
+    plans: PlanRelation;
+  }>;
+  profiles: MaybeRelation<{
+    full_name: string | null;
+    avatar_url: string | null;
+  }>;
+}
+
+interface SubscriptionCustomerRow {
+  user_id: string;
+  end_date: string;
+  plans: PlanRelation;
+  profiles: MaybeRelation<{
+    full_name: string | null;
+    avatar_url: string | null;
+    phone: string | null;
+  }>;
+}
+
+function getRelationItem<T>(relation: MaybeRelation<T>) {
+  if (Array.isArray(relation)) {
+    return relation[0] ?? null;
+  }
+
+  return relation ?? null;
+}
+
+function getPlanName(planRelation: PlanRelation, fallback: string) {
+  return getRelationItem(planRelation)?.name || fallback;
 }
 
 // ====================
@@ -220,8 +265,8 @@ export async function getPlanDistribution(): Promise<PlanDistribution[]> {
   // Contar por plan
   const planCounts: Record<string, { name: string; count: number }> = {};
 
-  data.forEach((sub: any) => {
-    const planName = sub.plans?.name || "Sin Plan";
+  (data as PlanDistributionRow[]).forEach((sub) => {
+    const planName = getPlanName(sub.plans, "Sin Plan");
     if (!planCounts[planName]) {
       planCounts[planName] = { name: planName, count: 0 };
     }
@@ -265,16 +310,21 @@ export async function getRecentPayments(limit: number = 10): Promise<RecentPayme
 
   if (!data) return [];
 
-  return data.map((payment: any) => ({
-    id: payment.id,
-    user_id: payment.user_id,
-    user_name: payment.profiles?.full_name || "Usuario",
-    avatar_url: payment.profiles?.avatar_url,
-    plan_name: payment.subscriptions?.plans?.name || "Plan",
-    amount: Number(payment.amount_paid),
-    method: payment.method,
-    date: payment.payment_date,
-  }));
+  return (data as RecentPaymentRow[]).map((payment) => {
+    const paymentProfile = getRelationItem(payment.profiles);
+    const paymentSubscription = getRelationItem(payment.subscriptions);
+
+    return {
+      id: payment.id,
+      user_id: payment.user_id,
+      user_name: paymentProfile?.full_name || "Usuario",
+      avatar_url: paymentProfile?.avatar_url ?? null,
+      plan_name: getPlanName(paymentSubscription?.plans ?? null, "Plan"),
+      amount: Number(payment.amount_paid),
+      method: payment.method,
+      date: payment.payment_date,
+    };
+  });
 }
 
 export async function getExpiringSubscriptions(daysAhead: number = 5): Promise<ExpiringSubscription[]> {
@@ -304,14 +354,16 @@ export async function getExpiringSubscriptions(daysAhead: number = 5): Promise<E
 
   if (!data) return [];
 
-  return data.map((sub: any) => {
+  return (data as SubscriptionCustomerRow[]).map((sub) => {
     const endDate = new Date(sub.end_date);
+    const subscriptionProfile = getRelationItem(sub.profiles);
+
     return {
       user_id: sub.user_id,
-      user_name: sub.profiles?.full_name || "Usuario",
-      avatar_url: sub.profiles?.avatar_url,
-      phone: sub.profiles?.phone,
-      plan_name: sub.plans?.name || "Plan",
+      user_name: subscriptionProfile?.full_name || "Usuario",
+      avatar_url: subscriptionProfile?.avatar_url ?? null,
+      phone: subscriptionProfile?.phone ?? null,
+      plan_name: getPlanName(sub.plans, "Plan"),
       end_date: sub.end_date,
       days_left: differenceInDays(endDate, today),
     };
@@ -344,9 +396,9 @@ export async function getInactiveCustomers(limit: number = 10): Promise<Inactive
   if (!data) return [];
 
   // Filtrar usuarios que no tienen una suscripción activa
-  const uniqueUsers = new Map();
+  const uniqueUsers = new Map<string, InactiveCustomer>();
 
-  for (const sub of data) {
+  for (const sub of data as SubscriptionCustomerRow[]) {
     if (!uniqueUsers.has(sub.user_id)) {
       // Verificar si tiene suscripción activa
       const { count } = await supabase
@@ -356,14 +408,16 @@ export async function getInactiveCustomers(limit: number = 10): Promise<Inactive
         .eq("status", "active");
 
       if (!count || count === 0) {
-        const endDate = new Date((sub as any).end_date);
+        const endDate = new Date(sub.end_date);
+        const subscriptionProfile = getRelationItem(sub.profiles);
+
         uniqueUsers.set(sub.user_id, {
           user_id: sub.user_id,
-          user_name: (sub as any).profiles?.full_name || "Usuario",
-          avatar_url: (sub as any).profiles?.avatar_url,
-          phone: (sub as any).profiles?.phone,
-          last_plan: (sub as any).plans?.name || "Plan",
-          expired_date: (sub as any).end_date,
+          user_name: subscriptionProfile?.full_name || "Usuario",
+          avatar_url: subscriptionProfile?.avatar_url ?? null,
+          phone: subscriptionProfile?.phone ?? null,
+          last_plan: getPlanName(sub.plans, "Plan"),
+          expired_date: sub.end_date,
           days_inactive: differenceInDays(today, endDate),
         });
       }
@@ -451,7 +505,7 @@ export async function getPaymentMethodDistribution(
   };
 
   return Object.entries(methodMap)
-    .filter(([_, data]) => data.count > 0)
+    .filter(([, data]) => data.count > 0)
     .map(([method, data]) => ({
       method: labels[method] || method,
       amount: data.amount,

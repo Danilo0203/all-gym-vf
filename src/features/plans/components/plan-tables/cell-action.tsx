@@ -30,7 +30,7 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
         toast.error(`Error: ${result.error}`);
       }
       setOpenDelete(false);
-    } catch (error) {
+    } catch {
         toast.error('Error al eliminar el plan');
     } finally {
       setLoading(false);
