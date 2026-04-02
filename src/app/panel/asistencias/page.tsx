@@ -84,7 +84,7 @@ async function fetchJson<T>(url: URL, token: string): Promise<T> {
 }
 
 export const metadata = {
-  title: "Dashboard: Asistencias",
+  title: "Panel: Asistencias",
 };
 
 export default async function AttendancePage(props: AttendancePageProps) {

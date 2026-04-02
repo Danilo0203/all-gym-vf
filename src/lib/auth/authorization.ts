@@ -1,18 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { UserRole } from "@/types";
-
-const VALID_ROLES: UserRole[] = ["admin", "trainer", "employee", "client"];
+import { parseUserRole } from "@/lib/auth/role-utils";
 
 export interface UserAccessContext {
   isAuthenticated: boolean;
   isAdmin: boolean;
   role: UserRole | null;
   userId: string | null;
-}
-
-function parseUserRole(value: unknown): UserRole | null {
-  if (typeof value !== "string") return null;
-  return VALID_ROLES.includes(value as UserRole) ? (value as UserRole) : null;
 }
 
 export async function getUserAccessContext(): Promise<UserAccessContext> {

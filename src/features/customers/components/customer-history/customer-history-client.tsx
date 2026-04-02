@@ -69,6 +69,7 @@ import {
   reactivateCustomer,
 } from "@/features/customers/actions/customer-actions";
 import { useCustomer } from "@/features/customers/hooks/use-customers";
+import type { TrainingProfileRecord } from "@/lib/training/types";
 
 function toCustomerGender(value: string | null): "male" | "female" | "other" | null {
   if (value === "male" || value === "female" || value === "other") return value;
@@ -218,8 +219,16 @@ export function CustomerHistoryClient({
         muscle_mass: lastAssessment.muscle_mass ?? null,
         chest_cm: lastAssessment.chest_cm ?? null,
         waist_cm: lastAssessment.waist_cm ?? null,
+        hip_cm: lastAssessment.hip_cm ?? null,
+        arm_right_cm: lastAssessment.arm_right_cm ?? lastAssessment.arm_cm ?? null,
+        arm_left_cm: lastAssessment.arm_left_cm ?? null,
+        leg_right_cm: lastAssessment.leg_right_cm ?? null,
+        leg_left_cm: lastAssessment.leg_left_cm ?? null,
+        injuries: profile.injuries ?? "",
       }
     : null;
+
+  const trainingProfileForRenewal: TrainingProfileRecord | null = routineWorkspace.trainingProfile ?? null;
 
   const customerForEditFallback = {
     id: profile.id,
@@ -702,6 +711,7 @@ export function CustomerHistoryClient({
               customerGender={toCustomerGender(profile.gender)}
               customerBirthDate={profile.birth_date}
               lastAssessment={lastAssessmentSafe}
+              trainingProfile={trainingProfileForRenewal}
             />
           </section>
 

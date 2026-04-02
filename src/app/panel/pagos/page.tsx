@@ -8,7 +8,7 @@ import { getUserAccessContext } from '@/lib/auth/authorization';
 import { redirect } from 'next/navigation';
 
 export const metadata = {
-  title: 'Dashboard: Pagos'
+  title: 'Panel: Pagos'
 };
 
 type pageProps = {

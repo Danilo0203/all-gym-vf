@@ -13,7 +13,7 @@ import { kilogramsToPounds, poundsToKilograms } from "@/lib/fitness/measurements
 import type { ActivityLevel, BodyType, DietType } from "@/lib/fitness/types";
 import { combineSessionDuration, DEFAULT_EQUIPMENT_AVAILABLE, DEFAULT_TRAINING_LOCATION, splitSessionMinutes } from "@/lib/training/profile-defaults";
 import { usePlans } from "@/features/plans/hooks/use-plans";
-import type { EquipmentOption, FocusArea, PrimaryGoal, RestrictedMovement, TrainingProfileStatus } from "@/lib/training/types";
+import type { EquipmentOption, FocusArea, PrimaryGoal, RestrictedMovement, TrainingProfileInput, TrainingProfileStatus } from "@/lib/training/types";
 import { renewSubscription, type CreateCustomerData } from "../actions/customer-actions";
 import { useCreateCustomer, useReactivateCustomer, useUpdateCustomer } from "./use-customers";
 
@@ -84,7 +84,7 @@ const daysPerWeekValues = ["1", "2", "3", "4", "5", "6", "7"] as const;
 
 const customerSheetSchema = z
   .object({
-    email: z.string().email({ message: "Email inválido" }),
+    email: z.string().email({ message: "Correo electrónico inválido" }),
     password: z.string().min(6, { message: "Mínimo 6 caracteres" }).optional().or(z.literal("")),
     full_name: z.string().min(2, { message: "El nombre es obligatorio" }),
     birth_date: z.date({ message: "La fecha de nacimiento es obligatoria" }),
@@ -151,32 +151,67 @@ const customerSheetSchema = z
     }
   });
 
-const renewSubscriptionSchema = z.object({
-  plan_id: z.string().min(1, "Selecciona un plan"),
-  subscription_period: z.object({
-    from: z.date({ message: "La fecha de inicio es obligatoria" }),
-    to: z.date({ message: "La fecha de fin es obligatoria" }),
-  }),
-  price: z.number(),
-  discount_amount: z.coerce.number().min(0).default(0),
-  final_price: z.number(),
-  payment_method: z.enum(["cash", "card", "transfer"]),
-  weight_lb: z.coerce.number().positive("El peso debe ser mayor a 0"),
-  height_cm: z.coerce.number().positive("La estatura debe ser mayor a 0"),
-  body_type: z.enum(["ectomorph", "mesomorph", "endomorph"]),
-  diet_type: z.enum(["hipocalorica", "normocalorica", "hipercalorica"]),
-  activity_level: z.enum(["sedentario", "1_3_dias", "3_5_dias", "6_7_dias", "2_veces_dia"]),
-  body_fat_percentage: z.coerce.number().min(1, "Ingresa % grasa").max(100),
-  muscle_mass_kg: z.coerce.number().positive("Ingresa masa muscular"),
-  chest: z.coerce.number().positive("Ingresa pecho"),
-  waist: z.coerce.number().positive("Ingresa cintura"),
-  hip: z.coerce.number().positive("Ingresa cadera"),
-  arm_right: z.coerce.number().positive("Ingresa brazo derecho"),
-  arm_left: z.coerce.number().positive("Ingresa brazo izquierdo"),
-  leg_right: z.coerce.number().positive("Ingresa pierna derecha"),
-  leg_left: z.coerce.number().positive("Ingresa pierna izquierda"),
-  injuries: z.string().optional().or(z.literal("")),
-});
+const renewSubscriptionSchema = z
+  .object({
+    plan_id: z.string().min(1, "Selecciona un plan"),
+    subscription_period: z.object({
+      from: z.date({ message: "La fecha de inicio es obligatoria" }),
+      to: z.date({ message: "La fecha de fin es obligatoria" }),
+    }),
+    price: z.number(),
+    discount_amount: z.coerce.number().min(0).default(0),
+    final_price: z.number(),
+    payment_method: z.enum(["cash", "card", "transfer"]),
+    weight_lb: z.coerce.number().positive("El peso debe ser mayor a 0"),
+    height_cm: z.coerce.number().positive("La estatura debe ser mayor a 0"),
+    body_type: z.enum(["ectomorph", "mesomorph", "endomorph"]),
+    diet_type: z.enum(["hipocalorica", "normocalorica", "hipercalorica"]),
+    activity_level: z.enum(["sedentario", "1_3_dias", "3_5_dias", "6_7_dias", "2_veces_dia"]),
+    body_fat_percentage: z.coerce.number().min(1, "Ingresa % grasa").max(100),
+    muscle_mass_kg: z.coerce.number().positive("Ingresa masa muscular"),
+    chest: z.coerce.number().positive("Ingresa pecho"),
+    waist: z.coerce.number().positive("Ingresa cintura"),
+    hip: z.coerce.number().positive("Ingresa cadera"),
+    arm_right: z.coerce.number().positive("Ingresa brazo derecho"),
+    arm_left: z.coerce.number().positive("Ingresa brazo izquierdo"),
+    leg_right: z.coerce.number().positive("Ingresa pierna derecha"),
+    leg_left: z.coerce.number().positive("Ingresa pierna izquierda"),
+    injuries: z.string().optional().or(z.literal("")),
+    primary_goal: z.enum(primaryGoalValues).optional(),
+    secondary_goal: z.enum(primaryGoalValues).optional(),
+    focus_areas: z.array(z.enum(focusAreaValues)).default([]),
+    experience_level: z.enum(experienceLevelValues).optional(),
+    days_per_week: z.enum(daysPerWeekValues).optional(),
+    session_hours: z.coerce.number().int().min(0).max(8).default(0),
+    session_minutes_extra: z.coerce.number().int().min(0).max(59).default(0),
+    training_location: z.enum(trainingLocationValues).default(DEFAULT_TRAINING_LOCATION),
+    equipment_available: z.array(z.enum(equipmentOptionValues)).default(DEFAULT_EQUIPMENT_AVAILABLE),
+    cardio_preference: z.enum(cardioPreferenceValues).optional(),
+    parq_requires_attention: z.enum(parqChoiceValues).optional(),
+    restricted_movements: z.array(z.enum(restrictedMovementValues)).default([]),
+    exercise_preferences: z.string().optional().or(z.literal("")),
+    exercise_dislikes: z.string().optional().or(z.literal("")),
+    injuries_or_pain: z.string().optional().or(z.literal("")),
+    medical_clearance_notes: z.string().optional().or(z.literal("")),
+  })
+  .superRefine((value, ctx) => {
+    const sessionMinutes = combineSessionDuration(value.session_hours, value.session_minutes_extra);
+    if (sessionMinutes !== null && sessionMinutes > 480) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["session_hours"],
+        message: "La duración por sesión no puede superar 8 horas.",
+      });
+    }
+
+    if (value.parq_requires_attention === "yes" && !normalizeTextFieldValue(value.injuries_or_pain)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["injuries_or_pain"],
+        message: "Explica por qué requiere atención antes de entrenar.",
+      });
+    }
+  });
 
 function toBodyType(value?: string | null): BodyType {
   if (value === "ectomorph" || value === "mesomorph" || value === "endomorph") return value;
@@ -313,6 +348,7 @@ interface UseHookFormCustomerSheetParams {
   customer?: CustomerData | null;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  entrypoint?: "customers" | "cash";
 }
 
 export function useHookFormCustomerSheet({
@@ -320,6 +356,7 @@ export function useHookFormCustomerSheet({
   customer = null,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  entrypoint = "customers",
 }: UseHookFormCustomerSheetParams) {
   const [internalOpen, setInternalOpen] = useState(false);
   const userModifiedDatesRef = useRef(false);
@@ -554,6 +591,7 @@ export function useHookFormCustomerSheet({
     try {
       const payload: CreateCustomerData = {
         email: values.email,
+        origin: entrypoint,
         password: values.password || undefined,
         full_name: values.full_name,
         phone: values.phone,
@@ -652,7 +690,72 @@ interface RenewAssessmentData {
   muscle_mass?: number | null;
   chest_cm?: number | null;
   waist_cm?: number | null;
+  hip_cm?: number | null;
+  arm_right_cm?: number | null;
+  arm_left_cm?: number | null;
+  leg_right_cm?: number | null;
+  leg_left_cm?: number | null;
   injuries?: string;
+}
+
+function getRenewSubscriptionDefaultValues(
+  lastAssessment?: RenewAssessmentData | null,
+  trainingProfile?: TrainingProfileInput | null,
+): RenewSubscriptionFormValues {
+  const sessionDuration = splitSessionMinutes(trainingProfile?.session_minutes);
+
+  return {
+    plan_id: "",
+    subscription_period: {
+      from: new Date(),
+      to: new Date(),
+    },
+    price: 0,
+    discount_amount: 0,
+    final_price: 0,
+    payment_method: "cash",
+    weight_lb: kilogramsToPounds(lastAssessment?.weight_kg) || 0,
+    height_cm: lastAssessment?.height_cm || 0,
+    body_type: toBodyType(lastAssessment?.body_type),
+    diet_type: toDietType(lastAssessment?.diet_type),
+    activity_level: toActivityLevel(trainingProfile?.activity_level ?? lastAssessment?.activity_level),
+    body_fat_percentage: lastAssessment?.body_fat_percentage || 0,
+    muscle_mass_kg: lastAssessment?.muscle_mass || 0,
+    chest: lastAssessment?.chest_cm || 0,
+    waist: lastAssessment?.waist_cm || 0,
+    hip: lastAssessment?.hip_cm || 0,
+    arm_right: lastAssessment?.arm_right_cm || 0,
+    arm_left: lastAssessment?.arm_left_cm || 0,
+    leg_right: lastAssessment?.leg_right_cm || 0,
+    leg_left: lastAssessment?.leg_left_cm || 0,
+    injuries: lastAssessment?.injuries || "",
+    primary_goal: trainingProfile?.primary_goal ?? undefined,
+    secondary_goal: trainingProfile?.secondary_goal ?? undefined,
+    focus_areas: trainingProfile?.focus_areas ?? [],
+    experience_level: trainingProfile?.experience_level ?? undefined,
+    days_per_week: trainingProfile?.days_per_week
+      ? (trainingProfile.days_per_week.toString() as RenewSubscriptionFormValues["days_per_week"])
+      : undefined,
+    session_hours: sessionDuration.hours,
+    session_minutes_extra: sessionDuration.minutes,
+    training_location: trainingProfile?.training_location ?? DEFAULT_TRAINING_LOCATION,
+    equipment_available:
+      trainingProfile?.equipment_available && trainingProfile.equipment_available.length > 0
+        ? trainingProfile.equipment_available
+        : DEFAULT_EQUIPMENT_AVAILABLE,
+    cardio_preference: trainingProfile?.cardio_preference ?? undefined,
+    parq_requires_attention:
+      trainingProfile?.parq_requires_attention === true
+        ? "yes"
+        : trainingProfile?.parq_requires_attention === false
+          ? "no"
+          : undefined,
+    restricted_movements: trainingProfile?.restricted_movements ?? [],
+    exercise_preferences: trainingProfile?.exercise_preferences || "",
+    exercise_dislikes: trainingProfile?.exercise_dislikes || "",
+    injuries_or_pain: trainingProfile?.injuries_or_pain || "",
+    medical_clearance_notes: trainingProfile?.medical_clearance_notes || "",
+  };
 }
 
 interface UseHookFormRenewSubscriptionParams {
@@ -660,8 +763,10 @@ interface UseHookFormRenewSubscriptionParams {
   customerGender?: "male" | "female" | "other" | null;
   customerBirthDate?: string | null;
   lastAssessment?: RenewAssessmentData | null;
+  trainingProfile?: TrainingProfileInput | null;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  entrypoint?: "customers" | "cash";
 }
 
 export function useHookFormRenewSubscription({
@@ -669,8 +774,10 @@ export function useHookFormRenewSubscription({
   customerGender,
   customerBirthDate,
   lastAssessment,
+  trainingProfile,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  entrypoint = "customers",
 }: UseHookFormRenewSubscriptionParams) {
   const [internalOpen, setInternalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -683,32 +790,7 @@ export function useHookFormRenewSubscription({
 
   const form = useForm<RenewSubscriptionFormValues>({
     resolver: zodResolver(renewSubscriptionSchema) as Resolver<RenewSubscriptionFormValues>,
-    defaultValues: {
-      plan_id: "",
-      subscription_period: {
-        from: new Date(),
-        to: new Date(),
-      },
-      price: 0,
-      discount_amount: 0,
-      final_price: 0,
-      payment_method: "cash",
-      weight_lb: kilogramsToPounds(lastAssessment?.weight_kg) || 0,
-      height_cm: lastAssessment?.height_cm || 0,
-      body_type: toBodyType(lastAssessment?.body_type),
-      diet_type: toDietType(lastAssessment?.diet_type),
-      activity_level: toActivityLevel(lastAssessment?.activity_level),
-      body_fat_percentage: lastAssessment?.body_fat_percentage || 0,
-      muscle_mass_kg: lastAssessment?.muscle_mass || 0,
-      chest: lastAssessment?.chest_cm || 0,
-      waist: lastAssessment?.waist_cm || 0,
-      hip: 0,
-      arm_right: 0,
-      arm_left: 0,
-      leg_right: 0,
-      leg_left: 0,
-      injuries: lastAssessment?.injuries || "",
-    },
+    defaultValues: getRenewSubscriptionDefaultValues(lastAssessment, trainingProfile),
   });
 
   const watchedPlanId = useWatch({ control: form.control, name: "plan_id" });
@@ -718,6 +800,7 @@ export function useHookFormRenewSubscription({
   const watchedBodyType = useWatch({ control: form.control, name: "body_type" });
   const watchedDietType = useWatch({ control: form.control, name: "diet_type" });
   const watchedActivity = useWatch({ control: form.control, name: "activity_level" });
+  const watchedParqRequiresAttention = useWatch({ control: form.control, name: "parq_requires_attention" });
   const selectedPlanPrice = useMemo(() => {
     const selectedPlan = plans.find((plan) => plan.id.toString() === watchedPlanId);
     return selectedPlan?.price ?? 0;
@@ -745,35 +828,10 @@ export function useHookFormRenewSubscription({
 
   useEffect(() => {
     if (!open) return;
-    form.reset({
-      plan_id: "",
-      subscription_period: {
-        from: new Date(),
-        to: new Date(),
-      },
-      price: 0,
-      discount_amount: 0,
-      final_price: 0,
-      payment_method: "cash",
-      weight_lb: kilogramsToPounds(lastAssessment?.weight_kg) || 0,
-      height_cm: lastAssessment?.height_cm || 0,
-      body_type: toBodyType(lastAssessment?.body_type),
-      diet_type: toDietType(lastAssessment?.diet_type),
-      activity_level: toActivityLevel(lastAssessment?.activity_level),
-      body_fat_percentage: lastAssessment?.body_fat_percentage || 0,
-      muscle_mass_kg: lastAssessment?.muscle_mass || 0,
-      chest: lastAssessment?.chest_cm || 0,
-      waist: lastAssessment?.waist_cm || 0,
-      hip: 0,
-      arm_right: 0,
-      arm_left: 0,
-      leg_right: 0,
-      leg_left: 0,
-      injuries: lastAssessment?.injuries || "",
-    });
+    form.reset(getRenewSubscriptionDefaultValues(lastAssessment, trainingProfile));
     userModifiedDatesRef.current = false;
     previousPlanId.current = null;
-  }, [open, lastAssessment, form]);
+  }, [open, lastAssessment, trainingProfile, form]);
 
   useEffect(() => {
     if (!watchedPlanId) return;
@@ -800,10 +858,27 @@ export function useHookFormRenewSubscription({
     form.setValue("final_price", finalPrice);
   }, [selectedPlanPrice, watchedDiscount, form]);
 
+  useEffect(() => {
+    if (watchedParqRequiresAttention !== "no") return;
+
+    form.setValue("injuries_or_pain", "", {
+      shouldDirty: false,
+      shouldTouch: false,
+      shouldValidate: false,
+    });
+    form.setValue("medical_clearance_notes", "", {
+      shouldDirty: false,
+      shouldTouch: false,
+      shouldValidate: false,
+    });
+    form.clearErrors(["injuries_or_pain", "medical_clearance_notes"]);
+  }, [form, watchedParqRequiresAttention]);
+
   const onSubmit = async (values: RenewSubscriptionFormValues) => {
     try {
       setLoading(true);
       const result = await renewSubscription(customerId, {
+        origin: entrypoint,
         plan_id: Number(values.plan_id),
         start_date: values.subscription_period.from,
         end_date: values.subscription_period.to,
@@ -825,7 +900,29 @@ export function useHookFormRenewSubscription({
         arm_left: values.arm_left,
         leg_right: values.leg_right,
         leg_left: values.leg_left,
-        injuries: values.injuries,
+        injuries: normalizeTextFieldValue(values.injuries),
+        primary_goal: values.primary_goal,
+        secondary_goal: values.secondary_goal,
+        focus_areas: values.focus_areas,
+        experience_level: values.experience_level,
+        days_per_week: values.days_per_week ? Number(values.days_per_week) : undefined,
+        session_minutes: combineSessionDuration(values.session_hours, values.session_minutes_extra) ?? undefined,
+        training_location: DEFAULT_TRAINING_LOCATION,
+        equipment_available: values.equipment_available,
+        cardio_preference: values.cardio_preference,
+        parq_requires_attention:
+          values.parq_requires_attention === "yes"
+            ? true
+            : values.parq_requires_attention === "no"
+              ? false
+              : undefined,
+        restricted_movements: values.restricted_movements,
+        exercise_preferences: normalizeTextFieldValue(values.exercise_preferences),
+        exercise_dislikes: normalizeTextFieldValue(values.exercise_dislikes),
+        injuries_or_pain:
+          values.parq_requires_attention === "yes" ? normalizeTextFieldValue(values.injuries_or_pain) : "",
+        medical_clearance_notes:
+          values.parq_requires_attention === "yes" ? normalizeTextFieldValue(values.medical_clearance_notes) : "",
       });
 
       if (result.success) {

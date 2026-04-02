@@ -84,7 +84,7 @@ export function WeightChart({ data }: WeightChartProps) {
         <Select value={timeRange} onValueChange={setTimeRange}>
           <SelectTrigger
             className="w-[160px] rounded-lg sm:ml-auto bg-background/50 border-primary/10"
-            aria-label="Select a value"
+            aria-label="Seleccionar un rango"
           >
             <SelectValue placeholder="Últimos 3 meses" />
           </SelectTrigger>

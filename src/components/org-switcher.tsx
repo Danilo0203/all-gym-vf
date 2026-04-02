@@ -1,19 +1,7 @@
 'use client';
 
 // import { useAuth, useOrganizationList } from '@clerk/nextjs';
-import { Check, ChevronsUpDown, GalleryVerticalEnd, Plus } from 'lucide-react';
-import Image from 'next/image';
-import { useRouter } from 'next/navigation';
-
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu';
+import { Dumbbell } from 'lucide-react';
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -36,9 +24,7 @@ interface MockMembership {
 }
 
 export function OrgSwitcher() {
-  const { isMobile, state } = useSidebar();
-  const router = useRouter();
-
+  const { state } = useSidebar();
 
   // Mock data for replacement
   const isLoaded = true;
@@ -49,10 +35,10 @@ export function OrgSwitcher() {
          id: "mem_1",
          organization: {
             id: "org_1",
-            name: "My Organization",
-            slug: "my-org",
-            imageUrl: "https://api.slingacademy.com/public/sample-photos/1.jpeg", // Using the allowed domain
-            hasImage: true
+            name: "AllGym",
+            slug: "allgym",
+            imageUrl: "",
+            hasImage: false
          },
          role: "admin"
        }
@@ -77,30 +63,14 @@ export function OrgSwitcher() {
     (membership) => membership.organization.id === orgId
   )?.organization;
 
-
-  // Handle organization switch
-  const handleOrganizationSwitch = async (organizationId: string) => {
-    /*
-    if (orgId === organizationId || !setActive) {
-      return; // Already active or setActive not available
-    }
-    try {
-      await setActive({ organization: organizationId });
-    } catch (error) {
-      console.error('Failed to switch organization:', error);
-    }
-    */
-    console.log("Switch to", organizationId);
-  };
-
   // Show loading state
   if (!isLoaded) {
     return (
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton size='lg' disabled>
-            <div className='bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg'>
-              <GalleryVerticalEnd className='size-4' />
+            <div className='flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-red-600 text-white'>
+              <Dumbbell className='size-4' />
             </div>
             <div
               className={`grid flex-1 text-left text-sm leading-tight transition-all duration-200 ease-in-out ${
@@ -109,9 +79,9 @@ export function OrgSwitcher() {
                   : 'visible max-w-full opacity-100'
               }`}
             >
-              <span className='truncate font-medium'>Loading...</span>
+              <span className='truncate font-medium'>Cargando...</span>
               <span className='text-muted-foreground truncate text-xs'>
-                Organizations
+                Organizaciones
               </span>
             </div>
           </SidebarMenuButton>
@@ -122,40 +92,7 @@ export function OrgSwitcher() {
 
   // Show create organization option if no organizations
   if (!userMemberships?.data || userMemberships.data.length === 0) {
-    return (
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            size='lg'
-            onClick={() => router.push('/panel/workspaces')}
-            className='data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
-          >
-            <div className='bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg'>
-              <Plus className='size-4' />
-            </div>
-            <div
-              className={`grid flex-1 text-left text-sm leading-tight transition-all duration-200 ease-in-out ${
-                state === 'collapsed'
-                  ? 'invisible max-w-0 overflow-hidden opacity-0'
-                  : 'visible max-w-full opacity-100'
-              }`}
-            >
-              <span className='truncate font-medium'>Create organization</span>
-              <span className='text-muted-foreground truncate text-xs'>
-                Get started
-              </span>
-            </div>
-            <ChevronsUpDown
-              className={`ml-auto transition-all duration-200 ease-in-out ${
-                state === 'collapsed'
-                  ? 'invisible max-w-0 opacity-0'
-                  : 'visible max-w-full opacity-100'
-              }`}
-            />
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    );
+    return null;
   }
 
   // Use active organization or first organization as fallback
@@ -169,108 +106,28 @@ export function OrgSwitcher() {
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <SidebarMenuButton
-              size='lg'
-              className='data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
-            >
-              <div className='bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg'>
-                {displayOrganization.hasImage &&
-                displayOrganization.imageUrl ? (
-                  <Image
-                    src={displayOrganization.imageUrl}
-                    alt={displayOrganization.name}
-                    width={32}
-                    height={32}
-                    className='size-full object-cover'
-                  />
-                ) : (
-                  <GalleryVerticalEnd className='size-4' />
-                )}
-              </div>
-              <div
-                className={`grid flex-1 text-left text-sm leading-tight transition-all duration-200 ease-in-out ${
-                  state === 'collapsed'
-                    ? 'invisible max-w-0 overflow-hidden opacity-0'
-                    : 'visible max-w-full opacity-100'
-                }`}
-              >
-                <span className='truncate font-medium'>
-                  {displayOrganization.name}
-                </span>
-                <span className='text-muted-foreground truncate text-xs'>
-                  {userMemberships.data.find(
-                    (m) => m.organization.id === displayOrganization.id
-                  )?.role || 'Organization'}
-                </span>
-              </div>
-              <ChevronsUpDown
-                className={`ml-auto transition-all duration-200 ease-in-out ${
-                  state === 'collapsed'
-                    ? 'invisible max-w-0 opacity-0'
-                    : 'visible max-w-full opacity-100'
-                }`}
-              />
-            </SidebarMenuButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            className='w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg'
-            align='start'
-            side={isMobile ? 'bottom' : 'right'}
-            sideOffset={4}
+        <SidebarMenuButton
+          size='lg'
+          className='cursor-default data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
+        >
+          <div className='flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-red-600 text-white'>
+            <Dumbbell className='size-4' />
+          </div>
+          <div
+            className={`grid flex-1 text-left text-sm leading-tight transition-all duration-200 ease-in-out ${
+              state === 'collapsed'
+                ? 'invisible max-w-0 overflow-hidden opacity-0'
+                : 'visible max-w-full opacity-100'
+            }`}
           >
-            <DropdownMenuLabel className='text-muted-foreground text-xs'>
-              Organizations
-            </DropdownMenuLabel>
-            {userMemberships.data.map((membership, index) => {
-              const isActive = membership.organization.id === orgId;
-              return (
-                <DropdownMenuItem
-                  key={membership.id}
-                  onClick={() =>
-                    handleOrganizationSwitch(membership.organization.id)
-                  }
-                  className='gap-2 p-2'
-                >
-                  <div className='flex size-6 items-center justify-center overflow-hidden rounded-md border'>
-                    {membership.organization.hasImage &&
-                    membership.organization.imageUrl ? (
-                      <Image
-                        src={membership.organization.imageUrl}
-                        alt={membership.organization.name}
-                        width={24}
-                        height={24}
-                        className='size-full object-cover'
-                      />
-                    ) : (
-                      <GalleryVerticalEnd className='size-3.5 shrink-0' />
-                    )}
-                  </div>
-                  {membership.organization.name}
-                  {isActive && <Check className='ml-auto size-4' />}
-                  {!isActive && (
-                    <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
-                  )}
-                </DropdownMenuItem>
-              );
-            })}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className='gap-2 p-2'
-              onClick={() => {
-                router.push('/panel/workspaces');
-              }}
-            >
-              <div className='flex size-6 items-center justify-center rounded-md border bg-transparent'>
-                <Plus className='size-4' />
-              </div>
-              <div className='text-muted-foreground font-medium'>
-                Add organization
-              </div>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            <span className='truncate font-medium'>AllGym</span>
+            <span className='text-muted-foreground truncate text-xs'>
+              {userMemberships.data.find(
+                (m) => m.organization.id === displayOrganization.id
+              )?.role || 'Organización'}
+            </span>
+          </div>
+        </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>
   );

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { PRIMARY_GOAL_OPTIONS } from "@/lib/training/options";
 import { formatSessionDuration } from "@/lib/training/profile-defaults";
 import type {
   RoutineDetailRecord,
@@ -88,6 +89,13 @@ function groupDetailsByDay(details: RoutineDetailRecord[]) {
   }, {});
 }
 
+export function getPrimaryGoalLabel(value: string | null | undefined) {
+  if (!value) return null;
+
+  const option = PRIMARY_GOAL_OPTIONS.find((item) => item.value === value);
+  return option?.label ?? value;
+}
+
 export function buildEditorState(detail: RoutineDetailRecord): DetailEditorState {
   return {
     sets: detail.sets?.toString() || "",
@@ -101,7 +109,7 @@ export function buildEditorState(detail: RoutineDetailRecord): DetailEditorState
 
 export function buildTrainingContextHelper(trainingProfile: TrainingProfileRecord | null) {
   return [
-    trainingProfile?.primary_goal ? `Objetivo: ${trainingProfile.primary_goal}` : null,
+    trainingProfile?.primary_goal ? `Objetivo: ${getPrimaryGoalLabel(trainingProfile.primary_goal)}` : null,
     trainingProfile?.days_per_week ? `${trainingProfile.days_per_week} días/semana` : null,
     trainingProfile?.session_minutes ? `${formatSessionDuration(trainingProfile.session_minutes)} por sesión` : null,
   ]
@@ -163,6 +171,7 @@ export function RoutineViewer({
     .map(Number)
     .sort((a, b) => a - b);
   const defaultOpenDays = days.length > 0 ? [`day-${days[0]}`] : [];
+  const primaryGoalLabel = getPrimaryGoalLabel(routine.primary_goal);
 
   return (
     <Card className="border-border/70">
@@ -170,7 +179,7 @@ export function RoutineViewer({
         <div className="flex flex-wrap items-center gap-3">
           <CardTitle className="text-base">{title}</CardTitle>
           <Badge variant={getStatusBadgeVariant(routine.status)}>{getStatusLabel(routine.status)}</Badge>
-          {routine.primary_goal ? <Badge variant="outline">{routine.primary_goal}</Badge> : null}
+          {primaryGoalLabel ? <Badge variant="outline">{primaryGoalLabel}</Badge> : null}
         </div>
         <p className="text-sm text-muted-foreground">
           {editable

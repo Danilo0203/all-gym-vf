@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
+import { PASSWORD_RECOVERY_ENABLED } from "@/lib/auth/feature-flags";
 import { toast } from 'sonner';
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +27,34 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  if (!PASSWORD_RECOVERY_ENABLED) {
+    return (
+      <div className="bg-muted flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
+        <div className="flex w-full max-w-sm flex-col gap-6">
+          <Link href="/" className="flex items-center gap-2 self-center font-semibold text-lg">
+            <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-lg">
+              <IconBarbell className="size-5" />
+            </div>
+            All Gym
+          </Link>
+          <Card>
+            <CardHeader className="text-center">
+              <CardTitle className="text-xl">Recuperación deshabilitada</CardTitle>
+              <CardDescription>
+                Esta función no está disponible en el despliegue piloto con URL temporal.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-center">
+              <Button asChild className="w-full">
+                <Link href="/iniciar-sesion">Volver al inicio de sesión</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +85,7 @@ export default function ResetPasswordPage() {
         toast.error(error.message);
       } else {
         toast.success('Contraseña actualizada correctamente');
-        router.push('/panel');
+        router.push('/iniciar-sesion');
         router.refresh();
       }
     } catch {
@@ -77,7 +106,7 @@ export default function ResetPasswordPage() {
         </Link>
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-xl">Nueva Contraseña</CardTitle>
+            <CardTitle className="text-xl">Nueva contraseña</CardTitle>
             <CardDescription>
               Ingresa tu nueva contraseña para asegurar tu cuenta
             </CardDescription>
@@ -86,7 +115,7 @@ export default function ResetPasswordPage() {
             <form onSubmit={handleSubmit}>
               <FieldGroup>
                 <Field>
-                  <FieldLabel htmlFor="password">Nueva Contraseña</FieldLabel>
+                  <FieldLabel htmlFor="password">Nueva contraseña</FieldLabel>
                   <Input
                     id="password"
                     type="password"
@@ -98,7 +127,7 @@ export default function ResetPasswordPage() {
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="confirmPassword">Confirmar Contraseña</FieldLabel>
+                  <FieldLabel htmlFor="confirmPassword">Confirmar contraseña</FieldLabel>
                   <Input
                     id="confirmPassword"
                     type="password"
@@ -112,7 +141,7 @@ export default function ResetPasswordPage() {
                 <Field>
                   <Button type="submit" disabled={isLoading} className="w-full">
                     {isLoading && <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Actualizar Contraseña
+                    Actualizar contraseña
                   </Button>
                 </Field>
               </FieldGroup>

@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import CustomerViewPage from '@/features/customers/components/customer-view-page';
 
 export const metadata = {
-  title: 'Dashboard : Customer View'
+  title: 'Panel: Vista del cliente'
 };
 
 type PageProps = { params: Promise<{ customerId: string }> };

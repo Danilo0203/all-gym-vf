@@ -15,6 +15,7 @@ import {
 import type { SubscriptionEntry } from "../../../actions/customer-history-actions";
 import { cn } from "@/lib/utils";
 import { RenewSubscriptionSheet } from "../../renew-subscription-sheet";
+import type { TrainingProfileRecord } from "@/lib/training/types";
 
 interface SubscriptionHistoryTabProps {
   subscriptionHistory: SubscriptionEntry[];
@@ -32,7 +33,14 @@ interface SubscriptionHistoryTabProps {
     muscle_mass?: number | null;
     chest_cm?: number | null;
     waist_cm?: number | null;
+    hip_cm?: number | null;
+    arm_right_cm?: number | null;
+    arm_left_cm?: number | null;
+    leg_right_cm?: number | null;
+    leg_left_cm?: number | null;
+    injuries?: string;
   } | null;
+  trainingProfile?: TrainingProfileRecord | null;
 }
 
 export function SubscriptionHistoryTab({
@@ -42,6 +50,7 @@ export function SubscriptionHistoryTab({
   customerGender,
   customerBirthDate,
   lastAssessment,
+  trainingProfile,
 }: SubscriptionHistoryTabProps) {
   const statusConfig: Record<string, { label: string; style: string }> = {
     active: { label: "Activa", style: "bg-green-500/10 text-green-600 border-green-500/20" },
@@ -69,6 +78,7 @@ export function SubscriptionHistoryTab({
               customerGender={customerGender}
               customerBirthDate={customerBirthDate}
               lastAssessment={lastAssessment}
+              trainingProfile={trainingProfile}
             />
           </div>
         </CardHeader>

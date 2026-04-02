@@ -4,7 +4,7 @@ import { SearchParams } from "nuqs/server";
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths, startOfYear, endOfYear, format } from "date-fns";
 
 export const metadata = {
-  title: "Dashboard: Estado del Negocio",
+  title: "Panel: Estado del negocio",
 };
 
 type pageProps = {

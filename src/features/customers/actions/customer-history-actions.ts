@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient, getUserEmail } from "@/lib/supabase/admin";
+import { runPaymentsPostedQueryCompat } from "@/lib/payments/schema-compat";
 
 type PlanSummary = { name?: string | null; price?: number | null };
 type AttendanceLogRow = {
@@ -151,6 +152,11 @@ export interface BodyAssessmentEntry {
   waist_cm: number | null;
   chest_cm: number | null;
   arm_cm: number | null;
+  hip_cm: number | null;
+  arm_right_cm: number | null;
+  arm_left_cm: number | null;
+  leg_right_cm: number | null;
+  leg_left_cm: number | null;
   activity_level: string | null;
   diet_type: string | null;
   daily_calories: number | null;
@@ -231,10 +237,15 @@ export async function getCustomerKPIs(customerId: string): Promise<CustomerHisto
 
   // Total gastado - intentar desde payments, fallback a suscripciones
   let totalSpent = 0;
-  const { data: paymentsData, error: paymentsError } = await supabase
-    .from("payments")
-    .select("amount_paid")
-    .eq("user_id", customerId);
+  const { data: paymentsData, error: paymentsError } = await runPaymentsPostedQueryCompat((usePostedFilter) => {
+    let query = supabase.from("payments").select("amount_paid").eq("user_id", customerId);
+
+    if (usePostedFilter) {
+      query = query.eq("status", "posted");
+    }
+
+    return query;
+  });
 
   if (paymentsError) {
     // Fallback: calcular desde suscripciones
@@ -314,30 +325,38 @@ export async function getPaymentHistory(customerId: string): Promise<PaymentEntr
   const supabase = await createClient();
 
   // Obtener de la tabla payments con las columnas correctas
-  const { data, error } = await supabase
-    .from("payments")
-    .select(
-      `
-      id,
-      payment_date,
-      amount_original,
-      discount_amount,
-      amount_paid,
-      method,
-      subscription_id,
-      subscriptions (
-        status,
-        start_date,
-        end_date,
-        plan_id,
-        plans (
-          name
+  const { data, error } = await runPaymentsPostedQueryCompat((usePostedFilter) => {
+    let query = supabase
+      .from("payments")
+      .select(
+        `
+        id,
+        payment_date,
+        amount_original,
+        discount_amount,
+        amount_paid,
+        method,
+        subscription_id,
+        subscriptions (
+          status,
+          start_date,
+          end_date,
+          plan_id,
+          plans (
+            name
+          )
         )
+      `,
       )
-    `,
-    )
-    .eq("user_id", customerId)
-    .order("payment_date", { ascending: false });
+      .eq("user_id", customerId)
+      .order("payment_date", { ascending: false });
+
+    if (usePostedFilter) {
+      query = query.eq("status", "posted");
+    }
+
+    return query;
+  });
 
   // Si la tabla no existe o hay error, intentar construir desde suscripciones
   if (error) {
@@ -466,7 +485,11 @@ export async function getBodyAssessmentHistory(customerId: string): Promise<Body
       body_type,
       chest,
       waist,
+      hip,
       arm_right,
+      arm_left,
+      leg_right,
+      leg_left,
       activity_level,
       diet_type,
       daily_calories,
@@ -494,6 +517,11 @@ export async function getBodyAssessmentHistory(customerId: string): Promise<Body
     waist_cm: assessment.waist,
     chest_cm: assessment.chest,
     arm_cm: assessment.arm_right,
+    hip_cm: assessment.hip,
+    arm_right_cm: assessment.arm_right,
+    arm_left_cm: assessment.arm_left,
+    leg_right_cm: assessment.leg_right,
+    leg_left_cm: assessment.leg_left,
     activity_level: assessment.activity_level,
     diet_type: assessment.diet_type,
     daily_calories: assessment.daily_calories,

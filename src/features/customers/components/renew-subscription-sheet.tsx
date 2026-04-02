@@ -11,8 +11,10 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { FormCheckboxGroup } from "@/components/forms/form-checkbox-group";
 import { FormSelect } from "@/components/forms/form-select";
 import { FormInputGroup } from "@/components/forms/form-input-group";
+import { FormRadioGroup } from "@/components/forms/form-radio-group";
 import { FormTextarea } from "@/components/forms/form-textarea";
 import {
   IconCalendar,
@@ -30,9 +32,21 @@ import { Separator } from "@/components/ui/separator";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { differenceInDays, format, isValid, parse } from "date-fns";
 import { useHookFormRenewSubscription } from "../hooks/use-hook-form-customers";
+import {
+  CARDIO_PREFERENCE_OPTIONS,
+  DAYS_PER_WEEK_OPTIONS,
+  EQUIPMENT_OPTIONS,
+  EXPERIENCE_LEVEL_OPTIONS,
+  FOCUS_AREA_OPTIONS,
+  PRIMARY_GOAL_OPTIONS,
+  RESTRICTED_MOVEMENT_OPTIONS,
+} from "@/lib/training/options";
+import type { TrainingProfileInput } from "@/lib/training/types";
 
 function DatePickerInput({ value, onChange }: { value?: Date; onChange: (date?: Date) => void }) {
   const [inputValue, setInputValue] = useState<string | undefined>(undefined);
+  const [open, setOpen] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState<Date>(value && isValid(value) ? value : new Date());
   const displayedValue = inputValue ?? (value && isValid(value) ? format(value, "dd/MM/yyyy") : "");
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -42,6 +56,7 @@ function DatePickerInput({ value, onChange }: { value?: Date; onChange: (date?: 
     if (val.length === 10) {
       const parsed = parse(val, "dd/MM/yyyy", new Date());
       if (isValid(parsed)) {
+        setVisibleMonth(parsed);
         onChange(parsed);
       }
     } else if (val === "") {
@@ -59,7 +74,15 @@ function DatePickerInput({ value, onChange }: { value?: Date; onChange: (date?: 
         maxLength={10}
       />
       <InputGroupAddon align="inline-end">
-        <Popover>
+        <Popover
+          open={open}
+          onOpenChange={(nextOpen) => {
+            setOpen(nextOpen);
+            if (nextOpen) {
+              setVisibleMonth(value && isValid(value) ? value : new Date());
+            }
+          }}
+        >
           <PopoverTrigger asChild>
             <InputGroupButton variant="ghost" size="icon-sm" className="shrink-0" tabIndex={-1}>
               <IconCalendar className="h-4 w-4 opacity-50" />
@@ -69,8 +92,13 @@ function DatePickerInput({ value, onChange }: { value?: Date; onChange: (date?: 
             <Calendar
               mode="single"
               selected={value}
+              month={visibleMonth}
+              onMonthChange={setVisibleMonth}
               onSelect={(date) => {
                 onChange(date);
+                if (date && isValid(date)) {
+                  setVisibleMonth(date);
+                }
                 setInputValue(undefined);
               }}
               initialFocus
@@ -101,11 +129,18 @@ interface RenewSubscriptionSheetProps {
     muscle_mass?: number | null;
     chest_cm?: number | null;
     waist_cm?: number | null;
+    hip_cm?: number | null;
+    arm_right_cm?: number | null;
+    arm_left_cm?: number | null;
+    leg_right_cm?: number | null;
+    leg_left_cm?: number | null;
     injuries?: string;
   } | null;
+  trainingProfile?: TrainingProfileInput | null;
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  entrypoint?: "customers" | "cash";
 }
 
 export function RenewSubscriptionSheet({
@@ -114,9 +149,11 @@ export function RenewSubscriptionSheet({
   customerGender,
   customerBirthDate,
   lastAssessment,
+  trainingProfile,
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  entrypoint = "customers",
 }: RenewSubscriptionSheetProps) {
   const { open, setOpen, form, plans, loading, selectedPlanPrice, calculationPreview, onSubmit, markDatesAsModified } =
     useHookFormRenewSubscription({
@@ -124,9 +161,13 @@ export function RenewSubscriptionSheet({
       customerGender,
       customerBirthDate,
       lastAssessment,
+      trainingProfile,
       open: controlledOpen,
       onOpenChange: controlledOnOpenChange,
+      entrypoint,
     });
+
+  const showAttentionDetails = form.watch("parq_requires_attention") === "yes";
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -142,9 +183,11 @@ export function RenewSubscriptionSheet({
       )}
       <SheetContent className="sm:max-w-xl w-full flex flex-col h-full p-0 gap-0">
         <SheetHeader className="px-6 py-4 border-b space-y-1 sticky top-0 bg-background/80 backdrop-blur-md z-10">
-          <SheetTitle>Renovar Suscripción: {customerName}</SheetTitle>
+          <SheetTitle>{entrypoint === "cash" ? `Renovar y cobrar: ${customerName}` : `Renovar Suscripción: ${customerName}`}</SheetTitle>
           <SheetDescription>
-            Completa los detalles de la renovación y actualiza la ficha médica si es necesario.
+            {entrypoint === "cash"
+              ? "Completa la renovación dentro de la sesión de caja actual y confirma el cobro."
+              : "Completa los detalles de la renovación y actualiza la ficha médica si es necesario."}
           </SheetDescription>
         </SheetHeader>
 
@@ -384,6 +427,179 @@ export function RenewSubscriptionSheet({
                       <p>Cardio: {calculationPreview.cardioMinutes} min</p>
                     </div>
                   )}
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-primary flex items-center gap-2">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs">
+                    3
+                  </span>
+                  Perfil de Entrenamiento
+                </h4>
+                <div className="space-y-4 pl-4">
+                  <div className="rounded-lg border bg-muted/20 p-4 space-y-4">
+                    <div className="space-y-1">
+                      <h5 className="text-sm font-semibold">Objetivo</h5>
+                      <p className="text-xs text-muted-foreground">
+                        Se carga el perfil actual para que puedas ajustarlo si cambió la meta o la rutina del cliente.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormSelect
+                        control={form.control}
+                        name="primary_goal"
+                        label="Objetivo principal"
+                        placeholder="Seleccionar objetivo..."
+                        options={PRIMARY_GOAL_OPTIONS}
+                      />
+                      <FormSelect
+                        control={form.control}
+                        name="secondary_goal"
+                        label="Objetivo secundario"
+                        placeholder="Opcional"
+                        options={PRIMARY_GOAL_OPTIONS}
+                      />
+                    </div>
+                    <FormCheckboxGroup
+                      control={form.control}
+                      name="focus_areas"
+                      label="Áreas de enfoque"
+                      description="Opcional. Ayuda a priorizar grupos musculares dentro de la rutina."
+                      options={FOCUS_AREA_OPTIONS}
+                      columns={3}
+                    />
+                  </div>
+
+                  <div className="rounded-lg border bg-muted/20 p-4 space-y-4">
+                    <div className="space-y-1">
+                      <h5 className="text-sm font-semibold">Salud y restricciones</h5>
+                      <p className="text-xs text-muted-foreground">
+                        Úsalo cuando el cliente cambió de condición, se lesionó o necesita adaptar su entrenamiento.
+                      </p>
+                    </div>
+                    <FormRadioGroup
+                      control={form.control}
+                      name="parq_requires_attention"
+                      label="¿Necesita revisión médica o atención especial antes de entrenar?"
+                      options={[
+                        { label: "Sí, requiere atención", value: "yes" },
+                        { label: "No, puede entrenar normal", value: "no" },
+                      ]}
+                      orientation="vertical"
+                    />
+                    {showAttentionDetails ? (
+                      <>
+                        <FormTextarea
+                          control={form.control}
+                          name="injuries_or_pain"
+                          label="¿Por qué requiere atención?"
+                          placeholder="Ejemplo: molestia en rodilla derecha al hacer sentadillas profundas."
+                          config={{ rows: 3, maxLength: 240 }}
+                        />
+                        <FormTextarea
+                          control={form.control}
+                          name="medical_clearance_notes"
+                          label="Notas de autorización médica"
+                          placeholder="Opcional. Indicaciones médicas, observaciones o restricciones clínicas."
+                          config={{ rows: 3, maxLength: 240 }}
+                        />
+                      </>
+                    ) : null}
+                    <FormCheckboxGroup
+                      control={form.control}
+                      name="restricted_movements"
+                      label="Movimientos a evitar o limitar"
+                      options={RESTRICTED_MOVEMENT_OPTIONS}
+                      showBadges={false}
+                      columns={2}
+                    />
+                  </div>
+
+                  <div className="rounded-lg border bg-muted/20 p-4 space-y-4">
+                    <div className="space-y-1">
+                      <h5 className="text-sm font-semibold">Preferencias de entrenamiento</h5>
+                      <p className="text-xs text-muted-foreground">
+                        Esto ayuda a regenerar o ajustar la rutina con el contexto correcto.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormSelect
+                        control={form.control}
+                        name="experience_level"
+                        label="Nivel de experiencia"
+                        placeholder="Seleccionar..."
+                        options={EXPERIENCE_LEVEL_OPTIONS}
+                      />
+                      <FormSelect
+                        control={form.control}
+                        name="days_per_week"
+                        label="Días por semana"
+                        placeholder="Seleccionar..."
+                        options={DAYS_PER_WEEK_OPTIONS}
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <h6 className="text-sm font-medium">Duración por sesión</h6>
+                        <p className="text-xs text-muted-foreground">Define la sesión usando horas y minutos.</p>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormInputGroup
+                          control={form.control}
+                          name="session_hours"
+                          label="Horas"
+                          type="number"
+                          min={0}
+                          max={8}
+                          placeholder="1"
+                        />
+                        <FormInputGroup
+                          control={form.control}
+                          name="session_minutes_extra"
+                          label="Minutos"
+                          type="number"
+                          min={0}
+                          max={59}
+                          placeholder="30"
+                        />
+                      </div>
+                    </div>
+                    <FormRadioGroup
+                      control={form.control}
+                      name="cardio_preference"
+                      label="Preferencia de cardio"
+                      options={CARDIO_PREFERENCE_OPTIONS}
+                      orientation="vertical"
+                    />
+                    <FormCheckboxGroup
+                      control={form.control}
+                      name="equipment_available"
+                      label="Equipo disponible"
+                      description="Selecciona lo que realmente tiene a mano el cliente."
+                      options={EQUIPMENT_OPTIONS}
+                      showBadges={false}
+                      columns={3}
+                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormTextarea
+                        control={form.control}
+                        name="exercise_preferences"
+                        label="Preferencias"
+                        placeholder="Ejemplo: le gustan máquinas, caminadora y superseries."
+                        config={{ rows: 3, maxLength: 220 }}
+                      />
+                      <FormTextarea
+                        control={form.control}
+                        name="exercise_dislikes"
+                        label="Ejercicios o formatos que evita"
+                        placeholder="Ejemplo: no le gustan burpees ni ejercicios muy técnicos."
+                        config={{ rows: 3, maxLength: 220 }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </form>

@@ -40,7 +40,7 @@ export function ModeToggle() {
       onClick={handleThemeToggle}
     >
       <IconBrightness />
-      <span className='sr-only'>Toggle theme</span>
+      <span className='sr-only'>Cambiar tema</span>
     </Button>
   );
 }

@@ -3,7 +3,7 @@ import ProfileWrapper from "@/features/profile/components/profile-wrapper";
 import { ProfileSkeleton } from "@/features/profile/components/profile-skeleton";
 
 export const metadata = {
-  title: "Dashboard : Profile",
+  title: "Panel: Perfil",
 };
 
 export default async function Page() {

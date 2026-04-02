@@ -18,7 +18,7 @@ export function UserFormSheet({ open, onOpenChange, user }: UserFormSheetProps) 
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-xl w-full flex flex-col h-full p-0 gap-0">
         <SheetHeader className="px-6 py-4 border-b space-y-1 sticky top-0 bg-background/80 backdrop-blur-md z-10">
-          <SheetTitle>{isEditing ? "Editar Usuario" : "Nuevo Usuario"}</SheetTitle>
+          <SheetTitle>{isEditing ? "Editar usuario" : "Nuevo usuario"}</SheetTitle>
           <SheetDescription>
             {isEditing
               ? "Modifica los datos del usuario. Deja la contraseña en blanco para mantener la actual."
@@ -34,14 +34,14 @@ export function UserFormSheet({ open, onOpenChange, user }: UserFormSheetProps) 
                   <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs">
                     1
                   </span>
-                  Información Personal
+                  Información personal
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-4">
                   <FormInput control={form.control} name="full_name" label="Nombre Completo" placeholder="Juan Pérez" />
                   <FormInput
                     control={form.control}
                     name="email"
-                    label="Email"
+                    label="Correo electrónico"
                     type="email"
                     placeholder="juan@gym.com"
                     disabled={isEditing}
@@ -54,7 +54,7 @@ export function UserFormSheet({ open, onOpenChange, user }: UserFormSheetProps) 
                   <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs">
                     2
                   </span>
-                  Seguridad y Acceso
+                  Seguridad y acceso
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-4">
                   <FormSelect
@@ -71,7 +71,7 @@ export function UserFormSheet({ open, onOpenChange, user }: UserFormSheetProps) 
                   <FormInput
                     control={form.control}
                     name="password"
-                    label={isEditing ? "Nueva Contraseña" : "Contraseña"}
+                    label={isEditing ? "Nueva contraseña" : "Contraseña"}
                     type="password"
                     placeholder={isEditing ? "(Sin cambios)" : "Mínimo 6 caracteres"}
                   />
@@ -86,7 +86,7 @@ export function UserFormSheet({ open, onOpenChange, user }: UserFormSheetProps) 
             Cancelar
           </Button>
           <Button type="submit" disabled={isPending} onClick={form.handleSubmit(onSubmit)}>
-            {isPending ? "Guardando..." : isEditing ? "Guardar Cambios" : "Crear Usuario"}
+            {isPending ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear usuario"}
           </Button>
         </div>
       </SheetContent>

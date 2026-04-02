@@ -1,8 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use server";
 
-import fs from "node:fs";
-import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createClientAdmin } from "@supabase/supabase-js";
@@ -10,6 +8,12 @@ import { getUserEmail } from "@/lib/supabase/admin";
 import { computeFitnessPlan } from "@/lib/fitness/excel-calculator";
 import type { ActivityLevel, BodyType, DietType } from "@/lib/fitness/types";
 import { getUserAccessContext } from "@/lib/auth/authorization";
+import { runPaymentsPostedQueryCompat } from "@/lib/payments/schema-compat";
+import { isCashModuleNotReadyError } from "@/features/cash/lib/cash-module-errors";
+import {
+  runCreateSubscriptionPaymentForExistingCustomer,
+  runRenewSubscriptionWithPayment,
+} from "@/features/cash/actions/cash-actions";
 import { syncTrainingProfileWithAdmin } from "@/features/customers/actions/customer-routine-actions";
 import { DEFAULT_EQUIPMENT_AVAILABLE, DEFAULT_TRAINING_LOCATION } from "@/lib/training/profile-defaults";
 import type { NutritionContext, TrainingProfileInput } from "@/lib/training/types";
@@ -27,18 +31,7 @@ type DeviceSyncResult = {
   reason?: string;
   error?: string;
 };
-
-function readEnvValueFromLocalFile(key: string) {
-  try {
-    const envLocal = fs.readFileSync(path.join(process.cwd(), ".env.local"), "utf8");
-    const match = envLocal.match(new RegExp(`^${key}=([^\\n]+)$`, "m"));
-    return match?.[1]?.trim() || "";
-  } catch {
-    return "";
-  }
-}
-
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || readEnvValueFromLocalFile("SUPABASE_SERVICE_ROLE_KEY");
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const DEFAULT_ZK_DEVICE_SN = (process.env.DEFAULT_ZK_DEVICE_SN || "").trim();
 const GYM_SYNC_SERVER_URL = (process.env.GYM_SYNC_SERVER_URL || "http://127.0.0.1:8080").trim();
 const GYM_SYNC_API_TOKEN = (process.env.GYM_SYNC_API_TOKEN || "").trim();
@@ -460,6 +453,7 @@ async function syncCustomerDeviceAccess(params: {
 }
 
 export interface CreateCustomerData {
+  origin?: "customers" | "cash";
   // Auth
   email: string;
   password?: string;
@@ -605,7 +599,7 @@ function canComputeNutritionPlan(data: Partial<CreateCustomerData>) {
   );
 }
 
-async function createSubscriptionAndPayment(params: {
+async function createSubscriptionAndPaymentLegacy(params: {
   adminClient: AdminSupabaseClient;
   userId: string;
   planId?: number;
@@ -654,7 +648,7 @@ async function createSubscriptionAndPayment(params: {
     .single();
 
   if (subscriptionError || !subscription) {
-    throw subscriptionError || new Error("No se pudo crear la suscripción");
+    throw subscriptionError || new Error("No se pudo crear la suscripcion");
   }
 
   const amountOriginal = Number(planData.price);
@@ -676,6 +670,44 @@ async function createSubscriptionAndPayment(params: {
   }
 
   return { subscriptionId: subscription.id };
+}
+
+async function createSubscriptionAndPayment(params: {
+  adminClient: AdminSupabaseClient;
+  userId: string;
+  planId?: number;
+  startDate?: Date;
+  endDate?: Date;
+  finalPrice?: number;
+  discountAmount?: number;
+  paymentMethod?: "cash" | "card" | "transfer";
+  requireSession?: boolean;
+}) {
+  const { userId, planId } = params;
+  if (!planId) {
+    return { subscriptionId: null as string | null };
+  }
+
+  try {
+    const result = await runCreateSubscriptionPaymentForExistingCustomer({
+      customerId: userId,
+      planId,
+      startDate: formatToLocalISO(params.startDate) ?? null,
+      endDate: formatToLocalISO(params.endDate) ?? null,
+      finalPrice: params.finalPrice,
+      discountAmount: params.discountAmount,
+      paymentMethod: params.paymentMethod,
+      requireSession: params.requireSession,
+    });
+
+    return { subscriptionId: result?.subscription_id ?? null };
+  } catch (error) {
+    if (!isCashModuleNotReadyError(error)) {
+      throw error;
+    }
+
+    return createSubscriptionAndPaymentLegacy(params);
+  }
 }
 
 async function createBodyAssessmentAndMaybeSnapshot(params: {
@@ -769,13 +801,23 @@ async function createBodyAssessmentAndMaybeSnapshot(params: {
 export async function createCustomer(data: CreateCustomerData) {
   try {
     data = normalizeCustomerPayload(data);
+    const origin = data.origin || "customers";
 
     const access = await getUserAccessContext();
     if (!access.isAuthenticated || !access.userId) {
       return { success: false, error: "No autenticado" };
     }
-    if (!access.isAdmin) {
-      return { success: false, error: "No autorizado: Solo administradores" };
+    const isCashOrigin = origin === "cash";
+    const canCreateFromCustomers = access.isAdmin;
+    const canCreateFromCash = access.role === "admin" || access.role === "employee";
+
+    if ((!isCashOrigin && !canCreateFromCustomers) || (isCashOrigin && !canCreateFromCash)) {
+      return {
+        success: false,
+        error: isCashOrigin
+          ? "No autorizado para registrar clientes desde caja"
+          : "No autorizado: Solo administradores",
+      };
     }
 
     if (!SUPABASE_SERVICE_ROLE_KEY) {
@@ -831,6 +873,7 @@ export async function createCustomer(data: CreateCustomerData) {
         finalPrice: data.final_price,
         discountAmount: data.discount_amount,
         paymentMethod: data.payment_method,
+        requireSession: isCashOrigin,
       });
 
       await createBodyAssessmentAndMaybeSnapshot({
@@ -892,6 +935,8 @@ export async function createCustomer(data: CreateCustomerData) {
 
     revalidatePath("/panel/clientes");
     revalidatePath("/panel/resumen");
+    revalidatePath("/panel/caja");
+    revalidatePath("/panel/caja/historial");
     return { success: true, data: { user_id: createdUserId }, deviceSync };
   } catch (error) {
     console.error("Error creating customer:", error);
@@ -1047,11 +1092,20 @@ export async function getCustomerById(id: string) {
   let paymentMethod = null;
 
   if (latestSubscription) {
-    const { data: lastPayment } = await supabase
-      .from("payments")
-      .select("method")
-      .eq("subscription_id", latestSubscription.id)
-      .maybeSingle();
+    const { data: lastPayment } = await runPaymentsPostedQueryCompat((usePostedFilter) => {
+      let query = supabase
+        .from("payments")
+        .select("method")
+        .eq("subscription_id", latestSubscription.id)
+        .order("payment_date", { ascending: false })
+        .limit(1);
+
+      if (usePostedFilter) {
+        query = query.eq("status", "posted");
+      }
+
+      return query.maybeSingle();
+    });
 
     if (lastPayment) {
       paymentMethod = lastPayment.method;
@@ -1330,101 +1384,7 @@ export async function updateCustomer(id: string, data: Partial<CreateCustomerDat
       return { success: false, error: `Error perfil: ${profileError.message}` };
     }
 
-    // 2. Gestión de Suscripción
-    console.log("Plan ID received:", data.plan_id, "Type:", typeof data.plan_id);
-
-    // Verificar que plan_id sea un número válido mayor a 0
-    const validPlanId = typeof data.plan_id === "number" && data.plan_id > 0;
-
-    if (validPlanId) {
-      // Buscar la suscripción MÁS RECIENTE (activa o expirada) para actualizarla
-      // Prioriza las activas, pero si no hay, usa la expirada más reciente
-      const { data: currentSubscription } = await supabase
-        .from("subscriptions")
-        .select("*")
-        .eq("user_id", id)
-        .in("status", ["active", "expired"]) // Incluir ambos estados
-        .order("status", { ascending: true }) // 'active' viene primero
-        .order("end_date", { ascending: false, nullsFirst: false })
-        .order("start_date", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false, nullsFirst: false })
-        .limit(1)
-        .maybeSingle();
-
-      // Columnas de la tabla subscriptions: user_id, plan_id, start_date, end_date, status, discount_amount
-      const newSubscriptionData = {
-        user_id: id,
-        plan_id: data.plan_id,
-        start_date: formatToLocalISO(data.start_date),
-        end_date: formatToLocalISO(data.end_date),
-        discount_amount: data.discount_amount || 0,
-        status: "active", // Siempre guardar como active al editar
-      };
-
-      if (!currentSubscription) {
-        console.log("No active subscription found. Creating new one.");
-        const { error: insertError } = await supabase.from("subscriptions").insert(newSubscriptionData);
-        if (insertError) console.error("Error creating subscription:", insertError);
-      } else {
-        console.log(
-          `Updating existing subscription ${currentSubscription.id} with new details (Plan: ${data.plan_id})`,
-        );
-
-        // ACTUALIZAR la suscripción existente, incluso si cambia el plan
-        const { error: updateError } = await supabase
-          .from("subscriptions")
-          .update({
-            plan_id: data.plan_id, // Actualizar el plan
-            start_date: newSubscriptionData.start_date,
-            end_date: newSubscriptionData.end_date,
-            discount_amount: newSubscriptionData.discount_amount,
-            status: "active", // Reactivar si estaba expirada
-          })
-          .eq("id", currentSubscription.id);
-
-        if (updateError) {
-          console.error("Error updating existing subscription:", updateError);
-        } else {
-          // 2.1 Actualizar también el registro de PAGO asociado para mantener la consistencia financiera
-          // Obtener el precio del nuevo plan
-          const { data: planData } = await supabase.from("plans").select("price").eq("id", data.plan_id).single();
-
-          if (planData) {
-            const newOriginalAmount = Number(planData.price);
-            const newDiscount = Number(newSubscriptionData.discount_amount);
-            const newFinalAmount = newOriginalAmount - newDiscount;
-
-            console.log(
-              `Syncing payment data for subscription ${currentSubscription.id}: Original=${newOriginalAmount}, Discount=${newDiscount}, Final=${newFinalAmount}`,
-            );
-
-            const paymentUpdateData: Record<string, unknown> = {
-              amount_original: newOriginalAmount,
-              discount_amount: newDiscount,
-              amount_paid: newFinalAmount,
-            };
-
-            if (data.payment_method) {
-              paymentUpdateData.method = data.payment_method;
-            }
-
-            // Actualizar la fecha del pago con la fecha de inicio de la suscripción
-            if (data.start_date) {
-              paymentUpdateData.payment_date = new Date(data.start_date).toISOString();
-            }
-
-            const { error: paymentError } = await supabase
-              .from("payments")
-              .update(paymentUpdateData)
-              .eq("subscription_id", currentSubscription.id);
-
-            if (paymentError) console.error("Error syncing payment data:", paymentError);
-          }
-        }
-      }
-    }
-
-    // 3. Body Assessment
+    // 2. Body Assessment
     if (hasBodyAssessmentChanges(data)) {
       const mergedMetrics = {
         weight_kg: data.weight_kg ?? latestAssessmentRow?.weight_kg ?? undefined,
@@ -1564,6 +1524,7 @@ export async function updateCustomer(id: string, data: Partial<CreateCustomerDat
 }
 
 export interface RenewSubscriptionData {
+  origin?: "customers" | "cash";
   plan_id: number;
   start_date: Date;
   end_date: Date;
@@ -1587,16 +1548,85 @@ export interface RenewSubscriptionData {
   leg_right?: number;
   leg_left?: number;
   injuries?: string;
+  primary_goal?: TrainingProfileInput["primary_goal"];
+  secondary_goal?: TrainingProfileInput["secondary_goal"];
+  focus_areas?: TrainingProfileInput["focus_areas"];
+  experience_level?: TrainingProfileInput["experience_level"];
+  days_per_week?: number;
+  session_minutes?: number;
+  training_location?: TrainingProfileInput["training_location"];
+  equipment_available?: TrainingProfileInput["equipment_available"];
+  cardio_preference?: TrainingProfileInput["cardio_preference"];
+  exercise_preferences?: string;
+  exercise_dislikes?: string;
+  injuries_or_pain?: string;
+  restricted_movements?: TrainingProfileInput["restricted_movements"];
+  parq_requires_attention?: boolean;
+  medical_clearance_notes?: string;
+}
+
+async function renewSubscriptionWithPaymentLegacy(params: {
+  financialClient: Awaited<ReturnType<typeof createClient>> | AdminSupabaseClient;
+  customerId: string;
+  data: RenewSubscriptionData;
+}) {
+  const { financialClient, customerId, data } = params;
+
+  const { error: archiveError } = await financialClient
+    .from("subscriptions")
+    .update({ status: "expired" })
+    .eq("user_id", customerId)
+    .eq("status", "active");
+
+  if (archiveError) {
+    throw archiveError;
+  }
+
+  const { data: newSubscription, error: subscriptionError } = await financialClient
+    .from("subscriptions")
+    .insert({
+      user_id: customerId,
+      plan_id: data.plan_id,
+      start_date: formatToLocalISO(data.start_date),
+      end_date: formatToLocalISO(data.end_date),
+      status: "active",
+      discount_amount: data.discount_amount,
+    })
+    .select("id")
+    .single();
+
+  if (subscriptionError || !newSubscription) {
+    throw subscriptionError || new Error("No se pudo crear la suscripcion renovada");
+  }
+
+  const { error: paymentError } = await financialClient.from("payments").insert({
+    subscription_id: newSubscription.id,
+    user_id: customerId,
+    amount_original: data.price,
+    discount_amount: data.discount_amount,
+    amount_paid: data.amount_paid,
+    method: data.payment_method,
+    payment_date: new Date().toISOString(),
+  });
+
+  if (paymentError) {
+    throw paymentError;
+  }
+
+  return { subscriptionId: newSubscription.id };
 }
 
 export async function renewSubscription(customerId: string, data: RenewSubscriptionData) {
   const supabase = await createClient();
   console.log(`Renewing subscription for customer ${customerId}`, data);
+  const origin = data.origin || "customers";
 
   try {
     const access = await getUserAccessContext();
     if (!access.isAuthenticated) return { success: false, error: "No autenticado" };
-    if (!access.isAdmin) return { success: false, error: "No autorizado: Solo administradores" };
+    if (!access.userId || (access.role !== "admin" && access.role !== "employee")) {
+      return { success: false, error: "No autorizado para renovar suscripciones" };
+    }
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
@@ -1608,51 +1638,59 @@ export async function renewSubscription(customerId: string, data: RenewSubscript
       return { success: false, error: "No se pudo obtener perfil (nacimiento/género)." };
     }
 
-    // 1. Archivar TODAS las suscripciones activas anteriores
-    const { error: archiveError } = await supabase
-      .from("subscriptions")
-      .update({ status: "expired" })
-      .eq("user_id", customerId)
-      .eq("status", "active");
+    let newSubscriptionId: string | null = null;
 
-    if (archiveError) {
-      console.error("Error archiving previous subscriptions:", archiveError);
-      return { success: false, error: "Error archivando suscripción anterior" };
+    try {
+      const financialResult = await runRenewSubscriptionWithPayment({
+        customerId,
+        planId: data.plan_id,
+        startDate: formatToLocalISO(data.start_date) || "",
+        endDate: formatToLocalISO(data.end_date) || "",
+        price: data.price,
+        discountAmount: data.discount_amount,
+        amountPaid: data.amount_paid,
+        paymentMethod: data.payment_method,
+        requireSession: origin === "cash",
+      });
+
+      newSubscriptionId = financialResult?.subscription_id ?? null;
+    } catch (error) {
+      if (!isCashModuleNotReadyError(error)) {
+        throw error;
+      }
+
+      const financialClient = SUPABASE_SERVICE_ROLE_KEY
+        ? createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+            auth: { autoRefreshToken: false, persistSession: false },
+          })
+        : supabase;
+
+      const legacyResult = await renewSubscriptionWithPaymentLegacy({
+        financialClient,
+        customerId,
+        data,
+      });
+
+      newSubscriptionId = legacyResult.subscriptionId;
     }
 
-    // 2. Crear NUEVA suscripción
-    const { data: newSubscription, error: subError } = await supabase
-      .from("subscriptions")
-      .insert({
-        user_id: customerId,
-        plan_id: data.plan_id,
-        start_date: formatToLocalISO(data.start_date),
-        end_date: formatToLocalISO(data.end_date),
-        status: "active",
-        discount_amount: data.discount_amount,
-      })
-      .select()
-      .single();
-
-    if (subError || !newSubscription) {
-      console.error("Error creating new subscription:", subError);
-      return { success: false, error: "Error creando nueva suscripción" };
+    if (!newSubscriptionId) {
+      return { success: false, error: "No se pudo crear la suscripción renovada" };
     }
 
-    // 3. Registrar el PAGO
-    const { error: payError } = await supabase.from("payments").insert({
-      subscription_id: newSubscription.id,
-      user_id: customerId,
-      amount_original: data.price,
-      discount_amount: data.discount_amount,
-      amount_paid: data.amount_paid,
-      method: data.payment_method,
-      payment_date: new Date().toISOString(),
-    });
+    const profileUpdate: Record<string, unknown> = {};
+    if (data.injuries !== undefined) {
+      profileUpdate.injuries = normalizeNullableText(data.injuries);
+    }
+    if (data.medical_clearance_notes !== undefined) {
+      profileUpdate.medical_notes = normalizeNullableText(data.medical_clearance_notes);
+    }
 
-    if (payError) {
-      console.error("Error recording payment:", payError);
-      // No revertimos todo, pero logueamos el error grave
+    if (Object.keys(profileUpdate).length > 0) {
+      const { error: profileUpdateError } = await supabase.from("profiles").update(profileUpdate).eq("id", customerId);
+      if (profileUpdateError) {
+        console.error("Renewal profile update warning:", profileUpdateError);
+      }
     }
 
     await createAssessmentAndSnapshot({
@@ -1661,7 +1699,7 @@ export async function renewSubscription(customerId: string, data: RenewSubscript
       birthDate: new Date(profile.birth_date),
       gender: profile.gender as "male" | "female" | "other",
       sourceEvent: "renewal",
-      subscriptionId: newSubscription.id,
+      subscriptionId: newSubscriptionId,
       metrics: {
         weight_kg: data.weight_kg,
         height_cm: data.height_cm,
@@ -1687,14 +1725,19 @@ export async function renewSubscription(customerId: string, data: RenewSubscript
         .eq("user_id", customerId)
         .maybeSingle();
 
-      if (existingTrainingProfile) {
+      const trainingProfileUpdate = buildPartialTrainingProfileUpdate(data);
+
+      if (existingTrainingProfile || Object.keys(trainingProfileUpdate).length > 0) {
         await syncTrainingProfileWithAdmin({
           adminClient: createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
             auth: { autoRefreshToken: false, persistSession: false },
           }),
           userId: customerId,
-          createdBy: access.userId!,
-          trainingProfile: existingTrainingProfile as TrainingProfileInput,
+          createdBy: access.userId,
+          trainingProfile: {
+            ...(existingTrainingProfile || {}),
+            ...trainingProfileUpdate,
+          } as TrainingProfileInput,
           nutritionContext: {
             birthDate: new Date(profile.birth_date),
             gender: profile.gender as "male" | "female" | "other",
@@ -1713,6 +1756,8 @@ export async function renewSubscription(customerId: string, data: RenewSubscript
     revalidatePath("/panel/clientes");
     revalidatePath(`/panel/clientes/${customerId}`);
     revalidatePath("/panel/resumen");
+    revalidatePath("/panel/caja");
+    revalidatePath("/panel/caja/historial");
 
     let deviceSync: DeviceSyncResult | undefined;
 
@@ -1731,7 +1776,7 @@ export async function renewSubscription(customerId: string, data: RenewSubscript
     return { success: true, deviceSync };
   } catch (error) {
     console.error("Exception in renewSubscription:", error);
-    return { success: false, error: "Error inesperado al renovar" };
+    return { success: false, error: error instanceof Error ? error.message : "Error inesperado al renovar" };
   }
 }
 

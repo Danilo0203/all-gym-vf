@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
+import { PASSWORD_RECOVERY_ENABLED } from "@/lib/auth/feature-flags";
 import { toast } from 'sonner';
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +26,34 @@ export default function ForgotPasswordPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  if (!PASSWORD_RECOVERY_ENABLED) {
+    return (
+      <div className="bg-muted flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
+        <div className="flex w-full max-w-sm flex-col gap-6">
+          <Link href="/" className="flex items-center gap-2 self-center font-semibold text-lg">
+            <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-lg">
+              <IconBarbell className="size-5" />
+            </div>
+            All Gym
+          </Link>
+          <Card>
+            <CardHeader className="text-center">
+              <CardTitle className="text-xl">Recuperación deshabilitada</CardTitle>
+              <CardDescription>
+                La recuperación por correo está deshabilitada mientras la app use una URL temporal de despliegue.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-center">
+              <Button asChild className="w-full">
+                <Link href="/iniciar-sesion">Volver al inicio de sesión</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,14 +98,14 @@ export default function ForgotPasswordPage() {
           <CardHeader className="text-center">
             <CardTitle className="text-xl">Recuperar Contraseña</CardTitle>
             <CardDescription>
-              Ingresa tu email para recibir un código de verificación
+              Ingresa tu correo electrónico para recibir un código de verificación
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit}>
               <FieldGroup>
                 <Field>
-                  <FieldLabel htmlFor="email">Email</FieldLabel>
+                  <FieldLabel htmlFor="email">Correo electrónico</FieldLabel>
                   <Input
                     id="email"
                     type="email"
@@ -90,7 +119,7 @@ export default function ForgotPasswordPage() {
                 <Field>
                   <Button type="submit" disabled={isLoading} className="w-full">
                     {isLoading && <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Enviar Código
+                    Enviar código
                   </Button>
                 </Field>
                 <div className="text-center text-sm">

@@ -9,7 +9,7 @@ import { getUserAccessContext } from '@/lib/auth/authorization';
 import { redirect } from 'next/navigation';
 
 export const metadata = {
-  title: 'Dashboard : Planes'
+  title: 'Panel: Planes'
 };
 
 type pageProps = {

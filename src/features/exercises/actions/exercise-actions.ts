@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { getUserAccessContext } from "@/lib/auth/authorization";
 import { buildExerciseSlug } from "@/lib/training/catalog";
+import { resolveExerciseImageUrl } from "@/lib/training/exercise-media";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const exerciseNameSchema = z
@@ -337,7 +338,17 @@ export async function saveExerciseMediaToLocal(exerciseId: number): Promise<Exer
 
     await ensureExerciseMediaBucket(adminClient);
 
-    const mediaResponse = await fetch(currentImageUrl, {
+    const resolvedSourceUrl =
+      (await resolveExerciseImageUrl({
+        imageUrl: currentImageUrl,
+        name: typeof exercise.name === "string" ? exercise.name : null,
+        fallbackQueries: [
+          typeof exercise.slug === "string" ? exercise.slug.replace(/-/g, " ") : null,
+          typeof exercise.provider_item_id === "string" ? exercise.provider_item_id : null,
+        ],
+      })) || currentImageUrl;
+
+    const mediaResponse = await fetch(resolvedSourceUrl, {
       method: "GET",
       cache: "no-store",
     });
@@ -348,7 +359,7 @@ export async function saveExerciseMediaToLocal(exerciseId: number): Promise<Exer
 
     const mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
     const contentType = mediaResponse.headers.get("content-type") || "image/gif";
-    const fileExtension = resolveImageExtension(contentType, currentImageUrl);
+    const fileExtension = resolveImageExtension(contentType, resolvedSourceUrl);
     const fileBaseName =
       (typeof exercise.slug === "string" && exercise.slug.trim()) ||
       (typeof exercise.provider_item_id === "string" && exercise.provider_item_id.trim()) ||
@@ -383,7 +394,8 @@ export async function saveExerciseMediaToLocal(exerciseId: number): Promise<Exer
           ...currentPayload,
           media_cache: {
             source_provider: exercise.provider,
-            source_url: currentImageUrl,
+            source_url: resolvedSourceUrl,
+            legacy_source_url: currentImageUrl !== resolvedSourceUrl ? currentImageUrl : undefined,
             bucket: EXERCISE_MEDIA_BUCKET,
             path: uploadData.path,
             cached_at: new Date().toISOString(),

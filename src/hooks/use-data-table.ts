@@ -41,6 +41,23 @@ const ARRAY_SEPARATOR = ',';
 const DEBOUNCE_MS = 300;
 const THROTTLE_MS = 50;
 
+function readStoredTablePreference<T>(
+  storageKey: string | undefined,
+  suffix: string,
+  fallback: T
+): T {
+  if (!storageKey || typeof window === 'undefined') {
+    return fallback;
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(`${storageKey}-${suffix}`);
+    return storedValue ? (JSON.parse(storedValue) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 interface UseDataTableProps<TData>
   extends Omit<
       TableOptions<TData>,
@@ -109,13 +126,14 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>(
     initialState?.rowSelection ?? {}
   );
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(
-    initialState?.columnVisibility ?? {}
-  );
+  const [columnVisibility, setColumnVisibility] =
+    React.useState<VisibilityState>(initialState?.columnVisibility ?? {});
   const [columnPinning, setColumnPinning] = React.useState<ColumnPinningState>(
     initialState?.columnPinning ?? {}
   );
-  const hasLoadedPreferencesRef = React.useRef(false);
+  const [hasLoadedPreferences, setHasLoadedPreferences] = React.useState(
+    () => !storageKey
+  );
 
   const [page, setPage] = useQueryState(
     PAGE_KEY,
@@ -251,45 +269,40 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
 
   React.useEffect(() => {
     if (!storageKey || typeof window === 'undefined') {
-      hasLoadedPreferencesRef.current = true;
+      setHasLoadedPreferences(true);
       return;
     }
 
-    try {
-      const storedVisibility = window.localStorage.getItem(
-        `${storageKey}-column-visibility`
-      );
-      const storedPinning = window.localStorage.getItem(
-        `${storageKey}-column-pinning`
-      );
-
-      if (storedVisibility) {
-        setColumnVisibility(JSON.parse(storedVisibility) as VisibilityState);
-      }
-
-      if (storedPinning) {
-        setColumnPinning(JSON.parse(storedPinning) as ColumnPinningState);
-      }
-    } catch {
-      // Ignore malformed preferences and keep defaults.
-    } finally {
-      hasLoadedPreferencesRef.current = true;
-    }
-  }, [storageKey]);
+    setColumnVisibility(
+      readStoredTablePreference(
+        storageKey,
+        'column-visibility',
+        initialState?.columnVisibility ?? {}
+      )
+    );
+    setColumnPinning(
+      readStoredTablePreference(
+        storageKey,
+        'column-pinning',
+        initialState?.columnPinning ?? {}
+      )
+    );
+    setHasLoadedPreferences(true);
+  }, [initialState?.columnPinning, initialState?.columnVisibility, storageKey]);
 
   React.useEffect(() => {
     if (!storageKey || typeof window === 'undefined') return;
-    if (!hasLoadedPreferencesRef.current) return;
+    if (!hasLoadedPreferences) return;
 
     window.localStorage.setItem(
       `${storageKey}-column-visibility`,
       JSON.stringify(columnVisibility)
     );
-  }, [columnVisibility, storageKey]);
+  }, [columnVisibility, hasLoadedPreferences, storageKey]);
 
   React.useEffect(() => {
     if (!storageKey || typeof window === 'undefined') return;
-    if (!hasLoadedPreferencesRef.current) return;
+    if (!hasLoadedPreferences) return;
 
     const sanitize = (ids?: string[]) =>
       (ids ?? []).filter((columnId) => columnIds.has(columnId));
@@ -311,7 +324,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       `${storageKey}-column-pinning`,
       JSON.stringify(nextColumnPinning)
     );
-  }, [columnIds, columnPinning, storageKey]);
+  }, [columnIds, columnPinning, hasLoadedPreferences, storageKey]);
 
   const onColumnFiltersChange = React.useCallback(
     (updaterOrValue: Updater<ColumnFiltersState>) => {

@@ -9,7 +9,7 @@ import { redirect } from "next/navigation";
 import { SearchParams } from "nuqs/server";
 
 export const metadata = {
-  title: "Dashboard: Usuarios",
+  title: "Panel: Usuarios",
 };
 
 type PageProps = {

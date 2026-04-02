@@ -12,12 +12,15 @@ import { UserRole } from "@/types";
 
 // Define which roles can access which routes
 export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
-  "/panel/resumen": ["admin", "trainer", "employee", "client"],
+  "/panel/resumen": ["admin", "trainer", "employee"],
   "/panel/usuarios": ["admin"],
-  "/panel/clientes": ["admin", "trainer", "employee", "client"],
+  "/panel/clientes": ["admin", "trainer", "employee"],
   "/panel/planes": ["admin"],
   "/panel/pagos": ["admin"],
-  "/panel/perfil": ["admin", "trainer", "employee", "client"],
+  "/panel/perfil": ["admin", "trainer", "employee"],
+  "/mi/rutina": ["client"],
+  "/mi/perfil": ["client"],
+  "/mi/membresia": ["client"],
 };
 
 /**
@@ -139,9 +142,9 @@ export function canPerformAction(
       return false;
 
     case "clients":
-      // All authenticated users can read clients
+      // Solo el cliente puede leer su propia ficha; el resto de clientes no.
       if (action === "read") {
-        return true;
+        return resourceOwnerId === userId;
       }
       // Only admin can create, update, delete clients
       return false;

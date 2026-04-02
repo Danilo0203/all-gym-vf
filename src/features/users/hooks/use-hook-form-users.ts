@@ -9,7 +9,7 @@ import { createUser, updateUser, type UserData } from "../actions/user-actions";
 import { UserRole } from "@/types";
 
 const userFormSchema = z.object({
-  email: z.string().email({ message: "Email inválido" }),
+  email: z.string().email({ message: "Correo electrónico inválido" }),
   full_name: z.string().min(2, { message: "El nombre es obligatorio" }),
   role: z.enum(["admin", "trainer", "employee", "client"], {
     message: "Selecciona un rol válido",
@@ -107,4 +107,3 @@ export function useHookFormUsers({ open, onOpenChange, user }: UseHookFormUsersP
     onSubmit,
   };
 }
-

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { runPaymentsPostedQueryCompat } from "@/lib/payments/schema-compat";
 import { startOfMonth, endOfMonth, subMonths, format, differenceInDays, addDays } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -144,11 +145,19 @@ export async function getDashboardKPIs(dateRange?: DashboardDateRange): Promise<
   const prevPeriodStart = new Date(prevPeriodEnd.getTime() - periodDuration);
 
   // 1. Ingresos del período seleccionado
-  const { data: currentPayments } = await supabase
-    .from("payments")
-    .select("amount_paid, method")
-    .gte("payment_date", periodStart.toISOString())
-    .lte("payment_date", periodEnd.toISOString());
+  const { data: currentPayments } = await runPaymentsPostedQueryCompat((usePostedFilter) => {
+    let query = supabase
+      .from("payments")
+      .select("amount_paid, method")
+      .gte("payment_date", periodStart.toISOString())
+      .lte("payment_date", periodEnd.toISOString());
+
+    if (usePostedFilter) {
+      query = query.eq("status", "posted");
+    }
+
+    return query;
+  });
 
   const totalRevenue = currentPayments?.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0) || 0;
   const cashAmount =
@@ -160,11 +169,19 @@ export async function getDashboardKPIs(dateRange?: DashboardDateRange): Promise<
     0;
 
   // 2. Ingresos del período anterior (para comparativa)
-  const { data: prevPeriodPayments } = await supabase
-    .from("payments")
-    .select("amount_paid")
-    .gte("payment_date", prevPeriodStart.toISOString())
-    .lte("payment_date", prevPeriodEnd.toISOString());
+  const { data: prevPeriodPayments } = await runPaymentsPostedQueryCompat((usePostedFilter) => {
+    let query = supabase
+      .from("payments")
+      .select("amount_paid")
+      .gte("payment_date", prevPeriodStart.toISOString())
+      .lte("payment_date", prevPeriodEnd.toISOString());
+
+    if (usePostedFilter) {
+      query = query.eq("status", "posted");
+    }
+
+    return query;
+  });
 
   const prevPeriodRevenue = prevPeriodPayments?.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0) || 0;
   const revenueChange =
@@ -232,11 +249,19 @@ export async function getRevenueByMonth(): Promise<RevenueByMonth[]> {
     const start = startOfMonth(date);
     const end = endOfMonth(date);
 
-    const { data } = await supabase
-      .from("payments")
-      .select("amount_paid")
-      .gte("payment_date", start.toISOString())
-      .lte("payment_date", end.toISOString());
+    const { data } = await runPaymentsPostedQueryCompat((usePostedFilter) => {
+      let query = supabase
+        .from("payments")
+        .select("amount_paid")
+        .gte("payment_date", start.toISOString())
+        .lte("payment_date", end.toISOString());
+
+      if (usePostedFilter) {
+        query = query.eq("status", "posted");
+      }
+
+      return query;
+    });
 
     months.push({
       month: format(date, "MMM", { locale: es }),
@@ -287,26 +312,34 @@ export async function getPlanDistribution(): Promise<PlanDistribution[]> {
 export async function getRecentPayments(limit: number = 10): Promise<RecentPayment[]> {
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("payments")
-    .select(
-      `
-      id,
-      user_id,
-      amount_paid,
-      method,
-      payment_date,
-      subscriptions!inner (
-        plans (name)
-      ),
-      profiles!payments_user_id_fkey (
-        full_name,
-        avatar_url
+  const { data } = await runPaymentsPostedQueryCompat((usePostedFilter) => {
+    let query = supabase
+      .from("payments")
+      .select(
+        `
+        id,
+        user_id,
+        amount_paid,
+        method,
+        payment_date,
+        subscriptions!inner (
+          plans (name)
+        ),
+        profiles!payments_user_id_fkey (
+          full_name,
+          avatar_url
+        )
+      `,
       )
-    `,
-    )
-    .order("payment_date", { ascending: false })
-    .limit(limit);
+      .order("payment_date", { ascending: false })
+      .limit(limit);
+
+    if (usePostedFilter) {
+      query = query.eq("status", "posted");
+    }
+
+    return query;
+  });
 
   if (!data) return [];
 
@@ -470,11 +503,19 @@ export async function getPaymentMethodDistribution(
   const periodStart = dateRange?.from ? new Date(dateRange.from + "T00:00:00") : startOfMonth(now);
   const periodEnd = dateRange?.to ? new Date(dateRange.to + "T23:59:59") : endOfMonth(now);
 
-  const { data } = await supabase
-    .from("payments")
-    .select("amount_paid, method")
-    .gte("payment_date", periodStart.toISOString())
-    .lte("payment_date", periodEnd.toISOString());
+  const { data } = await runPaymentsPostedQueryCompat((usePostedFilter) => {
+    let query = supabase
+      .from("payments")
+      .select("amount_paid, method")
+      .gte("payment_date", periodStart.toISOString())
+      .lte("payment_date", periodEnd.toISOString());
+
+    if (usePostedFilter) {
+      query = query.eq("status", "posted");
+    }
+
+    return query;
+  });
 
   if (!data || data.length === 0) return [];
 

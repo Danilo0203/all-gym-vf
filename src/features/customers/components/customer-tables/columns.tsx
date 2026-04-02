@@ -88,7 +88,7 @@ export function getColumns(
       header: ({ column }) => <DataTableColumnHeader column={column} title="ACTIVO" />,
       enableColumnFilter: true,
       meta: {
-        label: "Estado",
+        label: "Estado cliente",
         variant: "multiSelect" as const,
         options: [
           { label: "Activo", value: "Active" },
@@ -113,8 +113,15 @@ export function getColumns(
       size: 170,
       minSize: 160,
       header: ({ column }) => <DataTableColumnHeader column={column} title="SUSCRIPCIÓN" />,
+      enableColumnFilter: true,
       meta: {
-        label: "Suscripción",
+        label: "Estado suscripción",
+        variant: "multiSelect" as const,
+        options: [
+          { label: "Activa", value: "active" },
+          { label: "Vencida", value: "expired" },
+          { label: "Cancelada", value: "cancelled" },
+        ],
       },
       cell: ({ row }) => (
         <SubscriptionStatusBadge

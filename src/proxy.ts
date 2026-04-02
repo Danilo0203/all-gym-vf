@@ -1,7 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
+import { getDefaultRouteForRole, isClientRole, isInternalRole, parseUserRole } from "@/lib/auth/role-utils";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -41,33 +43,53 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user && request.nextUrl.pathname.startsWith("/panel")) {
+  const isProtectedArea = pathname.startsWith("/panel") || pathname.startsWith("/mi");
+
+  if (!user && isProtectedArea) {
     const url = request.nextUrl.clone();
     url.pathname = "/iniciar-sesion";
     return NextResponse.redirect(url);
   }
 
-  if (user && request.nextUrl.pathname.startsWith("/iniciar-sesion")) {
+  if (!user) {
+    return response;
+  }
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  const role = parseUserRole(profile?.role) ?? parseUserRole(user.user_metadata?.role);
+  const defaultRoute = getDefaultRouteForRole(role);
+
+  if (pathname.startsWith("/iniciar-sesion")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/panel";
+    url.pathname = defaultRoute;
     return NextResponse.redirect(url);
   }
 
-  // Protect Admin-Only Routes
+  if (pathname === "/") {
+    const url = request.nextUrl.clone();
+    url.pathname = defaultRoute;
+    return NextResponse.redirect(url);
+  }
+
+  if (pathname.startsWith("/panel") && isClientRole(role)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/mi/rutina";
+    return NextResponse.redirect(url);
+  }
+
+  if (pathname.startsWith("/mi") && !isClientRole(role)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/panel/resumen";
+    return NextResponse.redirect(url);
+  }
+
   const adminOnlyRoutes = ["/panel/usuarios", "/panel/planes", "/panel/pagos", "/panel/ejercicios"];
-  const isAdminRoute = adminOnlyRoutes.some((route) => request.nextUrl.pathname.startsWith(route));
+  const isAdminRoute = adminOnlyRoutes.some((route) => pathname.startsWith(route));
 
-  if (user && isAdminRoute) {
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-    const role = profile?.role ?? user.user_metadata?.role;
-
-    // Only admin role can access these routes
-    if (role !== "admin") {
-      // Redirect to panel root
+  if (isAdminRoute && role !== "admin") {
       const url = request.nextUrl.clone();
-      url.pathname = "/panel";
+      url.pathname = isInternalRole(role) ? "/panel/resumen" : defaultRoute;
       return NextResponse.redirect(url);
-    }
   }
 
   return response;

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserAccessContext } from "@/lib/auth/authorization";
 import { normalizeExerciseCatalogItem, mapProviderExerciseToCatalogPayload } from "@/lib/training/catalog";
+import { hydrateProviderExerciseSummaries, resolveProviderExercisePayloadMedia } from "@/lib/training/exercise-media";
 import {
   buildExerciseReplacementGroups,
   getExerciseDisplayName,
@@ -1211,19 +1212,21 @@ export async function searchExerciseProvider(
     searchVariants: buildExerciseSearchVariants(query),
   });
 
+  const summaries = (Array.isArray(result?.data) ? result.data : []).map((item: Record<string, unknown>) => ({
+    exerciseId:
+      typeof item?.exerciseId === "string" ? item.exerciseId : typeof item?.id === "string" ? item.id : "",
+    name: typeof item?.name === "string" ? item.name : "Exercise",
+    imageUrl:
+      typeof item?.imageUrl === "string"
+        ? item.imageUrl
+        : typeof item?.gifUrl === "string"
+          ? item.gifUrl
+          : null,
+  })) as ProviderExerciseSummary[];
+
   return {
     success: true,
-    data: (Array.isArray(result?.data) ? result.data : []).map((item: Record<string, unknown>) => ({
-      exerciseId:
-        typeof item?.exerciseId === "string" ? item.exerciseId : typeof item?.id === "string" ? item.id : "",
-      name: typeof item?.name === "string" ? item.name : "Exercise",
-      imageUrl:
-        typeof item?.imageUrl === "string"
-          ? item.imageUrl
-        : typeof item?.gifUrl === "string"
-            ? item.gifUrl
-            : null,
-    })) as ProviderExerciseSummary[],
+    data: await hydrateProviderExerciseSummaries(summaries),
     hasMore: result?.hasMore === true,
     nextOffset: typeof result?.nextOffset === "number" ? result.nextOffset : null,
     limit: typeof result?.limit === "number" ? result.limit : clampProviderSearchLimit(limit),
@@ -1239,7 +1242,10 @@ export async function importExerciseFromProvider(rawExercise: Record<string, unk
     exercise: rawExercise,
   });
 
-  const payload = mapProviderExerciseToCatalogPayload((providerResult?.data as Record<string, unknown>) || rawExercise);
+  const normalizedProviderExercise = await resolveProviderExercisePayloadMedia(
+    ((providerResult?.data as Record<string, unknown>) || rawExercise) as Record<string, unknown>,
+  );
+  const payload = mapProviderExerciseToCatalogPayload(normalizedProviderExercise);
   const { data, error } = await adminClient
     .from("exercises")
     .upsert(payload, { onConflict: "slug" })
@@ -1347,8 +1353,10 @@ export async function seedExerciseCatalog() {
   };
 }
 
-export async function getCustomerRoutineWorkspace(customerId: string): Promise<CustomerRoutineWorkspace> {
-  const { adminClient } = await requireAdminAccess();
+async function getRoutineWorkspaceForUser(
+  adminClient: AdminSupabaseClient,
+  customerId: string,
+): Promise<CustomerRoutineWorkspace> {
   const [trainingProfile, nutritionContext, routinesResponse] = await Promise.all([
     fetchTrainingProfileInternal(adminClient, customerId),
     getNutritionContextForUser(adminClient, customerId),
@@ -1363,10 +1371,10 @@ export async function getCustomerRoutineWorkspace(customerId: string): Promise<C
 
   if (routinesResponse.error) throw routinesResponse.error;
 
-  const routines = (routinesResponse.data || []).map((row) => mapRoutineRow(row as Record<string, unknown>));
-  const draftRoutine = routines.find((routine) => routine.status === "draft") || null;
-  const activeRoutine = routines.find((routine) => routine.status === "active") || null;
-  const pendingRoutine = routines.find((routine) => routine.status === "pending_profile") || null;
+  const routines: RoutineRecord[] = (routinesResponse.data || []).map((row: Record<string, unknown>) => mapRoutineRow(row));
+  const draftRoutine = routines.find((routine: RoutineRecord) => routine.status === "draft") || null;
+  const activeRoutine = routines.find((routine: RoutineRecord) => routine.status === "active") || null;
+  const pendingRoutine = routines.find((routine: RoutineRecord) => routine.status === "pending_profile") || null;
   const detailsRoutineIds = [draftRoutine?.id, activeRoutine?.id, pendingRoutine?.id].filter(Boolean) as string[];
 
   let detailsByRoutineId: Record<string, RoutineDetailRecord[]> = {};
@@ -1381,7 +1389,7 @@ export async function getCustomerRoutineWorkspace(customerId: string): Promise<C
 
     if (detailsError) throw detailsError;
 
-    let mappedDetails = (details || []).map((row) => mapRoutineDetailRow(row as Record<string, unknown>));
+    let mappedDetails: RoutineDetailRecord[] = (details || []).map((row: Record<string, unknown>) => mapRoutineDetailRow(row));
 
     if (
       mappedDetails.some(
@@ -1393,7 +1401,7 @@ export async function getCustomerRoutineWorkspace(customerId: string): Promise<C
       mappedDetails = await hydrateRoutineDetailVisuals(mappedDetails, await listExerciseCatalog(adminClient));
     }
 
-    detailsByRoutineId = mappedDetails.reduce<Record<string, RoutineDetailRecord[]>>((accumulator, mapped) => {
+    detailsByRoutineId = mappedDetails.reduce<Record<string, RoutineDetailRecord[]>>((accumulator, mapped: RoutineDetailRecord) => {
       accumulator[mapped.routine_id] = accumulator[mapped.routine_id] || [];
       accumulator[mapped.routine_id].push(mapped);
       return accumulator;
@@ -1412,4 +1420,18 @@ export async function getCustomerRoutineWorkspace(customerId: string): Promise<C
     activeDetails: activeRoutine ? detailsByRoutineId[activeRoutine.id] || [] : [],
     pendingDetails: pendingRoutine ? detailsByRoutineId[pendingRoutine.id] || [] : [],
   };
+}
+
+export async function getCustomerRoutineWorkspace(customerId: string): Promise<CustomerRoutineWorkspace> {
+  const { adminClient } = await requireAdminAccess();
+  return getRoutineWorkspaceForUser(adminClient, customerId);
+}
+
+export async function getCurrentUserRoutineWorkspace(): Promise<CustomerRoutineWorkspace> {
+  const access = await getUserAccessContext();
+  if (!access.isAuthenticated || !access.userId) {
+    throw new Error("No autorizado");
+  }
+
+  return getRoutineWorkspaceForUser(createAdminClient(), access.userId);
 }

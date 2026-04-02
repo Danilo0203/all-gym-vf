@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
+import { PASSWORD_RECOVERY_ENABLED } from "@/lib/auth/feature-flags";
 import { toast } from 'sonner';
 import { Button } from "@/components/ui/button";
 import {
@@ -34,9 +35,37 @@ export default function VerifyCodePage() {
   const [token, setToken] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  if (!PASSWORD_RECOVERY_ENABLED) {
+    return (
+      <div className="bg-muted flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
+        <div className="flex w-full max-w-sm flex-col gap-6">
+          <Link href="/" className="flex items-center gap-2 self-center font-semibold text-lg">
+            <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-lg">
+              <IconBarbell className="size-5" />
+            </div>
+            All Gym
+          </Link>
+          <Card>
+            <CardHeader className="text-center">
+              <CardTitle className="text-xl">Recuperación deshabilitada</CardTitle>
+              <CardDescription>
+                La verificación por correo está deshabilitada mientras la app use una URL temporal.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-center">
+              <Button asChild className="w-full">
+                <Link href="/iniciar-sesion">Volver al inicio de sesión</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   useEffect(() => {
     if (!email) {
-      toast.error('Email no encontrado');
+      toast.error('Correo electrónico no encontrado');
       router.push('/auth/forgot-password');
     }
   }, [email, router]);
@@ -86,7 +115,7 @@ export default function VerifyCodePage() {
         </Link>
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-xl">Verificar Código</CardTitle>
+            <CardTitle className="text-xl">Verificar código</CardTitle>
             <CardDescription>
               Ingresa el código de 8 dígitos enviado a {email}
             </CardDescription>
@@ -95,7 +124,7 @@ export default function VerifyCodePage() {
             <form onSubmit={handleSubmit}>
               <FieldGroup>
                 <Field className="flex flex-col items-center">
-                  <FieldLabel htmlFor="token" className="sr-only">Código de Verificación</FieldLabel>
+                  <FieldLabel htmlFor="token" className="sr-only">Código de verificación</FieldLabel>
                   <InputOTP
                     maxLength={8}
                     value={token}
@@ -126,7 +155,7 @@ export default function VerifyCodePage() {
                 <div className="text-center text-sm">
                   <Link href="/auth/forgot-password" className="flex items-center justify-center gap-2 text-muted-foreground hover:text-primary">
                     <IconArrowLeft className="size-4" />
-                    Cambiar email
+                    Cambiar correo electrónico
                   </Link>
                 </div>
               </FieldGroup>

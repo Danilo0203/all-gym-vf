@@ -17,9 +17,12 @@ export const searchParams = {
   role: parseAsString,
   plan_name: parseAsString, // Filtro de plan
   user_name: parseAsString, // Filtro de cliente en pagos
+  session_number: parseAsString, // Filtro de número de sesión en caja
   method: parseAsString, // Filtro de método de pago
   subscription_status: parseAsString, // Filtro de estado de suscripción en pagos
   payment_date: parseAsString, // Filtro de fecha
+  opened_at: parseAsString, // Filtro de fecha de apertura en caja
+  opened_by_user_id: parseAsString, // Filtro de responsable en caja
   sort: getSortingStateParser().withDefault([]), // Sorting
   // advanced filter
   // filters: getFiltersStateParser().withDefault([]),

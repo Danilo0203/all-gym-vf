@@ -1062,17 +1062,52 @@ function ExerciseCreatePreview({
     <div className="space-y-3">
       <Label>{title}</Label>
       <div className="bg-muted/30 border-border overflow-hidden rounded-xl border">
-        {src ? (
-          <img src={src} alt={title} className="h-56 w-full object-cover lg:h-[320px]" />
-        ) : (
-          <div className="text-muted-foreground flex h-56 flex-col items-center justify-center gap-3 px-6 text-center lg:h-[320px]">
-            <ImagePlus className="size-9" />
-            <span className="max-w-xs text-sm">{emptyLabel}</span>
-          </div>
-        )}
+        <ExerciseImage
+          src={src}
+          alt={title}
+          className="h-56 w-full object-cover lg:h-[320px]"
+          fallback={
+            <div className="text-muted-foreground flex h-56 flex-col items-center justify-center gap-3 px-6 text-center lg:h-[320px]">
+              <ImagePlus className="size-9" />
+              <span className="max-w-xs text-sm">{emptyLabel}</span>
+            </div>
+          }
+        />
       </div>
       {helper ? <p className="text-muted-foreground text-xs">{helper}</p> : null}
     </div>
+  );
+}
+
+function ExerciseImage({
+  src,
+  alt,
+  className,
+  fallback,
+  loading,
+}: {
+  src?: string | null;
+  alt: string;
+  className: string;
+  fallback: ReactNode;
+  loading?: "eager" | "lazy";
+}) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const normalizedSrc = typeof src === "string" ? src : null;
+  const hasError = Boolean(normalizedSrc) && failedSrc === normalizedSrc;
+
+  if (!normalizedSrc || hasError) {
+    return <>{fallback}</>;
+  }
+
+  return (
+    <img
+      src={normalizedSrc}
+      alt={alt}
+      className={className}
+      loading={loading}
+      onError={() => setFailedSrc(normalizedSrc)}
+    />
   );
 }
 
@@ -1109,7 +1144,18 @@ function ExerciseCard({
     <Card className="overflow-hidden py-0">
       <div className="bg-muted/30 relative aspect-[4/3] overflow-hidden">
         {canShowPreview ? (
-          <img src={previewImageUrl} alt={displayName} className="h-full w-full object-cover" loading="lazy" />
+          <ExerciseImage
+            src={previewImageUrl}
+            alt={displayName}
+            className="h-full w-full object-cover"
+            loading="lazy"
+            fallback={
+              <div className="text-muted-foreground flex h-full flex-col items-center justify-center gap-3">
+                <ImagePlus className="size-8" />
+                <span className="text-sm">Sin imagen</span>
+              </div>
+            }
+          />
         ) : exercise.is_preview_hidden ? (
           <div className="text-muted-foreground flex h-full flex-col items-center justify-center gap-3">
             <EyeOff className="size-8" />
@@ -1257,11 +1303,13 @@ function ProviderExerciseOptionCard({
     >
       <div className="flex items-start gap-3">
         <div className="bg-muted/30 h-20 w-24 shrink-0 overflow-hidden rounded-lg border">
-          {exercise.imageUrl ? (
-            <img src={exercise.imageUrl} alt={exercise.name} className="h-full w-full object-cover" loading="lazy" />
-          ) : (
-            <div className="text-muted-foreground flex h-full items-center justify-center text-xs">Sin GIF</div>
-          )}
+          <ExerciseImage
+            src={exercise.imageUrl}
+            alt={exercise.name}
+            className="h-full w-full object-cover"
+            loading="lazy"
+            fallback={<div className="text-muted-foreground flex h-full items-center justify-center text-xs">Sin GIF</div>}
+          />
         </div>
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-start justify-between gap-3">

@@ -1,13 +1,14 @@
 'use client';
 
 import type { Column } from '@tanstack/react-table';
-import { EyeOff } from 'lucide-react';
+import { EyeOff, PinIcon, PinOffIcon } from 'lucide-react';
 
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -30,7 +31,12 @@ export function DataTableColumnHeader<TData, TValue>({
   className,
   ...props
 }: DataTableColumnHeaderProps<TData, TValue>) {
-  if (!column.getCanSort() && !column.getCanHide()) {
+  const canSort = column.getCanSort();
+  const canHide = column.getCanHide();
+  const canPin = column.getCanPin();
+  const isPinnedLeft = column.getIsPinned() === 'left';
+
+  if (!canSort && !canHide && !canPin) {
     return <div className={cn(className)}>{title}</div>;
   }
 
@@ -44,7 +50,7 @@ export function DataTableColumnHeader<TData, TValue>({
         {...props}
       >
         {title}
-        {column.getCanSort() &&
+        {canSort &&
           (column.getIsSorted() === 'desc' ? (
             <ChevronDownIcon />
           ) : column.getIsSorted() === 'asc' ? (
@@ -53,8 +59,8 @@ export function DataTableColumnHeader<TData, TValue>({
             <CaretSortIcon />
           ))}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align='start' className='w-28'>
-        {column.getCanSort() && (
+      <DropdownMenuContent align='start' className='w-44'>
+        {canSort && (
           <>
             <DropdownMenuCheckboxItem
               className='[&_svg]:text-muted-foreground relative pr-8 pl-2 [&>span:first-child]:right-2 [&>span:first-child]:left-auto'
@@ -62,7 +68,7 @@ export function DataTableColumnHeader<TData, TValue>({
               onClick={() => column.toggleSorting(false)}
             >
               <ChevronUpIcon />
-              Asc
+              Ascendente
             </DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem
               className='[&_svg]:text-muted-foreground relative pr-8 pl-2 [&>span:first-child]:right-2 [&>span:first-child]:left-auto'
@@ -70,7 +76,7 @@ export function DataTableColumnHeader<TData, TValue>({
               onClick={() => column.toggleSorting(true)}
             >
               <ChevronDownIcon />
-              Desc
+              Descendente
             </DropdownMenuCheckboxItem>
             {column.getIsSorted() && (
               <DropdownMenuItem
@@ -78,20 +84,35 @@ export function DataTableColumnHeader<TData, TValue>({
                 onClick={() => column.clearSorting()}
               >
                 <Cross2Icon />
-                Reset
+                Restablecer
               </DropdownMenuItem>
             )}
           </>
         )}
-        {column.getCanHide() && (
-          <DropdownMenuCheckboxItem
-            className='[&_svg]:text-muted-foreground relative pr-8 pl-2 [&>span:first-child]:right-2 [&>span:first-child]:left-auto'
-            checked={!column.getIsVisible()}
-            onClick={() => column.toggleVisibility(false)}
-          >
-            <EyeOff />
-            Hide
-          </DropdownMenuCheckboxItem>
+        {canPin && (
+          <>
+            {canSort && <DropdownMenuSeparator />}
+            <DropdownMenuItem
+              className='[&_svg]:text-muted-foreground pl-2'
+              onClick={() => column.pin(isPinnedLeft ? false : 'left')}
+            >
+              {isPinnedLeft ? <PinOffIcon /> : <PinIcon />}
+              {isPinnedLeft ? 'Quitar fijación' : 'Fijar a la izquierda'}
+            </DropdownMenuItem>
+          </>
+        )}
+        {canHide && (
+          <>
+            {(canSort || canPin) && <DropdownMenuSeparator />}
+            <DropdownMenuCheckboxItem
+              className='[&_svg]:text-muted-foreground relative pr-8 pl-2 [&>span:first-child]:right-2 [&>span:first-child]:left-auto'
+              checked={!column.getIsVisible()}
+              onClick={() => column.toggleVisibility(false)}
+            >
+              <EyeOff />
+              Ocultar
+            </DropdownMenuCheckboxItem>
+          </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

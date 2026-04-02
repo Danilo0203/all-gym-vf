@@ -53,10 +53,13 @@ interface CustomerFormSheetProps {
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  entrypoint?: "customers" | "cash";
 }
 
 function DatePickerInput({ value, onChange }: { value?: Date; onChange: (date?: Date) => void }) {
   const [inputValue, setInputValue] = useState<string | undefined>(undefined);
+  const [open, setOpen] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState<Date>(value && isValid(value) ? value : new Date());
   const displayedValue = inputValue ?? (value && isValid(value) ? format(value, "dd/MM/yyyy") : "");
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,6 +69,7 @@ function DatePickerInput({ value, onChange }: { value?: Date; onChange: (date?: 
     if (val.length === 10) {
       const parsed = parse(val, "dd/MM/yyyy", new Date());
       if (isValid(parsed)) {
+        setVisibleMonth(parsed);
         onChange(parsed);
       }
     } else if (val === "") {
@@ -83,7 +87,16 @@ function DatePickerInput({ value, onChange }: { value?: Date; onChange: (date?: 
         maxLength={10}
       />
       <InputGroupAddon align="inline-end">
-        <Popover modal={false}>
+        <Popover
+          modal={false}
+          open={open}
+          onOpenChange={(nextOpen) => {
+            setOpen(nextOpen);
+            if (nextOpen) {
+              setVisibleMonth(value && isValid(value) ? value : new Date());
+            }
+          }}
+        >
           <PopoverTrigger asChild>
             <InputGroupButton variant="ghost" size="icon-sm" className="shrink-0" tabIndex={-1}>
               <IconCalendar className="h-4 w-4 opacity-50" />
@@ -93,8 +106,13 @@ function DatePickerInput({ value, onChange }: { value?: Date; onChange: (date?: 
             <Calendar
               mode="single"
               selected={value}
+              month={visibleMonth}
+              onMonthChange={setVisibleMonth}
               onSelect={(date) => {
                 onChange(date);
+                if (date && isValid(date)) {
+                  setVisibleMonth(date);
+                }
                 setInputValue(undefined);
               }}
               autoFocus
@@ -116,6 +134,7 @@ export function CustomerFormSheet({
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  entrypoint = "customers",
 }: CustomerFormSheetProps) {
   const {
     open,
@@ -136,6 +155,7 @@ export function CustomerFormSheet({
     customer,
     open: controlledOpen,
     onOpenChange: controlledOnOpenChange,
+    entrypoint,
   });
 
   // Trigger por defecto para modo crear
@@ -156,11 +176,15 @@ export function CustomerFormSheet({
       )}
       <SheetContent className="sm:max-w-xl w-full flex flex-col h-full p-0 gap-0">
         <SheetHeader className="px-6 py-4 border-b space-y-1 sticky top-0 bg-background/80 backdrop-blur-md z-10">
-          <SheetTitle>{isEditing ? "Editar Cliente" : "Registro de Nuevo Cliente"}</SheetTitle>
+          <SheetTitle>
+            {isEditing ? "Editar Cliente" : entrypoint === "cash" ? "Nuevo cliente + cobro" : "Registro de Nuevo Cliente"}
+          </SheetTitle>
           <SheetDescription>
             {isEditing
-              ? "Modifica los datos del cliente. Los cambios se guardarán automáticamente."
-              : "Completa la ficha de inscripción. El precio y fechas se calculan según el plan."}
+              ? "Modifica perfil, métricas y entrenamiento. Los cambios financieros se gestionan desde renovación y pagos."
+              : entrypoint === "cash"
+                ? "Registra la ficha del cliente, asigna el plan y cobra dentro del turno actual."
+                : "Completa la ficha de inscripción. El precio y fechas se calculan según el plan."}
           </SheetDescription>
         </SheetHeader>
 
@@ -193,7 +217,7 @@ export function CustomerFormSheet({
                   <FormInputGroup
                     control={form.control}
                     name="email"
-                    label="Email"
+                    label="Correo electrónico"
                     placeholder="user@gym.com"
                     type="email"
                     icon={<IconMail className="h-4 w-4" />}
@@ -266,235 +290,239 @@ export function CustomerFormSheet({
                 </div>
               </div>
 
-              <Separator />
+              {!isEditing ? (
+                <>
+                  <Separator />
 
-              {/* 3. MEMBRESÍA Y PAGOS */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-semibold text-primary flex items-center gap-2">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs">
-                    3
-                  </span>
-                  Membresía
-                </h4>
-                <div className="space-y-4 pl-4">
-                  {/* Selección de Plan */}
-                  <FormSelect
-                    control={form.control}
-                    name="plan_id"
-                    label="Seleccionar Plan"
-                    placeholder="Elige un plan..."
-                    options={plans.map((p) => ({
-                      label: `${p.name} - Q${p.price} (${p.duration_days} días)`,
-                      value: p.id.toString(),
-                    }))}
-                  />
+                  {/* 3. MEMBRESÍA Y PAGOS */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold text-primary flex items-center gap-2">
+                      <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs">
+                        3
+                      </span>
+                      Membresía
+                    </h4>
+                    <div className="space-y-4 pl-4">
+                      {/* Selección de Plan */}
+                      <FormSelect
+                        control={form.control}
+                        name="plan_id"
+                        label="Seleccionar Plan"
+                        placeholder="Elige un plan..."
+                        options={plans.map((p) => ({
+                          label: `${p.name} - Q${p.price} (${p.duration_days} días)`,
+                          value: p.id.toString(),
+                        }))}
+                      />
 
-                  {/* CALENDARIO DE RANGO */}
-                  <FormField
-                    control={form.control}
-                    name="subscription_period"
-                    render={({ field }) => {
-                      const from = field.value?.from;
-                      const to = field.value?.to;
-                      const daysDiff = from && to ? differenceInDays(to, from) : 0;
+                      {/* CALENDARIO DE RANGO */}
+                      <FormField
+                        control={form.control}
+                        name="subscription_period"
+                        render={({ field }) => {
+                          const from = field.value?.from;
+                          const to = field.value?.to;
+                          const daysDiff = from && to ? differenceInDays(to, from) : 0;
 
-                      // Handlers for individual date inputs
-                      const handleStartChange = (date?: Date) => {
-                        markDatesAsModified();
-                        form.setValue("subscription_period", {
-                          from: date || new Date(),
-                          to: field.value?.to || date || new Date(),
-                        });
-                      };
+                          // Handlers for individual date inputs
+                          const handleStartChange = (date?: Date) => {
+                            markDatesAsModified();
+                            form.setValue("subscription_period", {
+                              from: date || new Date(),
+                              to: field.value?.to || date || new Date(),
+                            });
+                          };
 
-                      const handleEndChange = (date?: Date) => {
-                        markDatesAsModified();
-                        form.setValue("subscription_period", {
-                          from: field.value?.from || new Date(),
-                          to: date || new Date(),
-                        });
-                      };
+                          const handleEndChange = (date?: Date) => {
+                            markDatesAsModified();
+                            form.setValue("subscription_period", {
+                              from: field.value?.from || new Date(),
+                              to: date || new Date(),
+                            });
+                          };
 
-                      // Presets for subscription periods
-                      const applyPreset = (days: number) => {
-                        markDatesAsModified();
-                        const start = new Date();
-                        const end = addDays(start, days);
-                        form.setValue("subscription_period", {
-                          from: start,
-                          to: end,
-                        });
-                      };
+                          // Presets for subscription periods
+                          const applyPreset = (days: number) => {
+                            markDatesAsModified();
+                            const start = new Date();
+                            const end = addDays(start, days);
+                            form.setValue("subscription_period", {
+                              from: start,
+                              to: end,
+                            });
+                          };
 
-                      return (
-                        <FormItem className="flex flex-col">
-                          <FormLabel>Vigencia de Suscripción</FormLabel>
-                          <div className="grid grid-cols-[1fr_1fr_auto_80px] gap-2 items-center">
-                            {/* Fecha Inicio */}
-                            <div className="flex flex-col gap-1">
-                              <span className="text-xs text-muted-foreground">Inicio</span>
-                              <DatePickerInput value={from} onChange={handleStartChange} />
-                            </div>
-
-                            {/* Fecha Fin */}
-                            <div className="flex flex-col gap-1">
-                              <span className="text-xs text-muted-foreground">Fin</span>
-                              <DatePickerInput value={to} onChange={handleEndChange} />
-                            </div>
-
-                            {/* Botón Calendario Range con Presets */}
-                            <Popover modal={false}>
-                              <PopoverTrigger asChild>
-                                <Button type="button" variant="outline" size="icon" className="mt-5">
-                                  <IconCalendar className="h-4 w-4" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="end">
-                                <div className="flex">
-                                  {/* Presets sidebar */}
-                                  <div className="flex flex-col border-r p-2 min-w-[130px]">
-                                    <p className="text-xs font-medium text-muted-foreground mb-2 px-2">Períodos</p>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="justify-start font-normal text-xs h-8"
-                                      onClick={() => applyPreset(7)}
-                                    >
-                                      1 semana
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="justify-start font-normal text-xs h-8"
-                                      onClick={() => applyPreset(15)}
-                                    >
-                                      15 días
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="justify-start font-normal text-xs h-8"
-                                      onClick={() => applyPreset(30)}
-                                    >
-                                      1 mes
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="justify-start font-normal text-xs h-8"
-                                      onClick={() => applyPreset(60)}
-                                    >
-                                      2 meses
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="justify-start font-normal text-xs h-8"
-                                      onClick={() => applyPreset(90)}
-                                    >
-                                      3 meses
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="justify-start font-normal text-xs h-8"
-                                      onClick={() => applyPreset(180)}
-                                    >
-                                      6 meses
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="justify-start font-normal text-xs h-8"
-                                      onClick={() => applyPreset(365)}
-                                    >
-                                      1 año
-                                    </Button>
-                                  </div>
-
-                                  {/* Calendar */}
-                                  <Calendar
-                                    autoFocus
-                                    mode="range"
-                                    defaultMonth={from}
-                                    selected={
-                                      subscriptionPeriod?.from
-                                        ? { from: subscriptionPeriod.from, to: subscriptionPeriod.to }
-                                        : undefined
-                                    }
-                                    onSelect={handleDateRangeChange}
-                                    numberOfMonths={2}
-                                    locale={es}
-                                  />
+                          return (
+                            <FormItem className="flex flex-col">
+                              <FormLabel>Vigencia de Suscripción</FormLabel>
+                              <div className="grid grid-cols-[1fr_1fr_auto_80px] gap-2 items-center">
+                                {/* Fecha Inicio */}
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-xs text-muted-foreground">Inicio</span>
+                                  <DatePickerInput value={from} onChange={handleStartChange} />
                                 </div>
-                              </PopoverContent>
-                            </Popover>
 
-                            {/* Días */}
-                            <div className="flex flex-col gap-1 mt-5">
-                              <div className="h-9 flex items-center justify-center px-2 border rounded-md bg-muted text-muted-foreground font-medium text-sm">
-                                {daysDiff} días
+                                {/* Fecha Fin */}
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-xs text-muted-foreground">Fin</span>
+                                  <DatePickerInput value={to} onChange={handleEndChange} />
+                                </div>
+
+                                {/* Botón Calendario Range con Presets */}
+                                <Popover modal={false}>
+                                  <PopoverTrigger asChild>
+                                    <Button type="button" variant="outline" size="icon" className="mt-5">
+                                      <IconCalendar className="h-4 w-4" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0" align="end">
+                                    <div className="flex">
+                                      {/* Presets sidebar */}
+                                      <div className="flex flex-col border-r p-2 min-w-[130px]">
+                                        <p className="text-xs font-medium text-muted-foreground mb-2 px-2">Períodos</p>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="justify-start font-normal text-xs h-8"
+                                          onClick={() => applyPreset(7)}
+                                        >
+                                          1 semana
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="justify-start font-normal text-xs h-8"
+                                          onClick={() => applyPreset(15)}
+                                        >
+                                          15 días
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="justify-start font-normal text-xs h-8"
+                                          onClick={() => applyPreset(30)}
+                                        >
+                                          1 mes
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="justify-start font-normal text-xs h-8"
+                                          onClick={() => applyPreset(60)}
+                                        >
+                                          2 meses
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="justify-start font-normal text-xs h-8"
+                                          onClick={() => applyPreset(90)}
+                                        >
+                                          3 meses
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="justify-start font-normal text-xs h-8"
+                                          onClick={() => applyPreset(180)}
+                                        >
+                                          6 meses
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="justify-start font-normal text-xs h-8"
+                                          onClick={() => applyPreset(365)}
+                                        >
+                                          1 año
+                                        </Button>
+                                      </div>
+
+                                      {/* Calendar */}
+                                      <Calendar
+                                        autoFocus
+                                        mode="range"
+                                        defaultMonth={from}
+                                        selected={
+                                          subscriptionPeriod?.from
+                                            ? { from: subscriptionPeriod.from, to: subscriptionPeriod.to }
+                                            : undefined
+                                        }
+                                        onSelect={handleDateRangeChange}
+                                        numberOfMonths={2}
+                                        locale={es}
+                                      />
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+
+                                {/* Días */}
+                                <div className="flex flex-col gap-1 mt-5">
+                                  <div className="h-9 flex items-center justify-center px-2 border rounded-md bg-muted text-muted-foreground font-medium text-sm">
+                                    {daysDiff} días
+                                  </div>
+                                </div>
                               </div>
-                            </div>
+                              <FormMessage />
+                            </FormItem>
+                          );
+                        }}
+                      />
+
+                      {/* Cálculos de Precio */}
+                      <div className="grid grid-cols-3 gap-4 items-end bg-muted/30 p-3 rounded-md">
+                        <div className="flex flex-col gap-2">
+                          <label className="text-xs font-medium text-muted-foreground">Precio Plan</label>
+                          <div className="h-10 flex items-center px-3 border rounded-md bg-muted text-muted-foreground font-semibold">
+                            Q{selectedPlanPrice.toFixed(2)}
                           </div>
-                          <FormMessage />
-                        </FormItem>
-                      );
-                    }}
-                  />
+                        </div>
 
-                  {/* Cálculos de Precio */}
-                  <div className="grid grid-cols-3 gap-4 items-end bg-muted/30 p-3 rounded-md">
-                    <div className="flex flex-col gap-2">
-                      <label className="text-xs font-medium text-muted-foreground">Precio Plan</label>
-                      <div className="h-10 flex items-center px-3 border rounded-md bg-muted text-muted-foreground font-semibold">
-                        Q{selectedPlanPrice.toFixed(2)}
-                      </div>
-                    </div>
-
-                    <FormInputGroup
-                      control={form.control}
-                      name="discount_amount"
-                      label="Descuento"
-                      type="number"
-                      min={0}
-                      placeholder="0.00"
-                      icon={<IconDiscount className="h-4 w-4" />}
-                    />
-
-                    <div className="flex flex-col gap-2">
-                      <label className="text-xs font-medium text-primary">Precio Final</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-2.5 text-sm font-bold">Q</span>
-                        <input
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 pl-7 py-2 text-sm font-bold text-green-600 disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled
-                          value={form.watch("final_price")?.toFixed(2) || "0.00"}
+                        <FormInputGroup
+                          control={form.control}
+                          name="discount_amount"
+                          label="Descuento"
+                          type="number"
+                          min={0}
+                          placeholder="0.00"
+                          icon={<IconDiscount className="h-4 w-4" />}
                         />
+
+                        <div className="flex flex-col gap-2">
+                          <label className="text-xs font-medium text-primary">Precio Final</label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-2.5 text-sm font-bold">Q</span>
+                            <input
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 pl-7 py-2 text-sm font-bold text-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+                              disabled
+                              value={form.watch("final_price")?.toFixed(2) || "0.00"}
+                            />
+                          </div>
+                        </div>
                       </div>
+
+                      <FormSelect
+                        control={form.control}
+                        name="payment_method"
+                        label="Método de Pago"
+                        options={[
+                          { label: "Efectivo", value: "cash" },
+                          { label: "Tarjeta", value: "card" },
+                          { label: "Transferencia", value: "transfer" },
+                        ]}
+                      />
                     </div>
                   </div>
 
-                  <FormSelect
-                    control={form.control}
-                    name="payment_method"
-                    label="Método de Pago"
-                    options={[
-                      { label: "Efectivo", value: "cash" },
-                      { label: "Tarjeta", value: "card" },
-                      { label: "Transferencia", value: "transfer" },
-                    ]}
-                  />
-                </div>
-              </div>
-
-              <Separator />
+                  <Separator />
+                </>
+              ) : null}
 
               {/* 4. PERFIL DE ENTRENAMIENTO */}
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-primary flex items-center gap-2">
                   <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs">
-                    4
+                    {isEditing ? 3 : 4}
                   </span>
                   Perfil de Entrenamiento
                 </h4>

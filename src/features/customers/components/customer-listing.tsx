@@ -9,7 +9,8 @@ export default async function CustomerListingPage() {
   const pageLimit = searchParamsCache.get("perPage");
   const fullName = searchParamsCache.get("full_name");
   const planName = searchParamsCache.get("plan_name");
-  const status = searchParamsCache.get("status");
+  const isActive = searchParamsCache.get("is_active");
+  const subscriptionStatus = searchParamsCache.get("subscription_status");
   const role = searchParamsCache.get("role") || "client";
   const sort = searchParamsCache.get("sort"); // Expecting format: "column.dir" (e.g., "full_name.asc")
 
@@ -19,7 +20,8 @@ export default async function CustomerListingPage() {
     role,
     ...(fullName && { full_name: fullName }),
     ...(planName && { plan_name: planName }),
-    ...(status && { status }),
+    ...(isActive && { is_active: isActive }),
+    ...(subscriptionStatus && { subscription_status: subscriptionStatus }),
   };
 
   const supabase = await createClient();
@@ -58,19 +60,25 @@ export default async function CustomerListingPage() {
     query = query.ilike("full_name", `%${filters.full_name}%`);
   }
 
-  // Filtro por estado (Active/Inactive)
-  if (filters.status) {
-    // Si el filtro es "Active", buscamos is_active = true
-    // Si es "Inactive", buscamos is_active = false
-    const statusValues = filters.status.split(",");
+  // Filtro por estado del cliente (Active/Inactive)
+  if (filters.is_active) {
+    const statusValues = filters.is_active.split(",");
     if (statusValues.length === 1) {
       query = query.eq("is_active", statusValues[0] === "Active");
     } else if (statusValues.length > 1) {
-      // Si hay múltiples (ej. Active,Inactive), filtramos por ambos (o sea, todos)
-      // Pero si la lógica requiere OR, `in` funciona.
-      // Convertimos "Active" -> true, "Inactive" -> false
       const boolValues = statusValues.map((s) => s === "Active");
       query = query.in("is_active", boolValues);
+    }
+  }
+
+  // Filtro por estado de suscripción
+  if (filters.subscription_status) {
+    const subscriptionStatuses = filters.subscription_status
+      .split(",")
+      .filter(Boolean);
+
+    if (subscriptionStatuses.length > 0) {
+      query = query.in("subscription_status", subscriptionStatuses);
     }
   }
 

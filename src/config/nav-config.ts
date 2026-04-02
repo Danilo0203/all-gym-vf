@@ -39,6 +39,7 @@ export const navItems: NavItem[] = [
     icon: "dashboard",
     isActive: false,
     shortcut: ["d", "d"],
+    access: { role: ["admin", "trainer", "employee"] },
     items: [],
   },
   {
@@ -46,6 +47,7 @@ export const navItems: NavItem[] = [
     url: "/panel/clientes",
     icon: "customers",
     isActive: false,
+    access: { role: ["admin", "trainer", "employee"] },
     items: [],
   },
   {
@@ -55,6 +57,25 @@ export const navItems: NavItem[] = [
     isActive: false,
     access: { role: ["admin"] },
     items: [],
+  },
+  {
+    title: "Caja",
+    url: "#",
+    icon: "cash",
+    isActive: false,
+    access: { role: ["admin", "employee"] },
+    items: [
+      {
+        title: "Caja actual",
+        url: "/panel/caja",
+        icon: "cash",
+      },
+      {
+        title: "Historial",
+        url: "/panel/caja/historial",
+        icon: "cash",
+      },
+    ],
   },
   {
     title: "Administración",
@@ -90,6 +111,7 @@ export const navItems: NavItem[] = [
     url: "#", // Placeholder as there is no direct link for the parent
     icon: "account",
     isActive: true,
+    access: { role: ["admin", "trainer", "employee"] },
     items: [
       {
         title: "Perfil",

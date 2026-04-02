@@ -100,7 +100,7 @@ export default function ProfileViewPage({ user }: ProfileViewPageProps) {
         <CardContent className="px-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1">
-              <p className="text-sm font-medium text-muted-foreground">Email</p>
+              <p className="text-sm font-medium text-muted-foreground">Correo electrónico</p>
               <p className="font-medium text-sm">{user.email}</p>
             </div>
             <div className="space-y-1">

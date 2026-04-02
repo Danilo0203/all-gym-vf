@@ -116,12 +116,12 @@ export function FileUploader(props: FileUploaderProps) {
   const onDrop = React.useCallback(
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
       if (!multiple && maxFiles === 1 && acceptedFiles.length > 1) {
-        toast.error('Cannot upload more than 1 file at a time');
+        toast.error('No puedes subir más de 1 archivo a la vez');
         return;
       }
 
       if ((files?.length ?? 0) + acceptedFiles.length > maxFiles) {
-        toast.error(`Cannot upload more than ${maxFiles} files`);
+        toast.error(`No puedes subir más de ${maxFiles} archivos`);
         return;
       }
 
@@ -137,7 +137,7 @@ export function FileUploader(props: FileUploaderProps) {
 
       if (rejectedFiles.length > 0) {
         rejectedFiles.forEach(({ file }) => {
-          toast.error(`File ${file.name} was rejected`);
+          toast.error(`El archivo ${file.name} fue rechazado`);
         });
       }
 
@@ -147,15 +147,15 @@ export function FileUploader(props: FileUploaderProps) {
         updatedFiles.length <= maxFiles
       ) {
         const target =
-          updatedFiles.length > 0 ? `${updatedFiles.length} files` : `file`;
+          updatedFiles.length > 0 ? `${updatedFiles.length} archivos` : `archivo`;
 
         toast.promise(onUpload(updatedFiles), {
-          loading: `Uploading ${target}...`,
+          loading: `Subiendo ${target}...`,
           success: () => {
             setFiles([]);
-            return `${target} uploaded`;
+            return `${target} subidos`;
           },
-          error: `Failed to upload ${target}`
+          error: `No se pudo subir ${target}`
         });
       }
     },
@@ -217,7 +217,7 @@ export function FileUploader(props: FileUploaderProps) {
                   />
                 </div>
                 <p className='text-muted-foreground font-medium'>
-                  Drop the files here
+                  Suelta los archivos aquí
                 </p>
               </div>
             ) : (
@@ -230,14 +230,14 @@ export function FileUploader(props: FileUploaderProps) {
                 </div>
                 <div className='space-y-px'>
                   <p className='text-muted-foreground font-medium'>
-                    Drag {`'n'`} drop files here, or click to select files
+                    Arrastra y suelta archivos aquí, o haz clic para seleccionarlos
                   </p>
                   <p className='text-muted-foreground/70 text-sm'>
-                    You can upload
+                    Puedes subir
                     {maxFiles > 1
-                      ? ` ${maxFiles === Infinity ? 'multiple' : maxFiles}
-                      files (up to ${formatBytes(maxSize)} each)`
-                      : ` a file with ${formatBytes(maxSize)}`}
+                      ? ` ${maxFiles === Infinity ? 'varios' : maxFiles}
+                      archivos (hasta ${formatBytes(maxSize)} cada uno)`
+                      : ` un archivo de hasta ${formatBytes(maxSize)}`}
                   </p>
                 </div>
               </div>
@@ -305,7 +305,7 @@ function FileCard({ file, progress, onRemove }: FileCardProps) {
           className='size-8 rounded-full'
         >
           <IconX className='text-muted-foreground' />
-          <span className='sr-only'>Remove file</span>
+          <span className='sr-only'>Eliminar archivo</span>
         </Button>
       </div>
     </div>

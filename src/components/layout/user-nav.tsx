@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { useCurrentUser } from '@/features/profile/hooks/use-profile';
+import { clearPwaCaches } from "@/lib/pwa/client-cache";
 import { IconUser, IconSettings, IconLogout } from '@tabler/icons-react';
 
 export function UserNav() {
@@ -25,6 +26,7 @@ export function UserNav() {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!
     );
+    await clearPwaCaches();
     await supabase.auth.signOut();
     router.push('/iniciar-sesion');
   };

@@ -5,6 +5,7 @@ import { ExerciseCatalogManager } from "@/features/exercises/components/exercise
 import { getUserAccessContext } from "@/lib/auth/authorization";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeExerciseCatalogItem } from "@/lib/training/catalog";
+import { hydrateExerciseCatalogMedia } from "@/lib/training/exercise-media";
 import { redirect } from "next/navigation";
 
 export const metadata = {
@@ -33,6 +34,7 @@ export default async function ExercisesPage() {
     .order("name", { ascending: true, nullsFirst: false });
 
   const exercises = (data ?? []).map((row) => normalizeExerciseCatalogItem(row as Record<string, unknown>));
+  const hydratedExercises = await hydrateExerciseCatalogMedia(exercises);
 
   return (
     <PageContainer>
@@ -40,7 +42,7 @@ export default async function ExercisesPage() {
         <Heading title="Ejercicios" description="Gestiona el catálogo local de ejercicios, imágenes y altas manuales." />
       </div>
       <Separator className="my-4" />
-      <ExerciseCatalogManager exercises={exercises} totalCount={count ?? exercises.length} />
+      <ExerciseCatalogManager exercises={hydratedExercises} totalCount={count ?? hydratedExercises.length} />
     </PageContainer>
   );
 }
