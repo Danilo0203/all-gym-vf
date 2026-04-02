@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { AlertCircle, CheckCircle2, ClipboardList, RefreshCw, Sparkles } from "lucide-react";
+import { AlertCircle, CheckCircle2, ClipboardList, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { TRAINING_LOCATION_OPTIONS } from "@/lib/training/options";
 import { formatSessionDuration } from "@/lib/training/profile-defaults";
 import type { CustomerRoutineWorkspace, RoutineDetailRecord, RoutineRecord } from "@/lib/training/types";
@@ -42,7 +42,7 @@ function formatRoutineTimestamp(value: string | undefined) {
   }
 }
 
-function buildProfileHighlights(workspace: CustomerRoutineWorkspace) {
+function getTrainingContextSummary(workspace: CustomerRoutineWorkspace) {
   const profile = workspace.trainingProfile;
   const locationLabel = profile?.training_location
     ? TRAINING_LOCATION_OPTIONS.find((item) => item.value === profile.training_location)?.label
@@ -53,23 +53,9 @@ function buildProfileHighlights(workspace: CustomerRoutineWorkspace) {
     profile?.days_per_week ? `${profile.days_per_week} días/semana` : null,
     profile?.session_minutes ? `${formatSessionDuration(profile.session_minutes)} por sesión` : null,
     locationLabel ? `Lugar: ${locationLabel}` : null,
-  ].filter((item): item is string => Boolean(item));
-}
-
-function getOverviewState(workspace: CustomerRoutineWorkspace) {
-  if (workspace.draftRoutine) {
-    return { label: "Revisión pendiente", variant: "warning" as const };
-  }
-
-  if (workspace.activeRoutine) {
-    return { label: "Rutina activa", variant: "success" as const };
-  }
-
-  if (workspace.missingRequirements.length > 0 || workspace.pendingRoutine) {
-    return { label: "Perfil incompleto", variant: "secondary" as const };
-  }
-
-  return { label: "Sin rutina", variant: "secondary" as const };
+  ]
+    .filter((item): item is string => Boolean(item))
+    .join(" • ");
 }
 
 function getNextStepTitle(workspace: CustomerRoutineWorkspace) {
@@ -132,7 +118,7 @@ function getGenerateLabel(workspace: CustomerRoutineWorkspace) {
     : "Generar propuesta";
 }
 
-function RoutineStagePanel({
+function RoutineStageRow({
   eyebrow,
   title,
   routine,
@@ -140,7 +126,6 @@ function RoutineStagePanel({
   description,
   tone,
   timestampLabel,
-  actions,
 }: {
   eyebrow: string;
   title: string;
@@ -149,7 +134,6 @@ function RoutineStagePanel({
   description: string;
   tone: "draft" | "active";
   timestampLabel: string;
-  actions?: React.ReactNode;
 }) {
   const timestamp = formatRoutineTimestamp(
     tone === "active" ? routine.reviewed_at || routine.created_at : routine.created_at,
@@ -157,8 +141,8 @@ function RoutineStagePanel({
   const primaryGoalLabel = getPrimaryGoalLabel(routine.primary_goal);
   const toneClasses =
     tone === "draft"
-      ? "border-amber-500/25 bg-amber-500/[0.08]"
-      : "border-emerald-500/25 bg-emerald-500/[0.08]";
+      ? "border-amber-500/25 bg-amber-500/[0.06]"
+      : "border-emerald-500/25 bg-emerald-500/[0.06]";
   const icon =
     tone === "draft" ? (
       <ClipboardList className="size-5 text-amber-600" />
@@ -167,36 +151,36 @@ function RoutineStagePanel({
     );
 
   return (
-    <section className={`rounded-2xl border p-5 ${toneClasses}`}>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-4">
+    <section className={`rounded-2xl border px-4 py-4 ${toneClasses}`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
           <div className="flex items-start gap-3">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80">
               {icon}
             </div>
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{eyebrow}</p>
+            <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                  {eyebrow}
+                </p>
+                <h3 className="text-base font-semibold tracking-tight">{title}</h3>
                 <Badge variant={getStatusBadgeVariant(routine.status)}>{getStatusLabel(routine.status)}</Badge>
                 {primaryGoalLabel ? <Badge variant="outline">{primaryGoalLabel}</Badge> : null}
               </div>
               <div className="space-y-1">
-                <p className="text-base font-medium">{routine.name}</p>
+                <p className="text-sm font-medium text-foreground/90">{routine.name}</p>
                 <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground lg:justify-end">
           <Badge variant="secondary">{getRoutineDayCount(details)} días</Badge>
           <Badge variant="secondary">{getRoutineExerciseCount(details)} ejercicios</Badge>
           {timestamp ? <Badge variant="outline">{timestampLabel} {timestamp}</Badge> : null}
         </div>
       </div>
-
-      {actions ? <div className="mt-5 flex flex-wrap gap-2">{actions}</div> : null}
     </section>
   );
 }
@@ -258,41 +242,24 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
   };
 
   const trainingContextHelper = buildTrainingContextHelper(workspace.trainingProfile);
-  const profileHighlights = buildProfileHighlights(workspace);
-  const overviewState = getOverviewState(workspace);
+  const trainingContextSummary = getTrainingContextSummary(workspace);
   const draftHref = `/panel/clientes/${customerId}/rutina/borrador`;
   const activeHref = `/panel/clientes/${customerId}/rutina/activa`;
   const canGenerate = workspace.missingRequirements.length === 0;
   const generateLabel = getGenerateLabel(workspace);
+  const hasRoutines = Boolean(workspace.draftRoutine || workspace.activeRoutine);
 
   return (
-    <div className="space-y-6">
-      <Card className="overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-muted/30">
-        <CardContent className="grid gap-6 p-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,360px)]">
-          <div className="space-y-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={getStatusBadgeVariant(workspace.trainingProfileStatus)}>
-                Perfil {getStatusLabel(workspace.trainingProfileStatus)}
-              </Badge>
-              <Badge variant={overviewState.variant}>{overviewState.label}</Badge>
-            </div>
+    <Card className="overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-muted/20 py-0">
+      <CardContent className="space-y-5 px-6 py-6">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 flex-1 space-y-4">
+            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{getWorkspaceNarrative(workspace)}</p>
 
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold tracking-tight">Centro de rutina</h2>
-              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                Genera nuevas propuestas, revisa el borrador y conserva visible la rutina activa sin repetir bloques ni
-                acciones en toda la pantalla.
-              </p>
-            </div>
-
-            {profileHighlights.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {profileHighlights.map((item) => (
-                  <Badge key={item} variant="outline" className="rounded-full border-border/70 bg-background/70 px-3 py-1">
-                    {item}
-                  </Badge>
-                ))}
-              </div>
+            {trainingContextSummary ? (
+              <p className="text-sm leading-6 text-muted-foreground">{trainingContextSummary}</p>
+            ) : trainingContextHelper ? (
+              <p className="text-sm leading-6 text-muted-foreground">Base actual: {trainingContextHelper}</p>
             ) : (
               <p className="text-sm text-muted-foreground">
                 Aún no hay suficiente contexto de entrenamiento para resumir la ficha.
@@ -300,7 +267,7 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
             )}
 
             {workspace.missingRequirements.length > 0 ? (
-              <div className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.08] p-4">
+              <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.08] px-4 py-3">
                 <div className="flex gap-3">
                   <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-600" />
                   <div className="space-y-2">
@@ -319,120 +286,104 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="rounded-2xl border border-border/60 bg-background/60 px-4 py-3">
-                <p className="text-sm text-muted-foreground">
-                  La ficha ya tiene el contexto mínimo para generar una propuesta coherente.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="flex h-full flex-col justify-between gap-5 rounded-2xl border border-border/70 bg-background/80 p-5 shadow-sm">
-            <div className="space-y-4">
-              <Badge variant="secondary" className="gap-1.5">
-                <Sparkles className="size-3.5" />
-                Siguiente paso
-              </Badge>
-              <div className="space-y-2">
-                <p className="text-lg font-semibold tracking-tight">{getNextStepTitle(workspace)}</p>
-                <p className="text-sm leading-6 text-muted-foreground">{getNextStepDescription(workspace)}</p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <Button onClick={handleGenerate} disabled={!canGenerate || isGenerating} className="w-full sm:w-auto">
-                <RefreshCw className={`size-4 ${isGenerating ? "animate-spin" : ""}`} />
-                {isGenerating ? "Generando..." : generateLabel}
-              </Button>
-              <p className="text-xs leading-5 text-muted-foreground">
-                {canGenerate
-                  ? workspace.draftRoutine || workspace.activeRoutine
-                    ? "Se creará un nuevo borrador. La rutina activa no cambia hasta que lo apruebes."
-                    : "Se creará una propuesta inicial basada en la ficha del cliente."
-                  : "Completa primero los campos pendientes para habilitar la generación."}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-border/70">
-        <CardHeader className="space-y-4 border-b">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-base">Estado de la rutina</CardTitle>
-                <Badge variant={overviewState.variant}>{overviewState.label}</Badge>
-              </div>
-              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{getWorkspaceNarrative(workspace)}</p>
-            </div>
-
-            {trainingContextHelper ? (
-              <p className="max-w-md text-sm leading-6 text-muted-foreground lg:text-right">
-                Base actual: {trainingContextHelper}
-              </p>
             ) : null}
           </div>
-        </CardHeader>
 
-        <CardContent className="space-y-4 pt-6">
-          {workspace.draftRoutine ? (
-            <RoutineStagePanel
-              eyebrow="Borrador"
-              title="Listo para revisión"
-              routine={workspace.draftRoutine}
-              details={workspace.draftDetails}
-              description={
-                workspace.activeRoutine
-                  ? "Revísalo antes de reemplazar la rutina que hoy sigue activa para el cliente."
-                  : "Revísalo y actívalo cuando quieras publicarlo para el cliente."
-              }
-              tone="draft"
-              timestampLabel="Generado"
-              actions={
+          <div className="flex w-full flex-col gap-3 xl:max-w-[320px] xl:shrink-0 xl:items-end">
+            <div className="space-y-1 xl:text-right">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                Siguiente paso
+              </p>
+              <p className="text-sm font-semibold tracking-tight">{getNextStepTitle(workspace)}</p>
+              <p className="text-sm leading-6 text-muted-foreground">{getNextStepDescription(workspace)}</p>
+            </div>
+
+            <div className="flex w-full flex-wrap gap-2 xl:justify-end">
+              {workspace.draftRoutine ? (
                 <>
-                  <Button asChild>
-                    <Link href={draftHref}>Ver borrador</Link>
+                  <Button asChild size="sm">
+                    <Link href={draftHref}>Revisar borrador</Link>
                   </Button>
-                  <Button variant="outline" onClick={handleApprove} disabled={isApproving}>
+                  <Button size="sm" variant="outline" onClick={handleApprove} disabled={isApproving}>
                     {isApproving ? "Aprobando..." : "Aprobar y activar"}
                   </Button>
                 </>
-              }
-            />
-          ) : null}
-
-          {workspace.draftRoutine && workspace.activeRoutine ? <div className="border-t border-dashed" /> : null}
-
-          {workspace.activeRoutine ? (
-            <RoutineStagePanel
-              eyebrow="Rutina activa"
-              title="Versión visible para el cliente"
-              routine={workspace.activeRoutine}
-              details={workspace.activeDetails}
-              description={
-                workspace.draftRoutine
-                  ? "Sigue siendo la versión publicada hasta que apruebes el borrador."
-                  : "Es la versión vigente y se mantiene en solo lectura para preservar trazabilidad."
-              }
-              tone="active"
-              timestampLabel="Activa"
-              actions={
+              ) : workspace.activeRoutine ? (
                 <>
-                  <Button asChild variant="secondary">
-                    <Link href={activeHref}>Abrir rutina activa</Link>
+                  <Button asChild size="sm" variant="secondary">
+                    <Link href={activeHref}>Abrir activa</Link>
                   </Button>
-                  <Button variant="ghost" onClick={handleArchiveActive} disabled={isArchiving}>
-                    {isArchiving ? "Archivando..." : "Archivar rutina"}
+                  <Button size="sm" variant="outline" onClick={handleGenerate} disabled={!canGenerate || isGenerating}>
+                    <RefreshCw className={`size-4 ${isGenerating ? "animate-spin" : ""}`} />
+                    {isGenerating ? "Generando..." : generateLabel}
                   </Button>
                 </>
-              }
-            />
-          ) : null}
+              ) : (
+                <Button size="sm" onClick={handleGenerate} disabled={!canGenerate || isGenerating}>
+                  <RefreshCw className={`size-4 ${isGenerating ? "animate-spin" : ""}`} />
+                  {isGenerating ? "Generando..." : generateLabel}
+                </Button>
+              )}
+            </div>
 
-          {!workspace.draftRoutine && !workspace.activeRoutine ? (
-            <section className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-6">
+            {workspace.draftRoutine && canGenerate ? (
+              <Button size="sm" variant="link" onClick={handleGenerate} disabled={isGenerating} className="h-auto px-0">
+                <RefreshCw className={`size-3.5 ${isGenerating ? "animate-spin" : ""}`} />
+                {isGenerating ? "Generando..." : "Generar otra propuesta"}
+              </Button>
+            ) : null}
+
+            {workspace.activeRoutine && !workspace.draftRoutine ? (
+              <Button
+                size="sm"
+                variant="link"
+                onClick={handleArchiveActive}
+                disabled={isArchiving}
+                className="h-auto px-0 text-muted-foreground"
+              >
+                {isArchiving ? "Archivando..." : "Archivar rutina"}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="border-t border-border/60 pt-5">
+          {hasRoutines ? (
+            <div className="space-y-3">
+              {workspace.draftRoutine ? (
+                <RoutineStageRow
+                  eyebrow="Borrador"
+                  title="Listo para revisión"
+                  routine={workspace.draftRoutine}
+                  details={workspace.draftDetails}
+                  description={
+                    workspace.activeRoutine
+                      ? "Revísalo antes de reemplazar la rutina que hoy sigue activa para el cliente."
+                      : "Revísalo y actívalo cuando quieras publicarlo para el cliente."
+                  }
+                  tone="draft"
+                  timestampLabel="Generado"
+                />
+              ) : null}
+
+              {workspace.activeRoutine ? (
+                <RoutineStageRow
+                  eyebrow="Rutina activa"
+                  title="Versión visible para el cliente"
+                  routine={workspace.activeRoutine}
+                  details={workspace.activeDetails}
+                  description={
+                    workspace.draftRoutine
+                      ? "Sigue siendo la versión publicada hasta que apruebes el borrador."
+                      : "Es la versión vigente y se mantiene en solo lectura para preservar trazabilidad."
+                  }
+                  tone="active"
+                  timestampLabel="Activa"
+                />
+              ) : null}
+            </div>
+          ) : (
+            <section className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-5">
               <div className="space-y-2">
                 <p className="text-base font-semibold tracking-tight">
                   {workspace.pendingRoutine || workspace.missingRequirements.length > 0
@@ -446,9 +397,9 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
                 </p>
               </div>
             </section>
-          ) : null}
-        </CardContent>
-      </Card>
-    </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
