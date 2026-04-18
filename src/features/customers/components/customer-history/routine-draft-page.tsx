@@ -1,12 +1,12 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { IconArrowLeft } from "@tabler/icons-react";
-import { ImageIcon } from "lucide-react";
+import { ImageIcon, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,6 +31,7 @@ import type {
 } from "@/lib/training/types";
 import {
   approveRoutineDraft,
+  generateRoutineProposal,
   getRoutineExerciseReplacementOptions,
   importExerciseFromProvider,
   replaceRoutineExercise,
@@ -76,9 +77,11 @@ export function RoutineDraftPage({ customerId, customerName, workspace }: Routin
   const router = useRouter();
   const [editors, setEditors] = useState<Record<number, DetailEditorState>>({});
   const [busyDetailId, setBusyDetailId] = useState<number | null>(null);
+  const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [replaceTarget, setReplaceTarget] = useState<RoutineDetailRecord | null>(null);
   const replacementRequestRef = useRef<number | null>(null);
+  const pendingDraftIdRef = useRef<string | null>(null);
   const [replacementContext, setReplacementContext] = useState<RoutineReplacementContext | null>(null);
   const [replacementGroups, setReplacementGroups] = useState<ExerciseReplacementGroup[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -98,6 +101,15 @@ export function RoutineDraftPage({ customerId, customerName, workspace }: Routin
     }
     setEditors(nextEditors);
   }, [workspace.draftDetails]);
+
+  useEffect(() => {
+    if (!isGeneratingDraft) return;
+    if (!pendingDraftIdRef.current) return;
+    if (workspace.draftRoutine?.id !== pendingDraftIdRef.current) return;
+
+    setIsGeneratingDraft(false);
+    pendingDraftIdRef.current = null;
+  }, [isGeneratingDraft, workspace.draftRoutine?.id]);
 
   const handleEditorChange = (detailId: number, patch: Partial<DetailEditorState>) => {
     setEditors((current) => ({
@@ -145,6 +157,31 @@ export function RoutineDraftPage({ customerId, customerName, workspace }: Routin
       toast.error(error instanceof Error ? error.message : "No se pudo aprobar la rutina.");
     } finally {
       setIsApproving(false);
+    }
+  };
+
+  const handleGenerateDraft = async () => {
+    try {
+      setIsGeneratingDraft(true);
+      pendingDraftIdRef.current = null;
+      const result = await generateRoutineProposal(customerId);
+
+      if (!result.success) {
+        toast.error(result.error || "Aún faltan datos para generar la propuesta.");
+        setIsGeneratingDraft(false);
+        return;
+      }
+
+      pendingDraftIdRef.current = result.routineId;
+      toast.success(workspace.draftRoutine ? "Nueva rutina generada." : "Propuesta de rutina generada.");
+
+      startTransition(() => {
+        router.refresh();
+      });
+    } catch (error) {
+      pendingDraftIdRef.current = null;
+      setIsGeneratingDraft(false);
+      toast.error(error instanceof Error ? error.message : "No se pudo generar la rutina.");
     }
   };
 
@@ -271,49 +308,60 @@ export function RoutineDraftPage({ customerId, customerName, workspace }: Routin
   const backHref = `/panel/clientes/${customerId}/history#routine`;
   const activeHref = `/panel/clientes/${customerId}/rutina/activa`;
   const trainingContextHelper = buildTrainingContextHelper(workspace.trainingProfile);
+  const canGenerate = workspace.missingRequirements.length === 0;
 
   if (!workspace.draftRoutine) {
     return (
-      <div className="flex h-full min-h-0 flex-col gap-6 overflow-y-auto p-6">
-        <div className="flex items-center justify-between gap-4">
-          <div className="space-y-2">
-            <Button asChild variant="ghost" className="h-auto px-0 text-muted-foreground hover:bg-transparent">
-              <Link href={backHref}>
-                <IconArrowLeft className="h-4 w-4" />
-                Volver al perfil
-              </Link>
-            </Button>
-            <div>
-              <h1 className="text-2xl font-black tracking-tight">Borrador de rutina</h1>
-              <p className="text-sm text-muted-foreground">{customerName}</p>
+      <div className="relative flex h-full min-h-0 flex-col">
+        <div className="flex h-full min-h-0 flex-col gap-6 overflow-y-auto p-6" aria-busy={isGeneratingDraft}>
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-2">
+              <Button asChild variant="ghost" className="h-auto px-0 text-muted-foreground hover:bg-transparent">
+                <Link href={backHref}>
+                  <IconArrowLeft className="h-4 w-4" />
+                  Volver al perfil
+                </Link>
+              </Button>
+              <div>
+                <h1 className="text-2xl font-black tracking-tight">Borrador de rutina</h1>
+                <p className="text-sm text-muted-foreground">{customerName}</p>
+              </div>
             </div>
           </div>
+
+          <Card className="border-border/70">
+            <CardContent className="space-y-3 p-8 text-center">
+              <p className="text-lg font-semibold">Todavía no hay un borrador disponible</p>
+              <p className="text-sm text-muted-foreground">
+                {canGenerate
+                  ? "Puedes generar la propuesta desde esta misma vista y empezar a trabajar aquí en cuanto termine."
+                  : "Todavía faltan datos en la ficha del cliente para generar una propuesta nueva."}
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button asChild variant="outline">
+                  <Link href={backHref}>Volver a Rutina</Link>
+                </Button>
+                <Button onClick={handleGenerateDraft} disabled={!canGenerate || isGeneratingDraft}>
+                  <RefreshCw className={`size-4 ${isGeneratingDraft ? "animate-spin" : ""}`} />
+                  {isGeneratingDraft ? "Generando..." : "Generar rutina"}
+                </Button>
+                {workspace.activeRoutine ? (
+                  <Button asChild variant="secondary">
+                    <Link href={activeHref}>Ver rutina aprobada</Link>
+                  </Button>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        <Card className="border-border/70">
-          <CardContent className="p-8 text-center space-y-3">
-            <p className="text-lg font-semibold">Todavía no hay un borrador disponible</p>
-            <p className="text-sm text-muted-foreground">
-              Genera una propuesta desde la pestaña de rutina del perfil para empezar a trabajar aquí.
-            </p>
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button asChild variant="outline">
-                <Link href={backHref}>Volver a Rutina</Link>
-              </Button>
-              {workspace.activeRoutine ? (
-                <Button asChild>
-                  <Link href={activeHref}>Ver rutina aprobada</Link>
-                </Button>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
+        {isGeneratingDraft ? <RoutineDraftGenerationOverlay hasExistingDraft={false} /> : null}
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden" aria-busy={isGeneratingDraft}>
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="flex flex-col gap-6 p-6 pb-8">
           <div className="space-y-4">
@@ -378,20 +426,23 @@ export function RoutineDraftPage({ customerId, customerName, workspace }: Routin
       </div>
 
       <div className="border-t bg-background/95 px-6 py-4 backdrop-blur">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground">
-            Guarda por bloque cuando ajustes series, repeticiones o notas. Aprueba solo cuando el borrador quede listo.
-          </p>
+        <div className="flex justify-end">
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline">
               <Link href={backHref}>Volver al perfil</Link>
             </Button>
-            <Button onClick={handleApprove} disabled={isApproving}>
+            <Button variant="outline" onClick={handleGenerateDraft} disabled={!canGenerate || isGeneratingDraft || isApproving}>
+              <RefreshCw className={`size-4 ${isGeneratingDraft ? "animate-spin" : ""}`} />
+              {isGeneratingDraft ? "Generando..." : "Generar nueva rutina"}
+            </Button>
+            <Button onClick={handleApprove} disabled={isApproving || isGeneratingDraft}>
               {isApproving ? "Aprobando..." : "Aprobar borrador"}
             </Button>
           </div>
         </div>
       </div>
+
+      {isGeneratingDraft ? <RoutineDraftGenerationOverlay hasExistingDraft /> : null}
 
       <Dialog open={Boolean(replaceTarget)} onOpenChange={(open) => !open && closeReplaceDialog()}>
         <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-hidden">
@@ -537,6 +588,39 @@ export function RoutineDraftPage({ customerId, customerName, workspace }: Routin
           </ScrollArea>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function RoutineDraftGenerationOverlay({ hasExistingDraft }: { hasExistingDraft: boolean }) {
+  return (
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-background/72 px-6 py-6 backdrop-blur-sm">
+      <div className="w-full max-w-6xl space-y-5 rounded-2xl border border-border/70 bg-card/95 p-5 shadow-2xl">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <RefreshCw className="size-5 animate-spin" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-base font-semibold tracking-tight">
+              {hasExistingDraft ? "Generando una nueva rutina" : "Generando el borrador de rutina"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {hasExistingDraft
+                ? "Estamos reemplazando este borrador por una propuesta nueva. La rutina activa seguirá igual hasta que apruebes la nueva versión."
+                : "Estamos preparando la primera propuesta para esta ficha. Esta misma vista se actualizará cuando termine."}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <Skeleton className="h-28 rounded-2xl" />
+          <Skeleton className="h-28 rounded-2xl" />
+          <Skeleton className="h-28 rounded-2xl" />
+        </div>
+
+        <Skeleton className="h-14 w-64 rounded-xl" />
+        <Skeleton className="h-[420px] w-full rounded-2xl" />
+      </div>
     </div>
   );
 }

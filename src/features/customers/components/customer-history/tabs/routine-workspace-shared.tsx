@@ -9,11 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PRIMARY_GOAL_OPTIONS } from "@/lib/training/options";
 import { formatSessionDuration } from "@/lib/training/profile-defaults";
-import type {
-  RoutineDetailRecord,
-  RoutineRecord,
-  TrainingProfileRecord,
-} from "@/lib/training/types";
+import type { RoutineDetailRecord, RoutineRecord, TrainingProfileRecord } from "@/lib/training/types";
 
 export interface DetailEditorState {
   sets: string;
@@ -125,15 +121,7 @@ export function getRoutineExerciseCount(details: RoutineDetailRecord[]) {
   return details.length;
 }
 
-export function RoutineSummaryCard({
-  title,
-  value,
-  helper,
-}: {
-  title: string;
-  value: string;
-  helper?: string;
-}) {
+export function RoutineSummaryCard({ title, value, helper }: { title: string; value: string; helper?: string }) {
   return (
     <Card className="border-border/70">
       <CardContent className="p-4 space-y-1">
@@ -197,13 +185,21 @@ export function RoutineViewer({
         {days.length > 0 ? (
           <Accordion type="multiple" defaultValue={defaultOpenDays} className="space-y-4">
             {days.map((day) => (
-              <AccordionItem key={day} value={`day-${day}`} className="overflow-hidden rounded-xl border border-border/70 px-0">
+              <AccordionItem
+                key={day}
+                value={`day-${day}`}
+                className="overflow-hidden rounded-xl border border-border/70 px-0"
+              >
                 <AccordionTrigger className="px-4 py-4 hover:no-underline">
                   <div className="flex flex-1 flex-wrap items-center justify-between gap-3 pr-2 text-left">
                     <div className="space-y-1">
-                      <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Día {day}</h4>
+                      <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                        Día {day}
+                      </h4>
                       <p className="text-xs text-muted-foreground">
-                        {editable ? "Expande este día para revisar o ajustar ejercicios." : "Expande este día para ver el detalle."}
+                        {editable
+                          ? "Expande este día para revisar o ajustar ejercicios."
+                          : "Expande este día para ver el detalle."}
                       </p>
                     </div>
                     <Badge variant="secondary">{grouped[day].length} ejercicios</Badge>
@@ -225,11 +221,17 @@ export function RoutineViewer({
                                 <div className="space-y-2">
                                   <div className="flex flex-wrap items-center gap-2">
                                     <Badge variant="outline">{getBlockLabel(detail.block_type)}</Badge>
-                                    {detail.exercise_order ? <Badge variant="secondary">#{detail.exercise_order}</Badge> : null}
-                                    {hasUsableExerciseMedia(detail) ? <Badge variant="secondary">Demo visual</Badge> : null}
+                                    {detail.exercise_order ? (
+                                      <Badge variant="secondary">#{detail.exercise_order}</Badge>
+                                    ) : null}
+                                    {hasUsableExerciseMedia(detail) ? (
+                                      <Badge variant="secondary">Demo visual</Badge>
+                                    ) : null}
                                   </div>
                                   <div>
-                                    <p className="font-semibold">{detail.exercise_name_snapshot || "Ejercicio por definir"}</p>
+                                    <p className="font-semibold">
+                                      {detail.exercise_name_snapshot || "Ejercicio por definir"}
+                                    </p>
                                     {detail.notes && !editable ? (
                                       <p className="text-sm text-muted-foreground mt-1">{detail.notes}</p>
                                     ) : null}
@@ -248,7 +250,12 @@ export function RoutineViewer({
                                     </Button>
                                   ) : null}
                                   {editable ? (
-                                    <Button variant="outline" size="sm" onClick={() => onReplace(detail)} disabled={isBusy}>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => onReplace(detail)}
+                                      disabled={isBusy}
+                                    >
                                       Reemplazar ejercicio
                                     </Button>
                                   ) : null}
@@ -277,7 +284,9 @@ export function RoutineViewer({
                                       <label className="text-xs text-muted-foreground">Descanso (seg)</label>
                                       <Input
                                         value={editor.rest_seconds}
-                                        onChange={(event) => onEditorChange(detail.id, { rest_seconds: event.target.value })}
+                                        onChange={(event) =>
+                                          onEditorChange(detail.id, { rest_seconds: event.target.value })
+                                        }
                                         inputMode="numeric"
                                       />
                                     </div>
@@ -295,7 +304,9 @@ export function RoutineViewer({
                                       <label className="text-xs text-muted-foreground">RIR objetivo</label>
                                       <Input
                                         value={editor.target_rir}
-                                        onChange={(event) => onEditorChange(detail.id, { target_rir: event.target.value })}
+                                        onChange={(event) =>
+                                          onEditorChange(detail.id, { target_rir: event.target.value })
+                                        }
                                         inputMode="decimal"
                                       />
                                     </div>
@@ -341,7 +352,7 @@ function ExerciseMediaPreview({ detail }: { detail: RoutineDetailRecord }) {
     <div className="xl:w-56 shrink-0">
       {canRenderMedia ? (
         <div className="overflow-hidden rounded-xl border bg-muted/20">
-          <div className="relative aspect-[4/3]">
+          <div className="relative aspect-[4/3] my-auto">
             {/* GIF demos are rendered directly to preserve animation and avoid provider optimization issues. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -351,10 +362,6 @@ function ExerciseMediaPreview({ detail }: { detail: RoutineDetailRecord }) {
               className="h-full w-full object-contain bg-black/30"
               onError={() => setHasMediaError(true)}
             />
-          </div>
-          <div className="border-t bg-background/80 px-3 py-2">
-            <p className="text-xs font-medium text-foreground">Cómo se ejecuta</p>
-            <p className="text-[11px] text-muted-foreground">Vista rápida para revisar técnica antes de ajustar.</p>
           </div>
         </div>
       ) : (
