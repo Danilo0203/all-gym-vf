@@ -972,6 +972,8 @@ export async function generateRoutineProposal(userId: string) {
 
   revalidatePath(`/panel/clientes/${userId}`);
   revalidatePath(`/panel/clientes/${userId}/history`);
+  revalidatePath(`/panel/clientes/${userId}/rutina/borrador`);
+  revalidatePath(`/panel/clientes/${userId}/rutina/activa`);
 
   return result;
 }
