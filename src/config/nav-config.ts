@@ -100,6 +100,11 @@ export const navItems: NavItem[] = [
         icon: "dashboard",
       },
       {
+        title: "Rutinas",
+        url: "/panel/rutinas",
+        icon: "routine",
+      },
+      {
         title: "Ejercicios",
         url: "/panel/ejercicios",
         icon: "product",
