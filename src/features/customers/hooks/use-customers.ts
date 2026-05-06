@@ -10,7 +10,6 @@ import {
 } from "../actions/customer-actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 
 export const customersKeys = {
   all: ["customers"] as const,
@@ -80,22 +79,7 @@ export function useUpdateCustomer() {
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<CreateCustomerData> }) => {
-      // Si hay una contraseña en los datos, obtener el token de acceso del cliente
-      let accessToken: string | undefined;
-
-      if (data.password && data.password.length >= 6) {
-        const supabase = createClient();
-        const { data: sessionData } = await supabase.auth.getSession();
-        accessToken = sessionData?.session?.access_token;
-
-        if (!accessToken) {
-          toast.error("Sesión expirada. Por favor inicia sesión nuevamente.");
-          router.push("/iniciar-sesion");
-          throw new Error("Sesión expirada");
-        }
-      }
-
-      const result = await updateCustomer(id, data, accessToken);
+      const result = await updateCustomer(id, data);
       if (!result.success) {
         throw new Error(result.error || "Error al actualizar");
       }

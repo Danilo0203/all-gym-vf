@@ -1288,7 +1288,7 @@ async function createAssessmentAndSnapshot(params: {
   return computed;
 }
 
-export async function updateCustomer(id: string, data: Partial<CreateCustomerData>, accessToken?: string) {
+export async function updateCustomer(id: string, data: Partial<CreateCustomerData>) {
   const supabase = await createClient();
   data = normalizeCustomerPayload(data);
 
@@ -1316,48 +1316,32 @@ export async function updateCustomer(id: string, data: Partial<CreateCustomerDat
     if (data.password && data.password.length >= 6) {
       console.log(`Updating password for user ${id}`);
 
-      if (!accessToken) {
-        console.error("No access token provided for password update");
-        return { success: false, error: "No hay sesión activa. Por favor, inicia sesión nuevamente." };
+      if (!SUPABASE_SERVICE_ROLE_KEY) {
+        console.error("Missing service role key for password update");
+        return { success: false, error: "Falta SUPABASE_SERVICE_ROLE_KEY para actualizar contraseñas." };
       }
 
+      const adminClient = createClientAdmin(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+
       try {
-        const passwordResponse = await fetch(`${SUPABASE_URL}/functions/v1/update-customer-password`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            user_id: id,
-            new_password: data.password,
-          }),
+        const { error: passwordError } = await adminClient.auth.admin.updateUserById(id, {
+          password: data.password,
         });
 
-        // Handle non-JSON responses (like 404)
-        const contentType = passwordResponse.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          console.error("Password update failed - Edge Function may not be deployed. Status:", passwordResponse.status);
+        if (passwordError) {
+          console.error("Error updating password:", passwordError);
           return {
             success: false,
-            error: `Error: La función de cambio de contraseña no está disponible (Status: ${passwordResponse.status}). Despliega la Edge Function 'update-customer-password'.`,
-          };
-        }
-
-        const passwordResult = await passwordResponse.json();
-
-        if (!passwordResponse.ok) {
-          console.error("Error updating password:", passwordResult);
-          return {
-            success: false,
-            error: `Error al cambiar contraseña: ${passwordResult.error || passwordResult.message || "Error desconocido"}`,
+            error: `Error al cambiar contraseña: ${passwordError.message || "Error desconocido"}`,
           };
         }
 
         console.log("Password updated successfully");
-      } catch (fetchError) {
-        console.error("Fetch error updating password:", fetchError);
-        return { success: false, error: "Error de conexión al actualizar contraseña" };
+      } catch (passwordUpdateError) {
+        console.error("Unexpected error updating password:", passwordUpdateError);
+        return { success: false, error: "Error inesperado al actualizar contraseña" };
       }
     }
 
