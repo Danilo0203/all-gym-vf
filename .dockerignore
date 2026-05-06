@@ -2,8 +2,6 @@
 .next
 node_modules
 npm-debug.log*
-testsprite_tests
-.testsprite
 .agent
 .agents
 .env.local
