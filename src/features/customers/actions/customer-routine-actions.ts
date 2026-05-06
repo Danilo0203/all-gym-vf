@@ -6,7 +6,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserAccessContext } from "@/lib/auth/authorization";
 import { normalizeExerciseCatalogItem, mapProviderExerciseToCatalogPayload } from "@/lib/training/catalog";
-import { hydrateProviderExerciseSummaries, resolveProviderExercisePayloadMedia } from "@/lib/training/exercise-media";
+import {
+  hydrateProviderExerciseSummaries,
+  resolveExerciseImageUrl,
+  resolveProviderExercisePayloadMedia,
+} from "@/lib/training/exercise-media";
 import {
   buildExerciseReplacementGroups,
   getExerciseDisplayName,
@@ -565,8 +569,7 @@ async function hydrateRoutineDetailVisuals(details: RoutineDetailRecord[], catal
 
   return Promise.all(
     details.map(async (detail) => {
-      const hasUsableMedia = Boolean(detail.exercise_image_url) && !isBrokenExerciseMediaUrl(detail.exercise_image_url);
-      if (hasUsableMedia || !detail.exercise_name_snapshot) {
+      if (!detail.exercise_name_snapshot) {
         return detail;
       }
 
@@ -578,20 +581,27 @@ async function hydrateRoutineDetailVisuals(details: RoutineDetailRecord[], catal
       const localMediaMatch =
         mediaCatalog.find((exercise) => localMatches.some((candidate) => candidate.id === exercise.id)) || null;
 
-      if (localMediaMatch?.image_url) {
-        return {
-          ...detail,
-          exercise_image_url: localMediaMatch.image_url,
-          exercise_video_url: detail.exercise_video_url || localMediaMatch.video_url,
-        };
-      }
-
       const candidateQueries = uniqueStrings([
         ...localMatches.map((exercise) => getExerciseDisplayName(exercise)),
         detail.exercise_name_snapshot,
         ...buildExerciseSearchVariants(detail.exercise_name_snapshot),
       ]);
       const fallbackQuery = candidateQueries[0];
+      const resolvedImageUrl = await resolveExerciseImageUrl({
+        imageUrl: localMediaMatch?.image_url || detail.exercise_image_url,
+        name: detail.exercise_name_snapshot,
+        fallbackQueries: candidateQueries,
+      });
+      const resolvedVideoUrl = detail.exercise_video_url || localMediaMatch?.video_url || null;
+
+      if (resolvedImageUrl || resolvedVideoUrl) {
+        return {
+          ...detail,
+          exercise_image_url: resolvedImageUrl,
+          exercise_video_url: resolvedVideoUrl,
+        };
+      }
+
       if (!fallbackQuery) {
         return {
           ...detail,
@@ -1393,13 +1403,7 @@ async function getRoutineWorkspaceForUser(
 
     let mappedDetails: RoutineDetailRecord[] = (details || []).map((row: Record<string, unknown>) => mapRoutineDetailRow(row));
 
-    if (
-      mappedDetails.some(
-        (detail) =>
-          (!detail.exercise_image_url || isBrokenExerciseMediaUrl(detail.exercise_image_url)) &&
-          detail.exercise_name_snapshot,
-      )
-    ) {
+    if (mappedDetails.some((detail) => detail.exercise_name_snapshot)) {
       mappedDetails = await hydrateRoutineDetailVisuals(mappedDetails, await listExerciseCatalog(adminClient));
     }
 
