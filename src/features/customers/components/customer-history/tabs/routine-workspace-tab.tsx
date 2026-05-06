@@ -5,11 +5,18 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { AlertCircle, CheckCircle2, ClipboardList, RefreshCw } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+  ClipboardList,
+  Dumbbell,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { TRAINING_LOCATION_OPTIONS } from "@/lib/training/options";
 import { formatSessionDuration } from "@/lib/training/profile-defaults";
 import type { CustomerRoutineWorkspace, RoutineDetailRecord, RoutineRecord } from "@/lib/training/types";
@@ -26,6 +33,7 @@ import {
   getStatusBadgeVariant,
   getStatusLabel,
 } from "./routine-workspace-shared";
+import { cn } from "@/lib/utils";
 
 interface RoutineWorkspaceTabProps {
   customerId: string;
@@ -42,20 +50,24 @@ function formatRoutineTimestamp(value: string | undefined) {
   }
 }
 
-function getTrainingContextSummary(workspace: CustomerRoutineWorkspace) {
+function getContextChips(workspace: CustomerRoutineWorkspace) {
   const profile = workspace.trainingProfile;
   const locationLabel = profile?.training_location
     ? TRAINING_LOCATION_OPTIONS.find((item) => item.value === profile.training_location)?.label
     : null;
 
-  return [
-    profile?.primary_goal ? `Objetivo: ${getPrimaryGoalLabel(profile.primary_goal)}` : null,
-    profile?.days_per_week ? `${profile.days_per_week} días/semana` : null,
-    profile?.session_minutes ? `${formatSessionDuration(profile.session_minutes)} por sesión` : null,
-    locationLabel ? `Lugar: ${locationLabel}` : null,
-  ]
-    .filter((item): item is string => Boolean(item))
-    .join(" • ");
+  const chips: { label: string; value: string }[] = [];
+  if (profile?.primary_goal) {
+    const goalLabel = getPrimaryGoalLabel(profile.primary_goal);
+    chips.push({ label: "Objetivo", value: goalLabel ?? "—" });
+  }
+  if (profile?.days_per_week) chips.push({ label: "Frecuencia", value: `${profile.days_per_week} días/sem` });
+  if (profile?.session_minutes) {
+    const duration = formatSessionDuration(profile.session_minutes);
+    if (duration) chips.push({ label: "Duración", value: duration });
+  }
+  if (locationLabel) chips.push({ label: "Lugar", value: locationLabel });
+  return chips;
 }
 
 function getNextStepTitle(workspace: CustomerRoutineWorkspace) {
@@ -92,114 +104,117 @@ function getNextStepDescription(workspace: CustomerRoutineWorkspace) {
   return "La propuesta aparecerá aquí lista para revisión en cuanto la generes.";
 }
 
-function getWorkspaceNarrative(workspace: CustomerRoutineWorkspace) {
-  if (workspace.draftRoutine && workspace.activeRoutine) {
-    return "Hay un borrador nuevo listo para revisión y una rutina activa que sigue visible hasta aprobar cambios.";
-  }
-
-  if (workspace.draftRoutine) {
-    return "Existe un borrador listo para revisión. El siguiente paso natural es abrirlo y decidir si se activa.";
-  }
-
-  if (workspace.activeRoutine) {
-    return "La rutina activa ya está publicada. Desde aquí solo necesitas abrirla o generar una nueva iteración.";
-  }
-
-  if (workspace.pendingRoutine || workspace.missingRequirements.length > 0) {
-    return "Todavía no hay una rutina utilizable porque faltan datos en la ficha del cliente.";
-  }
-
-  return "Todavía no se ha generado ninguna rutina para este cliente.";
-}
-
 function getGenerateLabel(workspace: CustomerRoutineWorkspace) {
   return workspace.draftRoutine || workspace.activeRoutine || workspace.pendingRoutine
     ? "Generar nueva propuesta"
     : "Generar propuesta";
 }
 
-function RoutineStageRow({
+function RoutineCard({
+  tone,
   eyebrow,
   title,
   routine,
   details,
   description,
-  tone,
   timestampLabel,
+  href,
+  actionLabel,
 }: {
+  tone: "draft" | "active";
   eyebrow: string;
   title: string;
   routine: RoutineRecord;
   details: RoutineDetailRecord[];
   description: string;
-  tone: "draft" | "active";
   timestampLabel: string;
+  href: string;
+  actionLabel: string;
 }) {
   const timestamp = formatRoutineTimestamp(
     tone === "active" ? routine.reviewed_at || routine.created_at : routine.created_at,
   );
   const primaryGoalLabel = getPrimaryGoalLabel(routine.primary_goal);
-  const toneClasses =
-    tone === "draft"
-      ? "border-amber-200/40 bg-gradient-to-br from-amber-50/50 to-amber-100/20"
-      : "border-emerald-200/40 bg-gradient-to-br from-emerald-50/50 to-emerald-100/20";
-  const iconBgClasses =
-    tone === "draft"
-      ? "bg-amber-100/60 border-amber-200/50 text-amber-700"
-      : "bg-emerald-100/60 border-emerald-200/50 text-emerald-700";
-  const icon =
-    tone === "draft" ? (
-      <ClipboardList className="size-5" />
-    ) : (
-      <CheckCircle2 className="size-5" />
-    );
+
+  const isDraft = tone === "draft";
+  const accentClasses = isDraft
+    ? "before:bg-amber-500"
+    : "before:bg-emerald-500";
+  const iconClasses = isDraft
+    ? "bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20"
+    : "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20";
+  const eyebrowClasses = isDraft ? "text-amber-400" : "text-emerald-400";
 
   return (
-    <section className={`rounded-2xl border px-5 py-5 ${toneClasses} transition-all hover:shadow-sm`}>
-      <div className="space-y-4">
-        {/* Header Section */}
-        <div className="flex items-start gap-4">
-          <div className={`flex size-11 shrink-0 items-center justify-center rounded-lg border ${iconBgClasses}`}>
-            {icon}
+    <div
+      className={cn(
+        "group relative overflow-hidden rounded-2xl border border-border/60 bg-card/60 p-5 transition-all hover:border-border hover:bg-card/80",
+        "before:absolute before:left-0 before:top-0 before:h-full before:w-1",
+        accentClasses,
+      )}
+    >
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex gap-4 min-w-0 flex-1">
+          <div className={cn("flex size-11 shrink-0 items-center justify-center rounded-xl", iconClasses)}>
+            {isDraft ? <ClipboardList className="size-5" /> : <CheckCircle2 className="size-5" />}
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">
-              {eyebrow}
-            </p>
-            <h3 className="text-lg font-bold tracking-tight text-foreground">{title}</h3>
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cn("text-[10px] font-bold uppercase tracking-[0.18em]", eyebrowClasses)}>
+                {eyebrow}
+              </span>
+              <span className="text-muted-foreground/50">•</span>
+              <Badge variant={getStatusBadgeVariant(routine.status)} className="h-5 text-[10px] uppercase tracking-wider">
+                {getStatusLabel(routine.status)}
+              </Badge>
+            </div>
+            <div>
+              <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
+              <p className="mt-0.5 text-sm font-medium text-muted-foreground">{routine.name}</p>
+            </div>
+            <p className="text-sm leading-relaxed text-muted-foreground/80 max-w-xl">{description}</p>
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-1 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="font-semibold text-foreground">{getRoutineDayCount(details)}</span>
+                <span>días</span>
+              </span>
+              <span className="h-3 w-px bg-border/60" />
+              <span className="inline-flex items-center gap-1.5">
+                <span className="font-semibold text-foreground">{getRoutineExerciseCount(details)}</span>
+                <span>ejercicios</span>
+              </span>
+              {primaryGoalLabel ? (
+                <>
+                  <span className="h-3 w-px bg-border/60" />
+                  <span className="inline-flex items-center gap-1.5">
+                    <span>Objetivo:</span>
+                    <span className="font-semibold text-foreground">{primaryGoalLabel}</span>
+                  </span>
+                </>
+              ) : null}
+              {timestamp ? (
+                <>
+                  <span className="h-3 w-px bg-border/60" />
+                  <span className="text-muted-foreground/70">
+                    {timestampLabel} {timestamp}
+                  </span>
+                </>
+              ) : null}
+            </div>
           </div>
-          <Badge variant={getStatusBadgeVariant(routine.status)} className="shrink-0">
-            {getStatusLabel(routine.status)}
-          </Badge>
         </div>
 
-        {/* Routine Name and Description */}
-        <div className="space-y-2 pl-12">
-          <p className="text-sm font-semibold text-foreground">{routine.name}</p>
-          <p className="text-sm leading-6 text-muted-foreground max-w-2xl">{description}</p>
-        </div>
-
-        {/* Metadata Section */}
-        <div className="border-t border-current/10 pt-4 pl-12 flex flex-wrap items-center gap-3">
-          <Badge variant="secondary" className="text-xs font-medium">
-            {getRoutineDayCount(details)} días
-          </Badge>
-          <Badge variant="secondary" className="text-xs font-medium">
-            {getRoutineExerciseCount(details)} ejercicios
-          </Badge>
-          {primaryGoalLabel ? (
-            <Badge variant="outline" className="text-xs font-medium">
-              {primaryGoalLabel}
-            </Badge>
-          ) : null}
-          {timestamp ? (
-            <Badge variant="outline" className="text-xs font-medium text-muted-foreground">
-              {timestampLabel} {timestamp}
-            </Badge>
-          ) : null}
+        <div className="flex shrink-0 lg:self-center">
+          <Button asChild variant="outline" size="sm" className="gap-1.5 group/btn">
+            <Link href={href}>
+              {actionLabel}
+              <ArrowRight className="size-3.5 transition-transform group-hover/btn:translate-x-0.5" />
+            </Link>
+          </Button>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -260,7 +275,7 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
   };
 
   const trainingContextHelper = buildTrainingContextHelper(workspace.trainingProfile);
-  const trainingContextSummary = getTrainingContextSummary(workspace);
+  const contextChips = getContextChips(workspace);
   const draftHref = `/panel/clientes/${customerId}/rutina/borrador`;
   const activeHref = `/panel/clientes/${customerId}/rutina/activa`;
   const canGenerate = workspace.missingRequirements.length === 0;
@@ -268,136 +283,176 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
   const hasRoutines = Boolean(workspace.draftRoutine || workspace.activeRoutine);
 
   return (
-    <div className="space-y-6">
-      {/* Narrative & Context Section */}
-      <Card className="overflow-hidden border-border/50 bg-gradient-to-br from-card via-card to-muted/10">
-        <CardContent className="space-y-4 px-6 py-6">
-          <div className="space-y-3">
-            <p className="max-w-3xl text-sm leading-7 text-foreground/85">{getWorkspaceNarrative(workspace)}</p>
+    <div className="space-y-4">
+      {/* Hero Section: Context + Next Step */}
+      <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-card via-card to-muted/10">
+        {/* Decorative gradient */}
+        <div className="pointer-events-none absolute -right-24 -top-24 size-64 rounded-full bg-primary/5 blur-3xl" />
 
-            {trainingContextSummary ? (
-              <p className="text-sm leading-6 text-muted-foreground font-medium">{trainingContextSummary}</p>
+        <div className="relative grid grid-cols-1 lg:grid-cols-[1.4fr_1fr]">
+          {/* Left: Context & Narrative */}
+          <div className="space-y-5 p-5 sm:p-6 lg:border-r border-border/40">
+            <div className="flex items-start gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
+                <Dumbbell className="size-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                  Contexto de entrenamiento
+                </p>
+                <h2 className="text-base font-semibold tracking-tight text-foreground mt-0.5">
+                  Ficha del cliente
+                </h2>
+              </div>
+            </div>
+
+            {contextChips.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {contextChips.map((chip) => (
+                  <div
+                    key={chip.label}
+                    className="rounded-lg border border-border/40 bg-background/40 px-3 py-2"
+                  >
+                    <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      {chip.label}
+                    </p>
+                    <p className="mt-0.5 text-sm font-semibold text-foreground truncate">{chip.value}</p>
+                  </div>
+                ))}
+              </div>
             ) : trainingContextHelper ? (
-              <p className="text-sm leading-6 text-muted-foreground">
-                <span className="font-medium">Base actual:</span> {trainingContextHelper}
-              </p>
+              <p className="text-sm leading-6 text-muted-foreground">{trainingContextHelper}</p>
             ) : (
-              <p className="text-sm text-muted-foreground italic">
+              <p className="text-sm italic text-muted-foreground">
                 Aún no hay suficiente contexto de entrenamiento para resumir la ficha.
               </p>
             )}
-          </div>
 
-          {workspace.missingRequirements.length > 0 ? (
-            <div className="rounded-xl border border-amber-200/50 bg-gradient-to-br from-amber-50/60 to-amber-100/20 px-4 py-3 mt-2">
-              <div className="flex gap-3">
-                <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-700" />
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-amber-900">Pendientes para generar una rutina personalizada</p>
-                  <div className="flex flex-wrap gap-2">
-                    {workspace.missingRequirements.map((item) => (
-                      <Badge
-                        key={item}
-                        variant="outline"
-                        className="border-amber-200/60 bg-background/80 text-amber-950 font-medium text-xs"
-                      >
-                        {item}
-                      </Badge>
-                    ))}
+            {workspace.missingRequirements.length > 0 ? (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5">
+                <div className="flex gap-2.5">
+                  <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-400" />
+                  <div className="space-y-2 min-w-0">
+                    <p className="text-sm font-semibold text-foreground">
+                      Faltan datos para personalizar la rutina
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {workspace.missingRequirements.map((item) => (
+                        <Badge
+                          key={item}
+                          variant="outline"
+                          className="h-5 border-amber-500/30 bg-background/50 text-[10px] font-medium text-amber-300"
+                        >
+                          {item}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {/* Next Step Section */}
-      <Card className="overflow-hidden border-border/50 bg-gradient-to-br from-primary/5 via-card to-muted/10 shadow-sm">
-        <CardContent className="space-y-5 px-6 py-6">
-          <div className="space-y-2">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Siguiente paso</p>
-            <h3 className="text-lg font-bold tracking-tight text-foreground">{getNextStepTitle(workspace)}</h3>
-            <p className="text-sm leading-6 text-muted-foreground">{getNextStepDescription(workspace)}</p>
+            ) : null}
           </div>
 
-          <div className="flex flex-col gap-2 pt-2">
-            {workspace.draftRoutine ? (
-              <>
-                <Button asChild size="default" className="w-full">
-                  <Link href={draftHref}>Revisar borrador</Link>
-                </Button>
+          {/* Right: Next Step Action */}
+          <div className="relative space-y-4 bg-muted/10 p-5 sm:p-6">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
+                <Sparkles className="size-3" />
+                Siguiente paso
+              </div>
+              <h3 className="text-base font-semibold tracking-tight text-foreground leading-snug">
+                {getNextStepTitle(workspace)}
+              </h3>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {getNextStepDescription(workspace)}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-1">
+              {workspace.draftRoutine ? (
+                <>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button asChild size="sm" className="flex-1 gap-1.5">
+                      <Link href={draftHref}>
+                        Revisar borrador
+                        <ArrowRight className="size-3.5" />
+                      </Link>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleApprove}
+                      disabled={isApproving}
+                      className="flex-1"
+                    >
+                      <CheckCircle2 className="size-3.5" />
+                      {isApproving ? "Aprobando..." : "Aprobar"}
+                    </Button>
+                  </div>
+                  {canGenerate ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleGenerate}
+                      disabled={isGenerating}
+                      className="h-8 justify-center text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      <RefreshCw className={cn("size-3", isGenerating && "animate-spin")} />
+                      {isGenerating ? "Generando..." : "Generar otra propuesta"}
+                    </Button>
+                  ) : null}
+                </>
+              ) : workspace.activeRoutine ? (
+                <>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button asChild size="sm" variant="secondary" className="flex-1 gap-1.5">
+                      <Link href={activeHref}>
+                        Abrir activa
+                        <ArrowRight className="size-3.5" />
+                      </Link>
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleGenerate}
+                      disabled={!canGenerate || isGenerating}
+                      className="flex-1"
+                    >
+                      <RefreshCw className={cn("size-3.5", isGenerating && "animate-spin")} />
+                      {isGenerating ? "Generando..." : generateLabel}
+                    </Button>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleArchiveActive}
+                    disabled={isArchiving}
+                    className="h-8 justify-center text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {isArchiving ? "Archivando..." : "Archivar rutina"}
+                  </Button>
+                </>
+              ) : (
                 <Button
-                  size="default"
-                  variant="outline"
-                  onClick={handleApprove}
-                  disabled={isApproving}
-                  className="w-full"
-                >
-                  {isApproving ? "Aprobando..." : "Aprobar y activar"}
-                </Button>
-              </>
-            ) : workspace.activeRoutine ? (
-              <>
-                <Button asChild size="default" variant="secondary" className="w-full">
-                  <Link href={activeHref}>Abrir rutina activa</Link>
-                </Button>
-                <Button
-                  size="default"
-                  variant="outline"
+                  size="sm"
                   onClick={handleGenerate}
                   disabled={!canGenerate || isGenerating}
-                  className="w-full"
+                  className="gap-1.5"
                 >
-                  <RefreshCw className={`size-4 ${isGenerating ? "animate-spin" : ""}`} />
+                  <RefreshCw className={cn("size-3.5", isGenerating && "animate-spin")} />
                   {isGenerating ? "Generando..." : generateLabel}
                 </Button>
-              </>
-            ) : (
-              <Button
-                size="default"
-                onClick={handleGenerate}
-                disabled={!canGenerate || isGenerating}
-                className="w-full"
-              >
-                <RefreshCw className={`size-4 ${isGenerating ? "animate-spin" : ""}`} />
-                {isGenerating ? "Generando..." : generateLabel}
-              </Button>
-            )}
-
-            {workspace.draftRoutine && canGenerate ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleGenerate}
-                disabled={isGenerating}
-                className="justify-center mt-1"
-              >
-                <RefreshCw className={`size-3.5 ${isGenerating ? "animate-spin" : ""}`} />
-                {isGenerating ? "Generando..." : "Generar otra propuesta"}
-              </Button>
-            ) : null}
-
-            {workspace.activeRoutine && !workspace.draftRoutine ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleArchiveActive}
-                disabled={isArchiving}
-                className="justify-center text-muted-foreground hover:text-foreground"
-              >
-                {isArchiving ? "Archivando..." : "Archivar rutina"}
-              </Button>
-            ) : null}
+              )}
+            </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* Routines Display Section */}
+      {/* Routines Section */}
       {hasRoutines ? (
         <div className="space-y-3">
           {workspace.draftRoutine ? (
-            <RoutineStageRow
+            <RoutineCard
+              tone="draft"
               eyebrow="Borrador"
               title="Listo para revisión"
               routine={workspace.draftRoutine}
@@ -407,13 +462,15 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
                   ? "Revísalo antes de reemplazar la rutina que hoy sigue activa para el cliente."
                   : "Revísalo y actívalo cuando quieras publicarlo para el cliente."
               }
-              tone="draft"
               timestampLabel="Generado"
+              href={draftHref}
+              actionLabel="Ver borrador"
             />
           ) : null}
 
           {workspace.activeRoutine ? (
-            <RoutineStageRow
+            <RoutineCard
+              tone="active"
               eyebrow="Rutina activa"
               title="Versión visible para el cliente"
               routine={workspace.activeRoutine}
@@ -423,26 +480,28 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
                   ? "Sigue siendo la versión publicada hasta que apruebes el borrador."
                   : "Es la versión vigente y se mantiene en solo lectura para preservar trazabilidad."
               }
-              tone="active"
               timestampLabel="Activa"
+              href={activeHref}
+              actionLabel="Ver rutina"
             />
           ) : null}
         </div>
       ) : (
-        <Card className="overflow-hidden border-border/50 border-dashed bg-muted/10">
-          <CardContent className="space-y-3 px-6 py-8">
-            <p className="text-base font-semibold tracking-tight">
-              {workspace.pendingRoutine || workspace.missingRequirements.length > 0
-                ? "La rutina sigue en espera"
-                : "Todavía no hay una rutina generada"}
-            </p>
-            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              {workspace.pendingRoutine || workspace.missingRequirements.length > 0
-                ? "Completa la ficha del cliente y después genera una propuesta para desbloquear el flujo."
-                : "Cuando generes una propuesta aparecerá aquí lista para revisión y activación."}
-            </p>
-          </CardContent>
-        </Card>
+        <div className="rounded-2xl border border-dashed border-border/60 bg-muted/5 p-8 text-center">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted/30 mb-3">
+            <Dumbbell className="size-6 text-muted-foreground" />
+          </div>
+          <p className="text-base font-semibold tracking-tight">
+            {workspace.pendingRoutine || workspace.missingRequirements.length > 0
+              ? "La rutina sigue en espera"
+              : "Todavía no hay una rutina generada"}
+          </p>
+          <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
+            {workspace.pendingRoutine || workspace.missingRequirements.length > 0
+              ? "Completa la ficha del cliente y después genera una propuesta para desbloquear el flujo."
+              : "Cuando generes una propuesta aparecerá aquí lista para revisión y activación."}
+          </p>
+        </div>
       )}
     </div>
   );

@@ -1,6 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import {
+  IconBarbell,
+  IconBolt,
+  IconClockHour4,
+  IconFlame,
+  IconNotes,
+  IconTargetArrow,
+} from "@tabler/icons-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -123,11 +131,13 @@ export function getRoutineExerciseCount(details: RoutineDetailRecord[]) {
 
 export function RoutineSummaryCard({ title, value, helper }: { title: string; value: string; helper?: string }) {
   return (
-    <Card className="border-border/70">
-      <CardContent className="p-4 space-y-1">
-        <p className="text-xs uppercase tracking-wider text-muted-foreground">{title}</p>
-        <p className="text-sm font-semibold">{value}</p>
-        {helper ? <p className="text-xs text-muted-foreground">{helper}</p> : null}
+    <Card className="border-border/70 bg-card/70 shadow-sm backdrop-blur-sm">
+      <CardContent className="space-y-3 p-5">
+        <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">{title}</p>
+        <div className="space-y-1.5">
+          <p className="text-base font-semibold leading-tight text-foreground">{value}</p>
+          {helper ? <p className="text-sm leading-relaxed text-muted-foreground">{helper}</p> : null}
+        </div>
       </CardContent>
     </Card>
   );
@@ -162,18 +172,48 @@ export function RoutineViewer({
   const primaryGoalLabel = getPrimaryGoalLabel(routine.primary_goal);
 
   return (
-    <Card className="border-border/70">
-      <CardHeader className="space-y-3">
+    <Card className="border-border/70 bg-card/80 shadow-sm backdrop-blur-sm">
+      <CardHeader className="space-y-4 border-b border-border/60 pb-5">
         <div className="flex flex-wrap items-center gap-3">
-          <CardTitle className="text-base">{title}</CardTitle>
+          <CardTitle className="text-xl font-semibold tracking-tight">{title}</CardTitle>
           <Badge variant={getStatusBadgeVariant(routine.status)}>{getStatusLabel(routine.status)}</Badge>
           {primaryGoalLabel ? <Badge variant="outline">{primaryGoalLabel}</Badge> : null}
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
           {editable
             ? "Puedes ajustar prescripción, descanso, notas y reemplazar ejercicios antes de aprobar."
             : "La rutina activa se muestra en solo lectura para mantener trazabilidad."}
         </p>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-2xl border border-border/60 bg-background/60 p-3">
+            <div className="mb-2 flex items-center gap-2 text-muted-foreground">
+              <IconBarbell className="h-4 w-4" />
+              <span className="text-xs uppercase tracking-[0.2em]">Ejercicios</span>
+            </div>
+            <p className="text-2xl font-semibold">{details.length}</p>
+          </div>
+          <div className="rounded-2xl border border-border/60 bg-background/60 p-3">
+            <div className="mb-2 flex items-center gap-2 text-muted-foreground">
+              <IconBolt className="h-4 w-4" />
+              <span className="text-xs uppercase tracking-[0.2em]">Bloques</span>
+            </div>
+            <p className="text-2xl font-semibold">{new Set(details.map((detail) => detail.block_type)).size}</p>
+          </div>
+          <div className="rounded-2xl border border-border/60 bg-background/60 p-3">
+            <div className="mb-2 flex items-center gap-2 text-muted-foreground">
+              <IconTargetArrow className="h-4 w-4" />
+              <span className="text-xs uppercase tracking-[0.2em]">Días</span>
+            </div>
+            <p className="text-2xl font-semibold">{days.length}</p>
+          </div>
+          <div className="rounded-2xl border border-border/60 bg-background/60 p-3">
+            <div className="mb-2 flex items-center gap-2 text-muted-foreground">
+              <IconFlame className="h-4 w-4" />
+              <span className="text-xs uppercase tracking-[0.2em]">Objetivo</span>
+            </div>
+            <p className="text-sm font-semibold leading-snug">{primaryGoalLabel || "Sin objetivo definido"}</p>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {days.length === 0 ? (
@@ -188,15 +228,15 @@ export function RoutineViewer({
               <AccordionItem
                 key={day}
                 value={`day-${day}`}
-                className="overflow-hidden rounded-xl border border-border/70 px-0"
+                className="overflow-hidden rounded-2xl border border-border/70 bg-background/40 px-0 shadow-sm"
               >
-                <AccordionTrigger className="px-4 py-4 hover:no-underline">
+                <AccordionTrigger className="px-5 py-5 hover:bg-muted/20 hover:no-underline">
                   <div className="flex flex-1 flex-wrap items-center justify-between gap-3 pr-2 text-left">
                     <div className="space-y-1">
-                      <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                      <h4 className="text-base font-semibold uppercase tracking-[0.18em] text-foreground/90">
                         Día {day}
                       </h4>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         {editable
                           ? "Expande este día para revisar o ajustar ejercicios."
                           : "Expande este día para ver el detalle."}
@@ -205,14 +245,17 @@ export function RoutineViewer({
                     <Badge variant="secondary">{grouped[day].length} ejercicios</Badge>
                   </div>
                 </AccordionTrigger>
-                <AccordionContent className="px-4 pb-4">
+                <AccordionContent className="px-5 pb-5">
                   <div className="space-y-3">
                     {grouped[day].map((detail) => {
                       const editor = editors[detail.id] || buildEditorState(detail);
                       const isBusy = busyDetailId === detail.id;
 
                       return (
-                        <div key={detail.id} className="rounded-lg border p-4 space-y-4">
+                        <div
+                          key={detail.id}
+                          className="space-y-4 rounded-2xl border border-border/70 bg-card/70 p-4 shadow-sm transition-colors hover:border-border"
+                        >
                           <div className="flex flex-col gap-4 xl:flex-row">
                             <ExerciseMediaPreview detail={detail} />
 
@@ -229,11 +272,14 @@ export function RoutineViewer({
                                     ) : null}
                                   </div>
                                   <div>
-                                    <p className="font-semibold">
+                                    <p className="text-lg font-semibold leading-tight">
                                       {detail.exercise_name_snapshot || "Ejercicio por definir"}
                                     </p>
                                     {detail.notes && !editable ? (
-                                      <p className="text-sm text-muted-foreground mt-1">{detail.notes}</p>
+                                      <div className="mt-3 flex items-start gap-2 rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-sm text-muted-foreground">
+                                        <IconNotes className="mt-0.5 h-4 w-4 shrink-0" />
+                                        <p>{detail.notes}</p>
+                                      </div>
                                     ) : null}
                                   </div>
                                 </div>
@@ -260,6 +306,34 @@ export function RoutineViewer({
                                     </Button>
                                   ) : null}
                                 </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-5">
+                                <ExerciseMetric
+                                  icon={<IconBarbell className="h-4 w-4" />}
+                                  label="Series"
+                                  value={detail.sets?.toString() || "-"}
+                                />
+                                <ExerciseMetric
+                                  icon={<IconTargetArrow className="h-4 w-4" />}
+                                  label="Reps"
+                                  value={detail.reps || "-"}
+                                />
+                                <ExerciseMetric
+                                  icon={<IconClockHour4 className="h-4 w-4" />}
+                                  label="Descanso"
+                                  value={detail.rest_seconds ? `${detail.rest_seconds}s` : "-"}
+                                />
+                                <ExerciseMetric
+                                  icon={<IconBolt className="h-4 w-4" />}
+                                  label="Duración"
+                                  value={detail.duration_minutes ? `${detail.duration_minutes} min` : "-"}
+                                />
+                                <ExerciseMetric
+                                  icon={<IconFlame className="h-4 w-4" />}
+                                  label="RIR"
+                                  value={detail.target_rir?.toString() || "-"}
+                                />
                               </div>
 
                               {editable ? (
@@ -349,23 +423,23 @@ function ExerciseMediaPreview({ detail }: { detail: RoutineDetailRecord }) {
   const canRenderMedia = Boolean(mediaUrl) && !hasMediaError;
 
   return (
-    <div className="xl:w-56 shrink-0">
+    <div className="shrink-0 xl:w-64">
       {canRenderMedia ? (
-        <div className="overflow-hidden rounded-xl border bg-muted/20">
-          <div className="relative aspect-[4/3] my-auto">
+        <div className="overflow-hidden rounded-2xl border border-border/70 bg-muted/20 shadow-sm">
+          <div className="relative aspect-[4/3] my-auto bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.08),_transparent_55%)]">
             {/* GIF demos are rendered directly to preserve animation and avoid provider optimization issues. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={mediaUrl!}
               alt={`Demostración visual de ${title}`}
               loading="lazy"
-              className="h-full w-full object-contain bg-black/30"
+              className="h-full w-full object-contain bg-black/30 p-2"
               onError={() => setHasMediaError(true)}
             />
           </div>
         </div>
       ) : (
-        <div className="flex aspect-[4/3] flex-col items-center justify-center rounded-xl border border-dashed bg-muted/10 px-4 text-center">
+        <div className="flex aspect-[4/3] flex-col items-center justify-center rounded-2xl border border-dashed bg-muted/10 px-4 text-center">
           <p className="text-sm font-medium">Demo visual no disponible</p>
           <p className="mt-1 text-xs text-muted-foreground">
             {hasMediaError
@@ -374,6 +448,18 @@ function ExerciseMediaPreview({ detail }: { detail: RoutineDetailRecord }) {
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function ExerciseMetric({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+      <div className="mb-1 flex items-center gap-2 text-muted-foreground">
+        {icon}
+        <span className="text-[11px] uppercase tracking-[0.18em]">{label}</span>
+      </div>
+      <p className="text-sm font-semibold leading-tight">{value}</p>
     </div>
   );
 }

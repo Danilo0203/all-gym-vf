@@ -5,7 +5,7 @@ import { startTransition, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { IconArrowLeft } from "@tabler/icons-react";
+import { IconArrowLeft, IconBarbell, IconChecklist, IconClockHour4, IconSparkles } from "@tabler/icons-react";
 import { ImageIcon, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,12 +41,10 @@ import {
 } from "@/features/customers/actions/customer-routine-actions";
 import {
   buildEditorState,
-  buildTrainingContextHelper,
   getRoutineDayCount,
   getRoutineExerciseCount,
   getStatusBadgeVariant,
   getStatusLabel,
-  RoutineSummaryCard,
   RoutineViewer,
   type DetailEditorState,
 } from "./tabs/routine-workspace-shared";
@@ -307,7 +305,6 @@ export function RoutineDraftPage({ customerId, customerName, workspace }: Routin
 
   const backHref = `/panel/clientes/${customerId}/history#routine`;
   const activeHref = `/panel/clientes/${customerId}/rutina/activa`;
-  const trainingContextHelper = buildTrainingContextHelper(workspace.trainingProfile);
   const canGenerate = workspace.missingRequirements.length === 0;
 
   if (!workspace.draftRoutine) {
@@ -363,53 +360,71 @@ export function RoutineDraftPage({ customerId, customerName, workspace }: Routin
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden" aria-busy={isGeneratingDraft}>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="flex flex-col gap-6 p-6 pb-8">
-          <div className="space-y-4">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-2">
+        <div className="flex flex-col gap-6 p-4 pb-8 md:p-6">
+          <section className="overflow-hidden rounded-[28px] border border-border/70 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.14),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(59,130,246,0.12),_transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))] shadow-sm">
+            <div className="flex flex-col gap-6 p-5 md:p-7">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-3">
                 <Button asChild variant="ghost" className="h-auto px-0 text-muted-foreground hover:bg-transparent">
                   <Link href={backHref}>
                     <IconArrowLeft className="h-4 w-4" />
                     Volver al perfil
                   </Link>
                 </Button>
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-2xl font-black tracking-tight">Borrador de rutina</h1>
-                    <Badge variant={getStatusBadgeVariant(workspace.draftRoutine.status)}>
-                      {getStatusLabel(workspace.draftRoutine.status)}
-                    </Badge>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-400">
+                        <IconSparkles className="mr-1 h-3.5 w-3.5" />
+                        Vista borrador
+                      </Badge>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h1 className="text-3xl font-black tracking-tight md:text-4xl">Borrador de rutina</h1>
+                        <Badge variant={getStatusBadgeVariant(workspace.draftRoutine.status)}>
+                          {getStatusLabel(workspace.draftRoutine.status)}
+                        </Badge>
+                      </div>
+                      <p className="max-w-3xl text-base text-muted-foreground md:text-lg">
+                        {customerName} · {workspace.draftRoutine.name}
+                      </p>
+                      <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                        Ajusta ejercicios, descansos y notas antes de aprobar la versión que quedará activa.
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {customerName} · {workspace.draftRoutine.name}
-                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <Badge variant="secondary">{getRoutineDayCount(workspace.draftDetails)} días</Badge>
+                  <Badge variant="secondary">{getRoutineExerciseCount(workspace.draftDetails)} ejercicios</Badge>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <Badge variant="secondary">{getRoutineDayCount(workspace.draftDetails)} días</Badge>
-                <Badge variant="secondary">{getRoutineExerciseCount(workspace.draftDetails)} ejercicios</Badge>
+              <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                <DraftHeroMetric
+                  icon={<IconChecklist className="h-4 w-4" />}
+                  label="Estado"
+                  value={getStatusLabel(workspace.draftRoutine.status)}
+                />
+                <DraftHeroMetric
+                  icon={<IconBarbell className="h-4 w-4" />}
+                  label="Ejercicios"
+                  value={`${getRoutineExerciseCount(workspace.draftDetails)}`}
+                />
+                <DraftHeroMetric
+                  icon={<IconClockHour4 className="h-4 w-4" />}
+                  label="Frecuencia"
+                  value={`${getRoutineDayCount(workspace.draftDetails)} días`}
+                />
+                <DraftHeroMetric
+                  icon={<IconSparkles className="h-4 w-4" />}
+                  label="Objetivo"
+                  value={workspace.draftRoutine.primary_goal || "Sin definir"}
+                />
               </div>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <RoutineSummaryCard
-              title="Cliente"
-              value={customerName}
-              helper={workspace.draftRoutine.primary_goal ? `Objetivo: ${workspace.draftRoutine.primary_goal}` : undefined}
-            />
-            <RoutineSummaryCard
-              title="Perfil de entrenamiento"
-              value={getStatusLabel(workspace.trainingProfileStatus)}
-              helper={trainingContextHelper || "Sin contexto suficiente para resumir."}
-            />
-            <RoutineSummaryCard
-              title="Borrador"
-              value={workspace.draftRoutine.name}
-              helper={`${getRoutineDayCount(workspace.draftDetails)} días • ${getRoutineExerciseCount(workspace.draftDetails)} ejercicios`}
-            />
-          </div>
+          </section>
 
           <RoutineViewer
             title="Editor de borrador"
@@ -588,6 +603,26 @@ export function RoutineDraftPage({ customerId, customerName, workspace }: Routin
           </ScrollArea>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function DraftHeroMetric({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-border/60 bg-background/60 p-4 backdrop-blur-sm">
+      <div className="mb-2 flex items-center gap-2 text-muted-foreground">
+        {icon}
+        <span className="text-[11px] uppercase tracking-[0.2em]">{label}</span>
+      </div>
+      <p className="text-sm font-semibold leading-tight md:text-base">{value}</p>
     </div>
   );
 }
