@@ -5,32 +5,11 @@ import { NavItem } from "@/types";
  *
  * This configuration is used for both the sidebar navigation and Cmd+K bar.
  *
- * RBAC Access Control:
- * Each navigation item can have an `access` property that controls visibility
- * based on permissions, plans, features, roles, and organization context.
+ * Access control:
+ * - `role`: legacy role-based filtering (still supported for backward compat)
+ * - `permissions`: array of permission keys required (matches against user.permissions)
  *
- * Examples:
- *
- * 1. Require organization:
- *    access: { requireOrg: true }
- *
- * 2. Require specific permission:
- *    access: { requireOrg: true, permission: 'org:teams:manage' }
- *
- * 3. Require specific plan:
- *    access: { plan: 'pro' }
- *
- * 4. Require specific feature:
- *    access: { feature: 'premium_access' }
- *
- * 5. Require specific role:
- *    access: { role: 'admin' }
- *
- * 6. Multiple conditions (all must be true):
- *    access: { requireOrg: true, permission: 'org:teams:manage', plan: 'pro' }
- *
- * Note: The `visible` function is deprecated but still supported for backward compatibility.
- * Use the `access` property for new items.
+ * Note: Owner bypasses all checks.
  */
 export const navItems: NavItem[] = [
   {
@@ -39,7 +18,7 @@ export const navItems: NavItem[] = [
     icon: "dashboard",
     isActive: false,
     shortcut: ["d", "d"],
-    access: { role: ["admin", "trainer", "employee"] },
+    access: { permissions: ["dashboard.view"] },
     items: [],
   },
   {
@@ -47,7 +26,7 @@ export const navItems: NavItem[] = [
     url: "/panel/clientes",
     icon: "customers",
     isActive: false,
-    access: { role: ["admin", "trainer", "employee"] },
+    access: { permissions: ["customers.view"] },
     items: [],
   },
   {
@@ -55,7 +34,7 @@ export const navItems: NavItem[] = [
     url: "/panel/pagos",
     icon: "billing",
     isActive: false,
-    access: { role: ["admin"] },
+    access: { permissions: ["payments.view"] },
     items: [],
   },
   {
@@ -63,7 +42,7 @@ export const navItems: NavItem[] = [
     url: "#",
     icon: "cash",
     isActive: false,
-    access: { role: ["admin", "employee"] },
+    access: { permissions: ["cash.view"] },
     items: [
       {
         title: "Caja actual",
@@ -79,44 +58,61 @@ export const navItems: NavItem[] = [
   },
   {
     title: "Administración",
-    url: "#", // Placeholder as there is no direct link for the parent
+    url: "#",
     icon: "settings",
     isActive: true,
-    access: { role: ["admin"] },
+    access: { permissions: ["users.view", "plans.view", "attendance.view", "routines.view", "exercises.view", "roles.view", "messages.view"] },
     items: [
       {
         title: "Usuarios",
         url: "/panel/usuarios",
         icon: "teams",
+        access: { permissions: ["users.view"] },
       },
       {
         title: "Planes",
         url: "/panel/planes",
         icon: "billing",
+        access: { permissions: ["plans.view"] },
       },
       {
         title: "Asistencias",
         url: "/panel/asistencias",
         icon: "dashboard",
+        access: { permissions: ["attendance.view"] },
       },
       {
         title: "Rutinas",
         url: "/panel/rutinas",
         icon: "routine",
+        access: { permissions: ["routines.view"] },
       },
       {
         title: "Ejercicios",
         url: "/panel/ejercicios",
         icon: "product",
+        access: { permissions: ["exercises.view"] },
+      },
+      {
+        title: "Roles",
+        url: "/panel/roles",
+        icon: "settings",
+        access: { permissions: ["roles.view"] },
+      },
+      {
+        title: "Mensajes",
+        url: "/panel/mensajes",
+        icon: "message",
+        access: { permissions: ["messages.view"] },
       },
     ],
   },
   {
     title: "Cuenta",
-    url: "#", // Placeholder as there is no direct link for the parent
+    url: "#",
     icon: "account",
     isActive: true,
-    access: { role: ["admin", "trainer", "employee"] },
+    access: { permissions: ["profile.view"] },
     items: [
       {
         title: "Perfil",

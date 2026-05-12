@@ -24,19 +24,34 @@ interface ActionProtectedProps extends ProtectedProps {
   resourceOwnerId?: string;
 }
 
+interface PermissionProtectedProps extends ProtectedProps {
+  permissionKey: string;
+}
+
+/**
+ * Protect content based on a specific permission key (or owner bypass)
+ */
+export function PermissionProtected({ permissionKey, children, fallback = null }: PermissionProtectedProps) {
+  const { data: user } = useCurrentUser();
+  const permissions = user?.permissions || [];
+  const isOwner = user?.isOwner || false;
+
+  if (isOwner || permissions.includes(permissionKey)) {
+    return <>{children}</>;
+  }
+
+  return <>{fallback}</>;
+}
+
 /**
  * Protect content based on route access
- *
- * @example
- * <RouteProtected route="/panel/usuarios">
- *   <UserManagementPanel />
- * </RouteProtected>
  */
 export function RouteProtected({ route, children, fallback = null }: RouteProtectedProps) {
   const { data: user } = useCurrentUser();
-  const userRole = (user?.role || "client") as UserRole;
+  const permissions = user?.permissions || [];
+  const isOwner = user?.isOwner || false;
 
-  if (!canAccessRoute(route, userRole)) {
+  if (!canAccessRoute(route, permissions, isOwner)) {
     return <>{fallback}</>;
   }
 
@@ -45,11 +60,6 @@ export function RouteProtected({ route, children, fallback = null }: RouteProtec
 
 /**
  * Protect content based on user role
- *
- * @example
- * <RoleProtected allowedRoles={["admin", "employee"]}>
- *   <AdminPanel />
- * </RoleProtected>
  */
 export function RoleProtected({ allowedRoles, children, fallback = null }: RoleProtectedProps) {
   const { data: user } = useCurrentUser();
@@ -64,11 +74,6 @@ export function RoleProtected({ allowedRoles, children, fallback = null }: RoleP
 
 /**
  * Protect content based on action permissions
- *
- * @example
- * <ActionProtected action="delete" resource="payments">
- *   <DeleteButton />
- * </ActionProtected>
  */
 export function ActionProtected({
   action,
@@ -89,17 +94,13 @@ export function ActionProtected({
 
 /**
  * Show content only to admin users
- *
- * @example
- * <AdminOnly>
- *   <AdminSettings />
- * </AdminOnly>
  */
 export function AdminOnly({ children, fallback = null }: ProtectedProps) {
   const { data: user } = useCurrentUser();
   const userRole = (user?.role || "client") as UserRole;
+  const isOwner = user?.isOwner || false;
 
-  if (!isAdmin(userRole)) {
+  if (!isAdmin(userRole) && !isOwner) {
     return <>{fallback}</>;
   }
 
@@ -108,22 +109,16 @@ export function AdminOnly({ children, fallback = null }: ProtectedProps) {
 
 /**
  * Show different content based on user role
- *
- * @example
- * <RoleSwitch
- *   admin={<AdminDashboard />}
- *   employee={<EmployeeDashboard />}
- *   trainer={<TrainerDashboard />}
- *   client={<ClientDashboard />}
- * />
  */
 export function RoleSwitch({
+  owner,
   admin,
   employee,
   trainer,
   client,
   fallback = null,
 }: {
+  owner?: ReactNode;
   admin?: ReactNode;
   employee?: ReactNode;
   trainer?: ReactNode;
@@ -134,6 +129,8 @@ export function RoleSwitch({
   const userRole = (user?.role || "client") as UserRole;
 
   switch (userRole) {
+    case "owner":
+      return <>{owner || fallback}</>;
     case "admin":
       return <>{admin || fallback}</>;
     case "employee":

@@ -1,9 +1,10 @@
 import { Icons } from "@/components/icons";
 
-export type UserRole = "admin" | "trainer" | "employee" | "client";
+export type UserRole = "owner" | "admin" | "trainer" | "employee" | "client";
 
 export interface PermissionCheck {
   permission?: string;
+  permissions?: string[];
   plan?: string;
   feature?: string;
   role?: UserRole | UserRole[];

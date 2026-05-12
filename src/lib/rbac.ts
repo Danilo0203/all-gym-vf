@@ -6,53 +6,62 @@ import { UserRole } from "@/types";
  * These utilities help enforce RBAC on the client side.
  * Note: These are NOT a security measure - they only improve UX.
  * Real security is enforced by:
- * 1. Middleware (src/middleware.ts)
- * 2. RLS policies in Supabase
+ * 1. Middleware (src/proxy.ts)
+ * 2. getUserAccessContext with permission checks in server actions
+ * 3. RLS policies in Supabase
  */
 
-// Define which roles can access which routes
-export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
-  "/panel/resumen": ["admin", "trainer", "employee"],
-  "/panel/usuarios": ["admin"],
-  "/panel/clientes": ["admin", "trainer", "employee"],
-  "/panel/planes": ["admin"],
-  "/panel/pagos": ["admin"],
-  "/panel/perfil": ["admin", "trainer", "employee"],
-  "/mi/rutina": ["client"],
-  "/mi/perfil": ["client"],
-  "/mi/membresia": ["client"],
+// Map routes to required permissions (replaces old ROUTE_PERMISSIONS role arrays)
+export const ROUTE_PERMISSIONS: Record<string, string> = {
+  "/panel/resumen": "dashboard.view",
+  "/panel/usuarios": "users.view",
+  "/panel/clientes": "customers.view",
+  "/panel/planes": "plans.view",
+  "/panel/pagos": "payments.view",
+  "/panel/caja": "cash.view",
+  "/panel/caja/historial": "cash.view",
+  "/panel/asistencias": "attendance.view",
+  "/panel/rutinas": "routines.view",
+  "/panel/ejercicios": "exercises.view",
+  "/panel/roles": "roles.view",
+  "/panel/mensajes": "messages.view",
+  "/panel/perfil": "profile.view",
+  "/mi/rutina": "",
+  "/mi/perfil": "",
+  "/mi/membresia": "",
 };
 
 /**
- * Check if a user has permission to access a route
- * @param route - The route to check
- * @param userRole - The user's role
- * @returns true if the user can access the route
+ * Check if a user has access to a route based on permissions
  */
-export function canAccessRoute(route: string, userRole: UserRole): boolean {
-  const allowedRoles = ROUTE_PERMISSIONS[route];
+export function canAccessRoute(route: string, permissions: string[], isOwner: boolean): boolean {
+  if (isOwner) return true;
 
-  if (!allowedRoles) {
-    // If route is not defined, default to allowing all authenticated users
+  const requiredPermission = ROUTE_PERMISSIONS[route];
+  if (!requiredPermission) {
+    // Routes without a permission requirement default to allowed (like /mi)
     return true;
   }
 
-  return allowedRoles.includes(userRole);
+  return permissions.includes(requiredPermission);
 }
 
 /**
  * Check if a user is an admin
- * @param userRole - The user's role
- * @returns true if the user is an admin
  */
 export function isAdmin(userRole: UserRole): boolean {
   return userRole === "admin";
 }
 
 /**
+ * Check if a user is owner
+ */
+export function isOwner(userRole: UserRole): boolean {
+  return userRole === "owner";
+}
+
+/**
  * Check if a user is an employee
- * @param userRole - The user's role
- * @returns true if the user is an employee
  */
 export function isEmployee(userRole: UserRole): boolean {
   return userRole === "employee";
@@ -60,8 +69,6 @@ export function isEmployee(userRole: UserRole): boolean {
 
 /**
  * Check if a user is a trainer
- * @param userRole - The user's role
- * @returns true if the user is a trainer
  */
 export function isTrainer(userRole: UserRole): boolean {
   return userRole === "trainer";
@@ -69,32 +76,33 @@ export function isTrainer(userRole: UserRole): boolean {
 
 /**
  * Check if a user is a client
- * @param userRole - The user's role
- * @returns true if the user is a client
  */
 export function isClient(userRole: UserRole): boolean {
   return userRole === "client";
 }
 
 /**
- * Get all routes accessible by a role
- * @param userRole - The user's role
- * @returns Array of accessible routes
+ * Check if the user has a specific permission (or is owner)
  */
-export function getAccessibleRoutes(userRole: UserRole): string[] {
+export function hasPermission(permissions: string[], isOwner: boolean, permissionKey: string): boolean {
+  if (isOwner) return true;
+  return permissions.includes(permissionKey);
+}
+
+/**
+ * Get all routes accessible by a user based on permissions
+ */
+export function getAccessibleRoutes(permissions: string[], isOwner: boolean): string[] {
+  if (isOwner) {
+    return Object.keys(ROUTE_PERMISSIONS);
+  }
   return Object.entries(ROUTE_PERMISSIONS)
-    .filter(([, roles]) => roles.includes(userRole))
+    .filter(([, perm]) => !perm || permissions.includes(perm))
     .map(([route]) => route);
 }
 
 /**
  * Check if a user can perform an action on a resource
- * @param userRole - The user's role
- * @param action - The action to perform (create, read, update, delete)
- * @param resource - The resource type
- * @param resourceOwnerId - Optional: The ID of the resource owner
- * @param userId - Optional: The current user's ID
- * @returns true if the user can perform the action
  */
 export function canPerformAction(
   userRole: UserRole,
@@ -103,50 +111,45 @@ export function canPerformAction(
   resourceOwnerId?: string,
   userId?: string,
 ): boolean {
+  // Owner can do everything
+  if (isOwner(userRole)) {
+    return true;
+  }
+
   // Admin can do everything
   if (isAdmin(userRole)) {
     return true;
   }
 
-  // Resource-specific permissions
   switch (resource) {
     case "profiles":
-      // Users can read and update their own profile
       if (action === "read" || action === "update") {
         return resourceOwnerId === userId;
       }
       return false;
 
     case "plans":
-      // All users can read plans
       if (action === "read") {
         return true;
       }
-      // Only admin can create, update, delete plans
       return false;
 
     case "payments":
-      // Users can read their own payments
       if (action === "read") {
         return resourceOwnerId === userId;
       }
-      // Only admin can create, update, delete payments
       return false;
 
     case "subscriptions":
-      // Users can read their own subscriptions
       if (action === "read") {
         return resourceOwnerId === userId;
       }
-      // Only admin can create, update, delete subscriptions
       return false;
 
     case "clients":
-      // Solo el cliente puede leer su propia ficha; el resto de clientes no.
       if (action === "read") {
         return resourceOwnerId === userId;
       }
-      // Only admin can create, update, delete clients
       return false;
 
     default:
@@ -156,8 +159,6 @@ export function canPerformAction(
 
 /**
  * Get a user-friendly error message for unauthorized access
- * @param userRole - The user's role
- * @returns Error message
  */
 export function getUnauthorizedMessage(userRole: UserRole): string {
   return `No tienes permisos para acceder a esta página. Tu rol actual es "${userRole}". Contacta a un administrador si crees que esto es un error.`;
@@ -165,21 +166,15 @@ export function getUnauthorizedMessage(userRole: UserRole): string {
 
 /**
  * Role hierarchy for comparison
- * Higher number = more permissions
  */
 const ROLE_HIERARCHY: Record<UserRole, number> = {
+  owner: 5,
   admin: 4,
   trainer: 3,
   employee: 2,
   client: 1,
 };
 
-/**
- * Check if a role has higher or equal permissions than another
- * @param userRole - The user's role
- * @param requiredRole - The required role
- * @returns true if userRole >= requiredRole
- */
 export function hasRoleOrHigher(userRole: UserRole, requiredRole: UserRole): boolean {
   return ROLE_HIERARCHY[userRole] >= ROLE_HIERARCHY[requiredRole];
 }

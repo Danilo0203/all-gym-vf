@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
-import { getDefaultRouteForRole, isClientRole, isInternalRole, parseUserRole } from "@/lib/auth/role-utils";
+import { isClientScope } from "@/lib/auth/role-utils";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
@@ -10,15 +10,11 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // Check for required Supabase environment variables
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
     if (request.nextUrl.pathname.startsWith("/panel")) {
-      // If we are trying to access dashboard without env vars, warn but maybe allow render
-      // logic to handle it or redirect to a special setup page.
-      // For now, let's just return response to avoid crash, but auth will fail.
       console.warn("Supabase environment variables are missing! Authentication will not work.");
     }
     return response;
@@ -56,8 +52,20 @@ export async function proxy(request: NextRequest) {
   }
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  const role = parseUserRole(profile?.role) ?? parseUserRole(user.user_metadata?.role);
-  const defaultRoute = getDefaultRouteForRole(role);
+  const roleSlug = (profile?.role || user.user_metadata?.role || null) as string | null;
+
+  // Fetch role scope from DB
+  let scope: string | null = null;
+  if (roleSlug) {
+    const { data: roleData } = await supabase
+      .from("roles")
+      .select("scope")
+      .eq("slug", roleSlug)
+      .maybeSingle();
+    scope = roleData?.scope || null;
+  }
+
+  const defaultRoute = isClientScope(scope) ? "/mi/rutina" : "/panel/resumen";
 
   if (pathname.startsWith("/iniciar-sesion")) {
     const url = request.nextUrl.clone();
@@ -71,25 +79,17 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (pathname.startsWith("/panel") && isClientRole(role)) {
+  // Gate by scope: clients → /mi, panel users → /panel
+  if (pathname.startsWith("/panel") && isClientScope(scope)) {
     const url = request.nextUrl.clone();
     url.pathname = "/mi/rutina";
     return NextResponse.redirect(url);
   }
 
-  if (pathname.startsWith("/mi") && !isClientRole(role)) {
+  if (pathname.startsWith("/mi") && !isClientScope(scope)) {
     const url = request.nextUrl.clone();
     url.pathname = "/panel/resumen";
     return NextResponse.redirect(url);
-  }
-
-  const adminOnlyRoutes = ["/panel/usuarios", "/panel/planes", "/panel/pagos", "/panel/ejercicios"];
-  const isAdminRoute = adminOnlyRoutes.some((route) => pathname.startsWith(route));
-
-  if (isAdminRoute && role !== "admin") {
-      const url = request.nextUrl.clone();
-      url.pathname = isInternalRole(role) ? "/panel/resumen" : defaultRoute;
-      return NextResponse.redirect(url);
   }
 
   return response;

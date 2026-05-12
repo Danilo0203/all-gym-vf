@@ -1,6 +1,6 @@
 import type { UserRole } from "@/types";
 
-export const VALID_USER_ROLES: UserRole[] = ["admin", "trainer", "employee", "client"];
+export const VALID_USER_ROLES: UserRole[] = ["owner", "admin", "trainer", "employee", "client"];
 
 export function parseUserRole(value: unknown): UserRole | null {
   if (typeof value !== "string") return null;
@@ -12,7 +12,15 @@ export function isClientRole(role: UserRole | null | undefined): role is "client
 }
 
 export function isInternalRole(role: UserRole | null | undefined): role is Exclude<UserRole, "client"> {
-  return role === "admin" || role === "trainer" || role === "employee";
+  return role === "owner" || role === "admin" || role === "trainer" || role === "employee";
+}
+
+export function isPanelScope(scope: string | null | undefined): scope is "panel" {
+  return scope === "panel";
+}
+
+export function isClientScope(scope: string | null | undefined): scope is "client" {
+  return scope === "client";
 }
 
 export function getDefaultRouteForRole(role: UserRole | null | undefined) {
