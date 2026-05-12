@@ -2,7 +2,7 @@ import PageContainer from "@/components/layout/page-container";
 import { Heading } from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
 import { ExerciseCatalogManager } from "@/features/exercises/components/exercise-catalog-manager";
-import { getUserAccessContext } from "@/lib/auth/authorization";
+import { getUserAccessContext, hasPermission } from "@/lib/auth/authorization";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeExerciseCatalogItem } from "@/lib/training/catalog";
 import { hydrateExerciseCatalogMedia } from "@/lib/training/exercise-media";
@@ -18,7 +18,7 @@ export default async function ExercisesPage() {
     redirect("/iniciar-sesion");
   }
 
-  if (!access.isAdmin) {
+  if (!hasPermission(access, "exercises.view")) {
     redirect("/panel");
   }
 

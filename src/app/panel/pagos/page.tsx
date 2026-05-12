@@ -4,7 +4,7 @@ import { DataTableSkeleton } from '@/components/ui/table/data-table-skeleton';
 import { searchParamsCache } from '@/lib/searchparams';
 import { SearchParams } from 'nuqs/server';
 import { Suspense } from 'react';
-import { getUserAccessContext } from '@/lib/auth/authorization';
+import { getUserAccessContext, hasPermission } from '@/lib/auth/authorization';
 import { redirect } from 'next/navigation';
 
 export const metadata = {
@@ -20,7 +20,7 @@ export default async function Page(props: pageProps) {
   if (!access.isAuthenticated) {
     redirect('/iniciar-sesion');
   }
-  if (!access.isAdmin) {
+  if (!hasPermission(access, "payments.view")) {
     redirect('/panel');
   }
 

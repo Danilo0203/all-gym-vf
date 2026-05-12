@@ -28,13 +28,18 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DataTableColumnHeader } from "@/components/ui/table/data-table-column-header";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { IconEdit, IconTrash } from "@tabler/icons-react";
+import { useCurrentUser } from "@/features/profile/hooks/use-profile";
 
 interface UsersTableProps {
   data: UserData[];
+  roleNameMap?: Record<string, string>;
 }
 
-export function UsersTable({ data }: UsersTableProps) {
+export function UsersTable({ data, roleNameMap = {} }: UsersTableProps) {
   const router = useRouter();
+  const { data: currentUser } = useCurrentUser();
+  const canUpdateUsers = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("users.update"));
+  const canDeleteUsers = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("users.delete"));
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
 
@@ -103,22 +108,15 @@ export function UsersTable({ data }: UsersTableProps) {
         meta: {
           label: "Rol",
           variant: "multiSelect" as const,
-          options: [
-            { label: "Administrador", value: "admin" },
-            { label: "Entrenador", value: "trainer" },
-            { label: "Empleado", value: "employee" },
-            { label: "Cliente", value: "client" },
-          ],
+          options: Object.entries(roleNameMap).map(([slug, name]) => ({
+            label: name,
+            value: slug,
+          })),
         },
         cell: ({ row }) => {
           const role = row.getValue("role") as UserRole;
-          const roleMap: Record<UserRole, string> = {
-            admin: "Administrador",
-            trainer: "Entrenador",
-            employee: "Empleado",
-            client: "Cliente",
-          };
-          const colorMap: Record<UserRole, "default" | "secondary" | "destructive" | "outline" | "success"> = {
+          const colorMap: Record<string, "default" | "secondary" | "destructive" | "outline" | "success"> = {
+            owner: "default",
             admin: "destructive",
             trainer: "default",
             employee: "secondary",
@@ -126,7 +124,7 @@ export function UsersTable({ data }: UsersTableProps) {
           };
           return (
             <Badge variant={colorMap[role] || "outline"} className="capitalize">
-              {roleMap[role] || role}
+              {roleNameMap[role] || role}
             </Badge>
           );
         },
@@ -146,55 +144,59 @@ export function UsersTable({ data }: UsersTableProps) {
           const user = row.original;
           return (
             <div className="flex items-center gap-1">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 hover:bg-muted"
-                      onClick={() => {
-                        setSelectedUser(user);
-                        setIsFormOpen(true);
-                      }}
-                    >
-                      <IconEdit className="h-4 w-4 text-blue-500" />
-                      <span className="sr-only">Editar</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Editar usuario</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              {canUpdateUsers && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 hover:bg-muted"
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setIsFormOpen(true);
+                        }}
+                      >
+                        <IconEdit className="h-4 w-4 text-blue-500" />
+                        <span className="sr-only">Editar</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Editar usuario</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
 
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 hover:bg-destructive/10"
-                      onClick={() => {
-                        setUserToDelete(user);
-                        setIsDeleteOpen(true);
-                      }}
-                    >
-                      <IconTrash className="h-4 w-4 text-destructive" />
-                      <span className="sr-only">Eliminar</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Eliminar usuario</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              {canDeleteUsers && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 hover:bg-destructive/10"
+                        onClick={() => {
+                          setUserToDelete(user);
+                          setIsDeleteOpen(true);
+                        }}
+                      >
+                        <IconTrash className="h-4 w-4 text-destructive" />
+                        <span className="sr-only">Eliminar</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Eliminar usuario</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
           );
         },
       },
     ],
-    [],
+    [canDeleteUsers, canUpdateUsers, roleNameMap],
   );
 
   const { table } = useDataTable({

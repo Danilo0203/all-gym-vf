@@ -1,7 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getUserAccessContext } from "@/lib/auth/authorization";
+import { getUserAccessContext, hasPermission } from "@/lib/auth/authorization";
 import type { RoutineRecord } from "@/lib/training/types";
 
 export interface RoutineWithCustomer extends RoutineRecord {
@@ -13,7 +13,7 @@ export interface RoutineWithCustomer extends RoutineRecord {
 
 export async function getAllRoutines(): Promise<RoutineWithCustomer[]> {
   const access = await getUserAccessContext();
-  if (!access.isAuthenticated || !access.isAdmin) {
+  if (!access.isAuthenticated || !hasPermission(access, "routines.view")) {
     throw new Error("No autorizado");
   }
 

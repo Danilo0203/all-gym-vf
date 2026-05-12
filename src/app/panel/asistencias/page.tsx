@@ -2,7 +2,7 @@ import PageContainer from "@/components/layout/page-container";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getUserAccessContext } from "@/lib/auth/authorization";
+import { getUserAccessContext, hasPermission } from "@/lib/auth/authorization";
 import { redirect } from "next/navigation";
 
 type AttendanceRow = {
@@ -92,7 +92,7 @@ export default async function AttendancePage(props: AttendancePageProps) {
   if (!access.isAuthenticated) {
     redirect("/iniciar-sesion");
   }
-  if (!access.isAdmin) {
+  if (!hasPermission(access, "attendance.view")) {
     redirect("/panel");
   }
 

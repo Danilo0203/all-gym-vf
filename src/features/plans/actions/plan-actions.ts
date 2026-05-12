@@ -1,7 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { getUserAccessContext } from '@/lib/auth/authorization';
+import { getUserAccessContext, hasPermission } from '@/lib/auth/authorization';
 import { revalidatePath } from 'next/cache';
 
 export interface Plan {
@@ -17,13 +17,13 @@ export interface Plan {
 export type CreatePlanData = Omit<Plan, 'id' | 'created_at'>;
 export type UpdatePlanData = Partial<CreatePlanData>;
 
-async function ensureAdmin() {
+async function ensureAdmin(permission: string = "plans.view") {
   const access = await getUserAccessContext();
   if (!access.isAuthenticated) {
     return { success: false, error: 'No autenticado' } as const;
   }
-  if (!access.isAdmin) {
-    return { success: false, error: 'No autorizado: Solo administradores' } as const;
+  if (!hasPermission(access, permission)) {
+    return { success: false, error: 'No autorizado' } as const;
   }
   return null;
 }
@@ -73,7 +73,7 @@ export async function getPlanById(id: number) {
 }
 
 export async function createPlan(data: CreatePlanData) {
-  const authError = await ensureAdmin();
+  const authError = await ensureAdmin("plans.create");
   if (authError) return authError;
 
   const supabase = await createClient();
@@ -102,11 +102,10 @@ export async function createPlan(data: CreatePlanData) {
 }
 
 export async function updatePlan(id: number, data: UpdatePlanData) {
-  const authError = await ensureAdmin();
+  const authError = await ensureAdmin("plans.update");
   if (authError) return authError;
 
   const supabase = await createClient();
-  
   const { error } = await supabase
     .from('plans')
     .update({
@@ -128,11 +127,11 @@ export async function updatePlan(id: number, data: UpdatePlanData) {
 }
 
 export async function deletePlan(id: number) {
-  const authError = await ensureAdmin();
+  const authError = await ensureAdmin("plans.delete");
   if (authError) return authError;
 
   const supabase = await createClient();
-  
+   
   // Realmente no borramos, solo desactivamos para preservar integridad referencial
   // Pero si el usuario explicitamente pide borrar, intentamos borrar.
   // Es mejor práctica hacer soft-delete (desactivar).

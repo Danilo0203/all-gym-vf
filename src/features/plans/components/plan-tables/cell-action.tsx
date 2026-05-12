@@ -8,6 +8,7 @@ import { AlertModal } from '@/components/modal/alert-modal';
 import { PlanFormSheet } from '../plan-form-sheet';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import { useCurrentUser } from '@/features/profile/hooks/use-profile';
 
 interface CellActionProps {
   data: Plan;
@@ -18,6 +19,9 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
   const [openDelete, setOpenDelete] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
   const router = useRouter();
+  const { data: currentUser } = useCurrentUser();
+  const canUpdate = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes('plans.update'));
+  const canDelete = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes('plans.delete'));
 
   const onDelete = async () => {
     setLoading(true);
@@ -46,33 +50,39 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
         loading={loading}
       />
       
-      <PlanFormSheet 
-        mode="edit" 
-        plan={data} 
-        open={openEdit} 
-        onOpenChange={setOpenEdit}
-        trigger={null}
-      />
+      {canUpdate ? (
+        <PlanFormSheet 
+          mode="edit" 
+          plan={data} 
+          open={openEdit} 
+          onOpenChange={setOpenEdit}
+          trigger={null}
+        />
+      ) : null}
 
       <div className="flex items-center gap-2">
-        <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-8 w-8 hover:bg-muted"
-            onClick={() => setOpenEdit(true)}
-        >
-          <IconEdit className="h-4 w-4 text-blue-500" />
-          <span className="sr-only">Editar</span>
-        </Button>
-        <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-8 w-8 hover:bg-destructive/10"
-            onClick={() => setOpenDelete(true)}
-        >
-          <IconTrash className="h-4 w-4 text-destructive" />
-          <span className="sr-only">Eliminar</span>
-        </Button>
+        {canUpdate ? (
+          <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8 hover:bg-muted"
+              onClick={() => setOpenEdit(true)}
+          >
+            <IconEdit className="h-4 w-4 text-blue-500" />
+            <span className="sr-only">Editar</span>
+          </Button>
+        ) : null}
+        {canDelete ? (
+          <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8 hover:bg-destructive/10"
+              onClick={() => setOpenDelete(true)}
+          >
+            <IconTrash className="h-4 w-4 text-destructive" />
+            <span className="sr-only">Eliminar</span>
+          </Button>
+        ) : null}
       </div>
     </>
   );

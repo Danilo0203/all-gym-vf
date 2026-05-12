@@ -4,7 +4,7 @@ import sharp from "sharp";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { getUserAccessContext } from "@/lib/auth/authorization";
+import { getUserAccessContext, hasPermission } from "@/lib/auth/authorization";
 import { buildExerciseSlug } from "@/lib/training/catalog";
 import { resolveExerciseImageUrl } from "@/lib/training/exercise-media";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -93,14 +93,14 @@ async function ensureExerciseMediaBucket(adminClient: ReturnType<typeof createAd
   }
 }
 
-async function ensureAdminAccess() {
+async function ensureAdminAccess(permission: string = "exercises.view") {
   const access = await getUserAccessContext();
 
   if (!access.isAuthenticated) {
     return "No autenticado.";
   }
 
-  if (!access.isAdmin) {
+  if (!hasPermission(access, permission)) {
     return "No autorizado.";
   }
 
@@ -173,7 +173,7 @@ export async function updateExerciseCatalogItem(input: {
   displayName: string;
 }): Promise<ExerciseCatalogMutationResult> {
   try {
-    const authError = await ensureAdminAccess();
+    const authError = await ensureAdminAccess("exercises.update");
     if (authError) {
       return { success: false, error: authError };
     }
@@ -236,7 +236,7 @@ export async function updateExerciseCatalogPreferences(input: {
   isPreviewHidden?: boolean;
 }): Promise<ExerciseCatalogMutationResult> {
   try {
-    const authError = await ensureAdminAccess();
+    const authError = await ensureAdminAccess("exercises.update");
     if (authError) {
       return { success: false, error: authError };
     }
@@ -285,7 +285,7 @@ export async function updateExerciseCatalogPreferences(input: {
 
 export async function saveExerciseMediaToLocal(exerciseId: number): Promise<ExerciseCatalogMutationResult> {
   try {
-    const authError = await ensureAdminAccess();
+    const authError = await ensureAdminAccess("exercises.update");
     if (authError) {
       return { success: false, error: authError };
     }
@@ -428,7 +428,7 @@ export async function saveExerciseMediaToLocal(exerciseId: number): Promise<Exer
 
 export async function archiveStarterPackExercises(): Promise<ExerciseCatalogMutationResult> {
   try {
-    const authError = await ensureAdminAccess();
+    const authError = await ensureAdminAccess("exercises.update");
     if (authError) {
       return { success: false, error: authError };
     }
@@ -464,7 +464,7 @@ export async function archiveStarterPackExercises(): Promise<ExerciseCatalogMuta
 
 export async function createExerciseCatalogItem(formData: FormData): Promise<ExerciseCatalogMutationResult> {
   try {
-    const authError = await ensureAdminAccess();
+    const authError = await ensureAdminAccess("exercises.create");
     if (authError) {
       return { success: false, error: authError };
     }

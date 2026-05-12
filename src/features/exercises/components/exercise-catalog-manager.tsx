@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useCurrentUser } from "@/features/profile/hooks/use-profile";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -117,6 +118,9 @@ type ExerciseCatalogFilter = "all" | "favorites" | "hidden";
 
 export function ExerciseCatalogManager({ exercises, totalCount }: ExerciseCatalogManagerProps) {
   const router = useRouter();
+  const { data: currentUser } = useCurrentUser();
+  const canCreate = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("exercises.create"));
+  const canUpdate = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("exercises.update"));
   const [searchTerm, setSearchTerm] = useState("");
   const deferredSearchTerm = useDeferredValue(searchTerm);
   const [catalogFilter, setCatalogFilter] = useState<ExerciseCatalogFilter>("all");
@@ -592,10 +596,12 @@ export function ExerciseCatalogManager({ exercises, totalCount }: ExerciseCatalo
           </CardDescription>
         </CardHeader>
         <CardFooter className="flex justify-end">
+          {canCreate && (
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus />
             Nuevo ejercicio
           </Button>
+          )}
         </CardFooter>
       </Card>
 
@@ -671,6 +677,7 @@ export function ExerciseCatalogManager({ exercises, totalCount }: ExerciseCatalo
                   key={exercise.id}
                   exercise={exercise}
                   showHiddenPreview={catalogFilter === "hidden"}
+                  canUpdate={canUpdate}
                   onEdit={() => openEditDialog(exercise)}
                   onSaveMediaLocally={() => handleSaveMediaLocally(exercise)}
                   onToggleFavorite={() => handleToggleFavorite(exercise)}
@@ -1118,9 +1125,10 @@ function ExerciseCard({
   onSaveMediaLocally,
   onToggleFavorite,
   onTogglePreviewVisibility,
-  isSavingMedia,
-  isTogglingFavorite,
-  isTogglingPreview,
+  isSavingMedia = false,
+  isTogglingFavorite = false,
+  isTogglingPreview = false,
+  canUpdate = true,
 }: {
   exercise: ExerciseCatalogItem;
   showHiddenPreview: boolean;
@@ -1131,6 +1139,7 @@ function ExerciseCard({
   isSavingMedia: boolean;
   isTogglingFavorite: boolean;
   isTogglingPreview: boolean;
+  canUpdate?: boolean;
 }) {
   const displayName = getExerciseDisplayName(exercise);
   const isStoredLocally = isExerciseStoredLocally(exercise);
@@ -1222,9 +1231,11 @@ function ExerciseCard({
               {isSavingMedia ? <Loader2 className="animate-spin" /> : <HardDriveDownload />}
             </TooltipIconButton>
           ) : null}
+          {canUpdate && (
           <TooltipIconButton label="Editar nombre" onClick={onEdit}>
             <PencilLine />
           </TooltipIconButton>
+          )}
         </div>
       </CardFooter>
     </Card>

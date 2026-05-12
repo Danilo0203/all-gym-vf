@@ -42,6 +42,7 @@ export const columns: ColumnDef<User>[] = [
       const role = row.getValue("role") as UserRole;
 
       const roleMap: Record<UserRole, string> = {
+        owner: "Propietario",
         admin: "Administrador",
         trainer: "Entrenador",
         employee: "Empleado",
@@ -49,6 +50,7 @@ export const columns: ColumnDef<User>[] = [
       };
 
       const colorMap: Record<UserRole, "default" | "secondary" | "destructive" | "outline"> = {
+        owner: "default",
         admin: "destructive",
         trainer: "default",
         employee: "secondary",

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import PageContainer from "@/components/layout/page-container";
 import { DataTableSkeleton } from "@/components/ui/table/data-table-skeleton";
 import RoutinesListing from "@/features/routines/components/routines-listing";
-import { getUserAccessContext } from "@/lib/auth/authorization";
+import { getUserAccessContext, hasPermission } from "@/lib/auth/authorization";
 
 export const metadata = {
   title: "Panel: Rutinas",
@@ -15,7 +15,7 @@ export default async function RoutinesPage() {
   if (!access.isAuthenticated) {
     redirect("/iniciar-sesion");
   }
-  if (!access.isAdmin) {
+  if (!hasPermission(access, "routines.view")) {
     redirect("/panel");
   }
 
@@ -23,7 +23,7 @@ export default async function RoutinesPage() {
     <PageContainer
       scrollable
       pageTitle="Rutinas"
-      pageDescription="Todas las rutinas guardadas de tus clientes."
+      pageDescription="Biblioteca de plantillas de rutina. Asigna a tus clientes."
     >
       <Suspense fallback={<DataTableSkeleton columnCount={4} rowCount={8} />}>
         <RoutinesListing />

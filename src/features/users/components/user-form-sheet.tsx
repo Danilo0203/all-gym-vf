@@ -1,18 +1,37 @@
 "use client";
+import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import { FormInput } from "@/components/forms/form-input";
 import { FormSelect } from "@/components/forms/form-select";
-import { type UserData } from "../actions/user-actions";
+import { type UserData, getAvailableRoles, type RoleOption } from "../actions/user-actions";
 import { useHookFormUsers } from "../hooks/use-hook-form-users";
+
 interface UserFormSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   user: UserData | null;
 }
+
 export function UserFormSheet({ open, onOpenChange, user }: UserFormSheetProps) {
   const { form, isPending, isEditing, onSubmit } = useHookFormUsers({ open, onOpenChange, user });
+  const [roleOptions, setRoleOptions] = useState<{ label: string; value: string }[]>([]);
+
+  useEffect(() => {
+    if (open) {
+      getAvailableRoles().then((result) => {
+        if (result.success && result.data) {
+          setRoleOptions(
+            result.data.map((r: RoleOption) => ({
+              label: r.name,
+              value: r.slug,
+            }))
+          );
+        }
+      });
+    }
+  }, [open]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -61,7 +80,8 @@ export function UserFormSheet({ open, onOpenChange, user }: UserFormSheetProps) 
                     control={form.control}
                     name="role"
                     label="Rol"
-                    options={[
+                    options={roleOptions.length > 0 ? roleOptions : [
+                      { label: "Propietario", value: "owner" },
                       { label: "Administrador", value: "admin" },
                       { label: "Entrenador", value: "trainer" },
                       { label: "Empleado", value: "employee" },

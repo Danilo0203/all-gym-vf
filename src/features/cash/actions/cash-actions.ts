@@ -2,14 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getUserAccessContext } from "@/lib/auth/authorization";
+import { getUserAccessContext, hasPermission } from "@/lib/auth/authorization";
 import { createClient } from "@/lib/supabase/server";
 import { toCashActionError } from "@/features/cash/lib/cash-module-errors";
 import type { TrainingProfileInput } from "@/lib/training/types";
 
 const GUATEMALA_UTC_OFFSET = "-06:00";
 
-type CashRole = "admin" | "employee";
 type SessionStatus = "open" | "closed" | "closed_with_difference" | "cancelled";
 export type PaymentMethod = "cash" | "card" | "transfer";
 type MovementType = "sale" | "manual_income" | "withdrawal" | "refund" | "adjustment" | "void";
@@ -240,7 +239,7 @@ export interface CashSessionView {
 }
 
 export interface CashDashboardData {
-  access: { role: CashRole; userId: string };
+  access: { role: string | null; userId: string };
   register: { id: string; name: string } | null;
   currentSession: CashSessionView | null;
   summary: CashDashboardSummary | null;
@@ -263,7 +262,7 @@ export interface CashHistoryFilters {
 }
 
 export interface CashHistoryData {
-  access: { role: CashRole; userId: string };
+  access: { role: string | null; userId: string };
   sessions: CashSessionView[];
   availableUsers: Array<{ id: string; name: string }>;
   totalItems: number;
@@ -271,7 +270,7 @@ export interface CashHistoryData {
 }
 
 export interface CashSessionDetailData {
-  access: { role: CashRole; userId: string };
+  access: { role: string | null; userId: string };
   session: CashSessionView;
   summary: CashSessionSummary;
   movements: CashMovementView[];
@@ -329,19 +328,17 @@ function isPaymentMethod(value: string | null | undefined): value is PaymentMeth
   return value === "cash" || value === "card" || value === "transfer";
 }
 
-function isCashRole(role: string | null): role is CashRole {
-  return role === "admin" || role === "employee";
-}
-
 async function requireCashAccess() {
   const access = await getUserAccessContext();
-  if (!access.isAuthenticated || !access.userId || !isCashRole(access.role)) {
+  if (!access.isAuthenticated || !access.userId || !hasPermission(access, "cash.operate")) {
     throw new Error("No autorizado para operar caja");
   }
 
   return {
     role: access.role,
     userId: access.userId,
+    isOwner: access.isOwner,
+    permissions: access.permissions,
   };
 }
 
@@ -364,7 +361,7 @@ async function requireOperableOpenCashSession(accessArg?: Awaited<ReturnType<typ
     throw new Error("Abre una caja antes de registrar cobros desde este modulo.");
   }
 
-  if (access.role !== "admin" && session.opened_by_user_id !== access.userId) {
+  if (!access.isOwner && !access.permissions.includes("cash.reverse_payment") && session.opened_by_user_id !== access.userId) {
     throw new Error("La caja abierta pertenece a otro usuario.");
   }
 
@@ -874,7 +871,7 @@ export async function getCashDashboardData(): Promise<CashDashboardData> {
     .lte("created_at", todayRange.end)
     .order("created_at", { ascending: false });
 
-  if (access.role !== "admin") {
+  if (!access.isOwner && !access.permissions.includes("cash.reverse_payment")) {
     outOfSessionQuery = outOfSessionQuery.eq("created_by_user_id", access.userId);
   }
 
@@ -907,7 +904,7 @@ export async function getCashDashboardData(): Promise<CashDashboardData> {
   );
 
   const canOperateSession = Boolean(
-    currentSession && (access.role === "admin" || currentSession.opened_by_user_id === access.userId),
+    currentSession && (access.isOwner || access.permissions.includes("cash.reverse_payment") || currentSession.opened_by_user_id === access.userId),
   );
   const canOpenSession = !currentSession;
   const activityMovements = [...sessionMovements, ...outOfSessionMovements].sort(
@@ -1130,7 +1127,7 @@ export async function getCashHistoryData(filters: CashHistoryFilters = {}): Prom
     query = query.lte("opened_at", `${filters.dateTo}T23:59:59.999${GUATEMALA_UTC_OFFSET}`);
   }
 
-  if (access.role === "admin") {
+  if (access.isOwner || access.permissions.includes("cash.reverse_payment")) {
     if (filters.openedByUserId) {
       query = query.eq("opened_by_user_id", filters.openedByUserId);
     }
@@ -1173,7 +1170,7 @@ export async function getCashHistoryData(filters: CashHistoryFilters = {}): Prom
   const sessions = await hydrateSessions((sessionRows as CashSessionRow[] | null) || []);
   let availableUsers: Array<{ id: string; name: string }> = [];
 
-  if (access.role === "admin") {
+  if (access.isOwner || access.permissions.includes("cash.reverse_payment")) {
     let userQuery = adminClient.from("cash_sessions").select("opened_by_user_id");
 
     if (status !== "all") {
@@ -1217,7 +1214,7 @@ export async function getCashHistoryData(filters: CashHistoryFilters = {}): Prom
       dateFrom: filters.dateFrom || "",
       dateTo: filters.dateTo || "",
       status,
-      openedByUserId: access.role === "admin" ? filters.openedByUserId || "" : access.userId,
+      openedByUserId: access.isOwner || access.permissions.includes("cash.reverse_payment") ? filters.openedByUserId || "" : access.userId,
     },
   };
 }
@@ -1241,7 +1238,7 @@ export async function getCashSessionDetail(sessionId: string): Promise<CashSessi
     throw new Error("Sesión de caja no encontrada");
   }
 
-  if (access.role !== "admin" && sessionRow.opened_by_user_id !== access.userId) {
+  if (!access.isOwner && !access.permissions.includes("cash.reverse_payment") && sessionRow.opened_by_user_id !== access.userId) {
     throw new Error("No autorizado para ver esta sesión");
   }
 
@@ -1445,7 +1442,7 @@ export async function runRenewSubscriptionWithPayment(params: {
 
 export async function getPaymentReversalContext(paymentId: string): Promise<CashPaymentReversalContext | null> {
   const access = await requireCashAccess();
-  if (access.role !== "admin") {
+  if (!access.isOwner && !access.permissions.includes("cash.reverse_payment")) {
     throw new Error("Solo administradores pueden revertir pagos");
   }
 
@@ -1515,7 +1512,7 @@ export async function getPaymentReversalContext(paymentId: string): Promise<Cash
 
 export async function reverseAndRecreatePayment(input: ReversePaymentInput) {
   const access = await requireCashAccess();
-  if (access.role !== "admin") {
+  if (!access.isOwner && !access.permissions.includes("cash.reverse_payment")) {
     throw new Error("Solo administradores pueden revertir pagos");
   }
 

@@ -27,19 +27,7 @@ export default function ProfileViewPage({ user }: ProfileViewPageProps) {
       .slice(0, 2);
   };
 
-  // Format role for display
-  const getRoleLabel = (role: string | null) => {
-    switch (role) {
-      case "admin":
-        return "Administrador";
-      case "staff":
-        return "Personal";
-      case "authenticated":
-        return "Usuario";
-      default:
-        return role || "Usuario";
-    }
-  };
+  const roleLabel = user.roleName || user.role || "Usuario";
 
   return (
     <div className="flex flex-1 flex-col gap-4 overflow-auto p-2 md:p-4">
@@ -61,7 +49,7 @@ export default function ProfileViewPage({ user }: ProfileViewPageProps) {
                 <h1 className="text-xl font-bold">{user.full_name || "Usuario"}</h1>
                 <Badge variant="secondary" className="font-normal h-5 px-2">
                   <IconShieldCheck className="mr-1 h-3 w-3" />
-                  {getRoleLabel(user.role)}
+                  {roleLabel}
                 </Badge>
               </div>
 

@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getUserAccessContext } from "@/lib/auth/authorization";
+import { getUserAccessContext, hasPermission } from "@/lib/auth/authorization";
 import { Payment } from "../components/payment-tables/columns";
 import type { ExtendedColumnSort } from "@/types/data-table";
 
@@ -46,8 +46,8 @@ export async function getPayments({
   if (!access.isAuthenticated) {
     throw new Error("No autenticado");
   }
-  if (!access.isAdmin) {
-    throw new Error("No autorizado: Solo administradores");
+  if (!hasPermission(access, "payments.view")) {
+    throw new Error("No autorizado: Se requiere permiso payments.view");
   }
 
   const supabase = await createClient();

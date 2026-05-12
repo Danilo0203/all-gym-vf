@@ -6,6 +6,8 @@ import { CustomerFormSheet } from '@/features/customers/components/customer-form
 import { searchParamsCache } from '@/lib/searchparams';
 import { SearchParams } from 'nuqs/server';
 import { Suspense } from 'react';
+import { getUserAccessContext, hasPermission } from '@/lib/auth/authorization';
+import { redirect } from 'next/navigation';
 
 export const metadata = {
   title: 'Panel: Clientes'
@@ -16,8 +18,11 @@ type pageProps = {
 };
 
 export default async function Page(props: pageProps) {
+  const access = await getUserAccessContext();
+  if (!access.isAuthenticated) redirect('/iniciar-sesion');
+  if (!hasPermission(access, "customers.view")) redirect('/panel');
+
   const searchParams = await props.searchParams;
-  // Allow nested RSCs to access the search params (in a type-safe way)
   searchParamsCache.parse(searchParams);
 
   return (
@@ -25,7 +30,7 @@ export default async function Page(props: pageProps) {
       scrollable={false}
       pageTitle='Clientes'
       pageDescription='Administración de clientes'
-      pageHeaderAction={<CustomerFormSheet />}
+      pageHeaderAction={hasPermission(access, "customers.create") ? <CustomerFormSheet /> : null}
     >
       <Suspense
         fallback={

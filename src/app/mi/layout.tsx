@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { ClientShell } from "@/features/client/components/client-shell";
 import { getUserAccessContext } from "@/lib/auth/authorization";
-import { isClientRole } from "@/lib/auth/role-utils";
+import { isClientScope } from "@/lib/auth/role-utils";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -15,7 +15,7 @@ export default async function ClientLayout({ children }: { children: React.React
     redirect("/iniciar-sesion");
   }
 
-  if (!isClientRole(access.role)) {
+  if (!isClientScope(access.roleScope)) {
     redirect("/panel/resumen");
   }
 

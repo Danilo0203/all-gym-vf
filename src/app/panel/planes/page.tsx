@@ -5,7 +5,7 @@ import { DataTableSkeleton } from '@/components/ui/table/data-table-skeleton';
 import { PlanFormSheet } from '@/features/plans/components/plan-form-sheet';
 import { searchParamsCache } from '@/lib/searchparams';
 import { SearchParams } from 'nuqs/server';
-import { getUserAccessContext } from '@/lib/auth/authorization';
+import { getUserAccessContext, hasPermission } from '@/lib/auth/authorization';
 import { redirect } from 'next/navigation';
 
 export const metadata = {
@@ -21,7 +21,7 @@ export default async function Page(props: pageProps) {
   if (!access.isAuthenticated) {
     redirect('/iniciar-sesion');
   }
-  if (!access.isAdmin) {
+  if (!hasPermission(access, "plans.view")) {
     redirect('/panel');
   }
 
@@ -34,7 +34,7 @@ export default async function Page(props: pageProps) {
       scrollable={false}
       pageTitle='Planes de Membresía'
       pageDescription='Administra los planes y precios del gimnasio.'
-      pageHeaderAction={<PlanFormSheet />}
+      pageHeaderAction={hasPermission(access, "plans.create") ? <PlanFormSheet /> : null}
     >
       <Suspense
         fallback={

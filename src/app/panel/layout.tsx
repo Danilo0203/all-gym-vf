@@ -1,5 +1,5 @@
 import { getUserAccessContext } from "@/lib/auth/authorization";
-import { isClientRole } from "@/lib/auth/role-utils";
+import { isClientScope } from "@/lib/auth/role-utils";
 import KBar from '@/components/kbar';
 import AppSidebar from '@/components/layout/app-sidebar';
 import Header from '@/components/layout/header';
@@ -23,7 +23,7 @@ export default async function DashboardLayout({
     redirect("/iniciar-sesion");
   }
 
-  if (isClientRole(access.role)) {
+  if (isClientScope(access.roleScope)) {
     redirect("/mi/rutina");
   }
 

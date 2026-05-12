@@ -11,7 +11,7 @@ import { UserRole } from "@/types";
 const userFormSchema = z.object({
   email: z.string().email({ message: "Correo electrónico inválido" }),
   full_name: z.string().min(2, { message: "El nombre es obligatorio" }),
-  role: z.enum(["admin", "trainer", "employee", "client"], {
+  role: z.enum(["owner", "admin", "trainer", "employee", "client"], {
     message: "Selecciona un rol válido",
   }),
   password: z.string().optional(),

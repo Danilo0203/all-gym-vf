@@ -31,6 +31,7 @@ import { CustomerFormSheet } from "@/features/customers/components/customer-form
 import { closeCashSession, type CashDashboardData, openCashSession } from "@/features/cash/actions/cash-actions";
 import { CashCustomerPaymentDialog } from "@/features/cash/components/cash-customer-payment-dialog";
 import { cn } from "@/lib/utils";
+import { useCurrentUser } from "@/features/profile/hooks/use-profile";
 
 function formatMoney(amount: number | null | undefined) {
   const safeAmount = typeof amount === "number" ? amount : 0;
@@ -320,6 +321,10 @@ function QuickActionCard({
 
 export function CashDashboardClient({ data }: { data: CashDashboardData }) {
   const router = useRouter();
+  const { data: currentUser } = useCurrentUser();
+  const canOperateCash = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("cash.operate"));
+  const canManageMembership = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("customers.manage_membership"));
+  const canReversePayment = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("cash.reverse_payment"));
   const summaryCardsRef = useRef<HTMLDivElement | null>(null);
   const [isPending, startTransition] = useTransition();
   const [openingAmount, setOpeningAmount] = useState("0.00");
@@ -473,6 +478,7 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
                 onChange={(event) => setOpeningNotes(event.target.value)}
                 placeholder="Observación opcional de apertura"
               />
+              {canOperateCash && (
               <Button
                 className="w-full"
                 disabled={isPending || !data.canOpenSession || !data.register}
@@ -481,6 +487,7 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
                 <IconLogin2 className="h-4 w-4" />
                 Abrir caja
               </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -565,8 +572,9 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {canOperateCash && (
             <QuickActionCard
-              title="Nuevo cliente + cobro"
+              title="Registro de nuevo cliente"
               description="Registra una alta nueva, asigna plan y cobra dentro de la sesión actual."
               tone="primary"
             >
@@ -580,6 +588,37 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
                 }
               />
             </QuickActionCard>
+            )}
+
+            {canManageMembership && (
+            <QuickActionCard
+              title="Renovar suscripción"
+              description="Busca al cliente, revisa su contexto y continúa con la renovación rápida."
+            >
+              <CashCustomerPaymentDialog
+                mode="renewal"
+                trigger={
+                  <Button className="w-full" variant="outline">
+                    <IconRefresh className="h-4 w-4" />
+                    Renovar suscripción
+                  </Button>
+                }
+              />
+            </QuickActionCard>
+            )}
+
+            {canOperateCash && (
+            <QuickActionCard
+              title="Cerrar caja"
+              description="Confirma el contado real y registra la diferencia si existe."
+              tone="danger"
+            >
+              <Button className="w-full" variant="destructive" onClick={() => setCloseDialogOpen(true)}>
+                <IconDoorExit className="h-4 w-4" />
+                Cerrar caja
+              </Button>
+            </QuickActionCard>
+            )}
 
             <QuickActionCard
               title="Renovar suscripción"
@@ -636,7 +675,7 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
                       <TableHead>Monto</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead>Usuario</TableHead>
-                      {data.access.role === "admin" ? <TableHead className="text-right">Acciones</TableHead> : null}
+                      {canReversePayment ? <TableHead className="text-right">Acciones</TableHead> : null}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -654,7 +693,7 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
                           <Badge variant={getActivityStatusVariant(movement)}>{getActivityStatusLabel(movement)}</Badge>
                         </TableCell>
                         <TableCell>{movement.created_by_name || "Usuario"}</TableCell>
-                        {data.access.role === "admin" ? (
+                        {canReversePayment ? (
                           <TableCell className="text-right">
                             {canReverseMovement(movement, data.access.role) && movement.source_payment_id ? (
                               <ReversePaymentDialog

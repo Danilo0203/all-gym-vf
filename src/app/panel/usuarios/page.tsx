@@ -3,7 +3,7 @@ import UserListing from "@/features/users/components/user-listing";
 import { Suspense } from "react";
 import { DataTableSkeleton } from "@/components/ui/table/data-table-skeleton";
 import { CreateUserButton } from "@/features/users/components/create-user-button";
-import { getUserAccessContext } from "@/lib/auth/authorization";
+import { getUserAccessContext, hasPermission } from "@/lib/auth/authorization";
 import { searchParamsCache } from "@/lib/searchparams";
 import { redirect } from "next/navigation";
 import { SearchParams } from "nuqs/server";
@@ -21,7 +21,7 @@ export default async function UsersPage(props: PageProps) {
   if (!access.isAuthenticated) {
     redirect("/iniciar-sesion");
   }
-  if (!access.isAdmin) {
+  if (!hasPermission(access, "users.view")) {
     redirect("/panel");
   }
 
@@ -33,7 +33,7 @@ export default async function UsersPage(props: PageProps) {
       scrollable={false}
       pageTitle="Usuarios"
       pageDescription="Administración de usuarios del sistema"
-      pageHeaderAction={<CreateUserButton />}
+      pageHeaderAction={hasPermission(access, "users.create") ? <CreateUserButton /> : null}
     >
       <Suspense fallback={<DataTableSkeleton columnCount={4} rowCount={8} />}>
         <UserListing />

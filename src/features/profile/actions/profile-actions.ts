@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export interface ProfileData {
   id: string;
@@ -12,6 +13,9 @@ export interface ProfileData {
   gender: 'male' | 'female' | 'other' | null;
   avatar_url: string | null;
   role: string | null;
+  roleName: string | null;
+  permissions: string[];
+  isOwner: boolean;
   created_at: string;
   updated_at: string | null;
 }
@@ -37,31 +41,62 @@ export async function getCurrentUser(): Promise<{ success: boolean; data?: Profi
       return { success: false, error: 'Usuario no autenticado' };
     }
 
+    const fallbackProfile: ProfileData = {
+      id: user.id,
+      email: user.email || '',
+      full_name: user.user_metadata?.full_name || null,
+      phone: null,
+      birth_date: null,
+      gender: null,
+      avatar_url: user.user_metadata?.avatar_url || null,
+      role: (user.user_metadata?.role as string | null) || user.role || 'authenticated',
+      roleName: null,
+      permissions: [],
+      isOwner: false,
+      created_at: user.created_at,
+      updated_at: null,
+    };
+
     // Get profile data from profiles table
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
 
-    if (profileError) {
+    if (profileError && profileError.code !== 'PGRST116') {
       console.error('Error fetching profile:', profileError);
-      // Return basic user data if profile doesn't exist
       return {
         success: true,
-        data: {
-          id: user.id,
-          email: user.email || '',
-          full_name: user.user_metadata?.full_name || null,
-          phone: null,
-          birth_date: null,
-          gender: null,
-          avatar_url: user.user_metadata?.avatar_url || null,
-          role: user.role || 'authenticated',
-          created_at: user.created_at,
-          updated_at: null,
-        }
+        data: fallbackProfile,
       };
+    }
+
+    if (!profile) {
+      return {
+        success: true,
+        data: fallbackProfile,
+      };
+    }
+
+    // Fetch permissions
+    let permissions: string[] = [];
+    const { data: perms } = await supabase.rpc("get_current_permissions");
+    if (perms) {
+      permissions = perms as string[];
+    }
+
+    const roleSlug = (profile.role as string) || user.role || 'authenticated';
+
+    let roleName: string | null = null;
+    const adminClient = createAdminClient();
+    const { data: roleRow } = await adminClient
+      .from('roles')
+      .select('name')
+      .eq('slug', roleSlug)
+      .maybeSingle();
+    if (roleRow) {
+      roleName = roleRow.name;
     }
 
     return {
@@ -74,7 +109,10 @@ export async function getCurrentUser(): Promise<{ success: boolean; data?: Profi
         birth_date: profile.birth_date,
         gender: profile.gender,
         avatar_url: profile.avatar_url || user.user_metadata?.avatar_url || null,
-        role: profile.role || user.role || 'authenticated',
+        role: roleSlug,
+        roleName,
+        permissions,
+        isOwner: profile.role === 'owner',
         created_at: user.created_at,
         updated_at: profile.updated_at,
       }
