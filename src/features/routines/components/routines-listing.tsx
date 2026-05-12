@@ -4,51 +4,22 @@ import {
   IconCalendar,
   IconListDetails,
   IconTargetArrow,
-  IconUser,
+  IconUsers,
 } from "@tabler/icons-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PRIMARY_GOAL_OPTIONS } from "@/lib/training/options";
 import { cn } from "@/lib/utils";
-import type { RoutineStatus } from "@/lib/training/types";
 
 import {
-  getAllRoutines,
-  type RoutineWithCustomer,
-} from "../actions/routines-actions";
-
-const STATUS_CONFIG: Record<
-  RoutineStatus,
-  { label: string; dotClass: string; badgeClass: string }
-> = {
-  pending_profile: {
-    label: "Perfil pendiente",
-    dotClass: "bg-slate-400",
-    badgeClass:
-      "bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/30",
-  },
-  draft: {
-    label: "Borrador",
-    dotClass: "bg-amber-500",
-    badgeClass:
-      "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30",
-  },
-  active: {
-    label: "Activa",
-    dotClass: "bg-emerald-500",
-    badgeClass:
-      "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
-  },
-  archived: {
-    label: "Archivada",
-    dotClass: "bg-slate-400",
-    badgeClass:
-      "bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/30",
-  },
-};
+  getAllRoutineBlueprints,
+  type BlueprintWithStats,
+} from "../actions/blueprint-actions";
+import { BlueprintRenameDialog } from "./blueprint-rename-dialog";
 
 function getPrimaryGoalLabel(value: string | null) {
   if (!value) return null;
@@ -68,8 +39,8 @@ function formatDate(value: string | null | undefined) {
   }
 }
 
-function getInitials(name: string | null, fallback: string) {
-  const source = (name ?? fallback).trim();
+function getInitials(name: string | null) {
+  const source = (name ?? "").trim();
   if (!source) return "?";
   return source
     .split(/\s+/)
@@ -78,41 +49,36 @@ function getInitials(name: string | null, fallback: string) {
     .join("");
 }
 
-function routineHref(routine: RoutineWithCustomer) {
-  if (!routine.user_id) return "#";
-  if (routine.status === "active") {
-    return `/panel/clientes/${routine.user_id}/rutina/activa`;
-  }
-  return `/panel/clientes/${routine.user_id}/rutina/borrador`;
+function getTooltipLabel(name: string | null) {
+  return name?.trim() || "Cliente";
 }
 
-function RoutineCard({ routine }: { routine: RoutineWithCustomer }) {
-  const status = STATUS_CONFIG[routine.status] ?? STATUS_CONFIG.draft;
-  const goalLabel = getPrimaryGoalLabel(routine.primary_goal);
-  const customerLabel = routine.customer_name ?? "Cliente sin asignar";
-  const updatedAt = formatDate(routine.reviewed_at ?? routine.created_at ?? null);
-  const href = routineHref(routine);
+function BlueprintCard({ blueprint }: { blueprint: BlueprintWithStats }) {
+  const goalLabel = getPrimaryGoalLabel(blueprint.primary_goal);
+  const updatedAt = formatDate(blueprint.updated_at ?? blueprint.created_at);
+  const hasAssignments = blueprint.assignment_count > 0;
+  const href = `/panel/rutinas/${blueprint.id}`;
 
   return (
     <Card className="group relative flex h-full flex-col overflow-hidden border-border/70 transition-all hover:border-primary/40 hover:shadow-md">
       <CardHeader className="gap-3 pb-3">
         <div className="flex items-start justify-between gap-2">
-          <Badge
-            variant="outline"
-            className={cn("gap-1.5 font-medium", status.badgeClass)}
-          >
-            <span className={cn("size-1.5 rounded-full", status.dotClass)} />
-            {status.label}
-          </Badge>
-          {routine.source === "admin" ? (
-            <Badge variant="secondary" className="text-xs">
-              Manual
+          {hasAssignments ? (
+            <Badge
+              variant="outline"
+              className="gap-1.5 border-emerald-500/30 bg-emerald-500/10 font-medium text-emerald-700 dark:text-emerald-300"
+            >
+              <span className="size-1.5 rounded-full bg-emerald-500" />
+              {blueprint.assignment_count} asignado{blueprint.assignment_count !== 1 ? "s" : ""}
             </Badge>
           ) : (
-            <Badge variant="secondary" className="text-xs">
-              IA
+            <Badge variant="outline" className="gap-1.5 font-medium">
+              Sin asignar
             </Badge>
           )}
+          <Badge variant="secondary" className="text-xs">
+            Plantilla
+          </Badge>
         </div>
         <div className="flex items-start gap-2">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -120,7 +86,7 @@ function RoutineCard({ routine }: { routine: RoutineWithCustomer }) {
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="truncate text-base font-semibold leading-snug">
-              {routine.name}
+              {blueprint.name}
             </h3>
             {goalLabel ? (
               <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
@@ -133,23 +99,42 @@ function RoutineCard({ routine }: { routine: RoutineWithCustomer }) {
       </CardHeader>
 
       <CardContent className="flex-1 space-y-3 pb-3">
-        <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 p-2">
-          <Avatar className="size-8">
-            <AvatarImage src={routine.customer_avatar ?? undefined} alt={customerLabel} />
-            <AvatarFallback className="text-xs">
-              {getInitials(routine.customer_name, "?")}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium leading-tight">
-              {customerLabel}
-            </p>
-            <p className="flex items-center gap-1 text-xs text-muted-foreground">
-              <IconUser className="size-3" />
-              Cliente
+        {blueprint.preview_users.length > 0 ? (
+          <div className="rounded-lg border border-border/60 bg-muted/40 p-2">
+            <div className="flex items-center gap-1.5">
+              <IconUsers className="size-3.5 text-muted-foreground" />
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Asignado a
+              </span>
+            </div>
+            <div className="mt-1.5 flex items-center gap-1">
+              {blueprint.preview_users.slice(0, 4).map((user, i) => (
+                <Tooltip key={i}>
+                  <TooltipTrigger asChild>
+                    <Avatar className="size-6 ring-2 ring-background">
+                      <AvatarImage src={user.avatar ?? undefined} alt={getTooltipLabel(user.name)} />
+                      <AvatarFallback className="text-[9px]">
+                        {getInitials(user.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </TooltipTrigger>
+                  <TooltipContent>{getTooltipLabel(user.name)}</TooltipContent>
+                </Tooltip>
+              ))}
+              {blueprint.assignment_count > 4 ? (
+                <span className="ml-0.5 text-[11px] text-muted-foreground">
+                  +{blueprint.assignment_count - 4}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 p-3 text-center">
+            <p className="text-xs text-muted-foreground">
+              Aún no asignada a ningún cliente
             </p>
           </div>
-        </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-lg border border-border/60 bg-background p-2">
@@ -157,7 +142,7 @@ function RoutineCard({ routine }: { routine: RoutineWithCustomer }) {
               <IconCalendar className="size-3" /> Días
             </p>
             <p className="mt-0.5 text-lg font-semibold tabular-nums">
-              {routine.day_count}
+              {blueprint.day_count}
             </p>
           </div>
           <div className="rounded-lg border border-border/60 bg-background p-2">
@@ -165,7 +150,7 @@ function RoutineCard({ routine }: { routine: RoutineWithCustomer }) {
               <IconListDetails className="size-3" /> Ejercicios
             </p>
             <p className="mt-0.5 text-lg font-semibold tabular-nums">
-              {routine.exercise_count}
+              {blueprint.exercise_count}
             </p>
           </div>
         </div>
@@ -173,11 +158,14 @@ function RoutineCard({ routine }: { routine: RoutineWithCustomer }) {
 
       <CardFooter className="flex items-center justify-between gap-2 border-t border-border/60 bg-muted/20 px-4 py-2.5">
         <span className="text-xs text-muted-foreground">
-          {updatedAt ? `Actualizada ${updatedAt}` : "Sin fecha"}
+          {updatedAt ? `Creada ${updatedAt}` : "Sin fecha"}
         </span>
-        <Button asChild size="sm" variant="ghost" disabled={!routine.user_id}>
-          <Link href={href}>Ver rutina</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <BlueprintRenameDialog blueprintId={blueprint.id} currentName={blueprint.name} />
+          <Button asChild size="sm" variant="ghost">
+            <Link href={href}>Ver plantilla</Link>
+          </Button>
+        </div>
       </CardFooter>
     </Card>
   );
@@ -190,9 +178,9 @@ function EmptyState() {
         <IconBarbell className="size-6" />
       </div>
       <div>
-        <h3 className="text-base font-semibold">Aún no hay rutinas guardadas</h3>
+        <h3 className="text-base font-semibold">Aún no hay plantillas guardadas</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Cuando generes o guardes rutinas para tus clientes, aparecerán aquí.
+          Cuando generes o guardes plantillas de rutina, aparecerán aquí.
         </p>
       </div>
     </div>
@@ -200,46 +188,40 @@ function EmptyState() {
 }
 
 export default async function RoutinesListing() {
-  const routines = await getAllRoutines();
+  const blueprints = await getAllRoutineBlueprints();
 
-  if (routines.length === 0) {
+  if (blueprints.length === 0) {
     return <EmptyState />;
   }
 
-  const totals = routines.reduce(
-    (acc, r) => {
-      if (r.status === "draft") acc.draft += 1;
-      else if (r.status === "active") acc.active += 1;
-      else if (r.status === "archived") acc.archived += 1;
+  const totals = blueprints.reduce(
+    (acc, bp) => {
+      if (bp.assignment_count > 0) acc.assigned += 1;
+      else acc.unassigned += 1;
       return acc;
     },
-    { draft: 0, active: 0, archived: 0 },
+    { assigned: 0, unassigned: 0 },
   );
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <SummaryTile label="Total" value={routines.length} accent="bg-primary/10 text-primary" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <SummaryTile label="Total" value={blueprints.length} accent="bg-primary/10 text-primary" />
         <SummaryTile
-          label="Activas"
-          value={totals.active}
+          label="Asignadas"
+          value={totals.assigned}
           accent="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
         />
         <SummaryTile
-          label="Borradores"
-          value={totals.draft}
+          label="Sin asignar"
+          value={totals.unassigned}
           accent="bg-amber-500/10 text-amber-600 dark:text-amber-400"
-        />
-        <SummaryTile
-          label="Archivadas"
-          value={totals.archived}
-          accent="bg-slate-500/10 text-slate-600 dark:text-slate-300"
         />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {routines.map((routine) => (
-          <RoutineCard key={routine.id} routine={routine} />
+        {blueprints.map((blueprint) => (
+          <BlueprintCard key={blueprint.id} blueprint={blueprint} />
         ))}
       </div>
     </div>
