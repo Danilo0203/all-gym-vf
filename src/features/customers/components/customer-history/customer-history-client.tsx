@@ -28,6 +28,7 @@ import {
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { differenceInDays, formatDistanceToNow } from "date-fns";
+import { useCurrentUser } from "@/features/profile/hooks/use-profile";
 import { es } from "date-fns/locale";
 import type { CustomerRoutineWorkspace } from "@/lib/training/types";
 import type {
@@ -146,6 +147,8 @@ export function CustomerHistoryClient({
   const router = useRouter();
   const isScrollingRef = useRef(false);
   const { data: customerDetails } = useCustomer(editOpen ? profile.id : null);
+  const { data: currentUser } = useCurrentUser();
+  const canUpdateCustomer = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("customers.update"));
 
   // ScrollSpy Implementation
   useEffect(() => {
@@ -561,11 +564,14 @@ export function CustomerHistoryClient({
                     Gestión de Cliente
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  {canUpdateCustomer && (
                   <DropdownMenuItem className="gap-2 py-2 cursor-pointer" onClick={() => setEditOpen(true)}>
                     <IconEdit className="h-4 w-4 text-muted-foreground" />
                     <span className="text-xs font-medium">Editar Perfil</span>
                   </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
+                  {canUpdateCustomer && (
                   <DropdownMenuItem
                     className={cn(
                       "gap-2 py-2 cursor-pointer",
@@ -581,6 +587,8 @@ export function CustomerHistoryClient({
                       {profile.is_active ? "Desactivar Cliente" : "Reactivar Cliente"}
                     </span>
                   </DropdownMenuItem>
+                  )}
+                  {canUpdateCustomer && (
                   <DropdownMenuItem
                     className="gap-2 py-2 cursor-pointer text-red-500 hover:text-red-600 hover:bg-red-500/10 focus:text-red-600 focus:bg-red-500/10"
                     onClick={() => setDeleteOpen(true)}
@@ -589,6 +597,7 @@ export function CustomerHistoryClient({
                     <IconTrash className="h-4 w-4" />
                     <span className="text-xs font-medium">Eliminar Completamente</span>
                   </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>

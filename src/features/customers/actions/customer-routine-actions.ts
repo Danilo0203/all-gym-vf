@@ -4,7 +4,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getUserAccessContext } from "@/lib/auth/authorization";
+import { saveRoutineAsBlueprint } from "@/features/routines/actions/blueprint-actions";
+import { getUserAccessContext, hasPermission } from "@/lib/auth/authorization";
 import { normalizeExerciseCatalogItem, mapProviderExerciseToCatalogPayload } from "@/lib/training/catalog";
 import {
   hydrateProviderExerciseSummaries,
@@ -451,7 +452,7 @@ function mapRoutineDetailRow(row: Record<string, unknown>): RoutineDetailRecord 
 
 async function requireAdminAccess() {
   const access = await getUserAccessContext();
-  if (!access.isAuthenticated || !access.isAdmin || !access.userId) {
+  if (!access.isAuthenticated || !hasPermission(access, "customers.manage_routine") || !access.userId) {
     throw new Error("No autorizado");
   }
 
@@ -909,7 +910,7 @@ export async function syncTrainingProfileWithAdmin(params: {
 
 async function callExerciseCatalogFunction(body: Record<string, unknown>) {
   const access = await getUserAccessContext();
-  if (!access.isAuthenticated || !access.isAdmin) {
+  if (!access.isAuthenticated || !hasPermission(access, "exercises.view")) {
     throw new Error("No autorizado");
   }
 
@@ -1033,30 +1034,8 @@ export async function approveRoutineDraft(routineId: string) {
 }
 
 export async function archiveRoutine(routineId: string) {
-  const { adminClient } = await requireAdminAccess();
-
-  const { data: routine, error: fetchError } = await adminClient
-    .from("routines")
-    .select("id, user_id")
-    .eq("id", routineId)
-    .single();
-
-  if (fetchError || !routine?.user_id) {
-    throw new Error("No se encontró la rutina.");
-  }
-
-  const { error } = await adminClient
-    .from("routines")
-    .update({ status: "archived", is_active: false })
-    .eq("id", routineId);
-
-  if (error) throw error;
-
-  revalidatePath(`/panel/clientes/${routine.user_id}`);
-  revalidatePath(`/panel/clientes/${routine.user_id}/history`);
-  revalidatePath(`/panel/clientes/${routine.user_id}/rutina/activa`);
-
-  return { success: true };
+  const result = await saveRoutineAsBlueprint(routineId);
+  return result;
 }
 
 export async function updateRoutineDetail(
@@ -1076,8 +1055,8 @@ export async function updateRoutineDetail(
   }
 
   const routine = Array.isArray(detail.routines) ? detail.routines[0] : detail.routines;
-  if (!routine || routine.status !== "draft") {
-    throw new Error("Solo puedes editar detalles de una rutina en borrador.");
+  if (!routine || (routine.status !== "draft" && routine.status !== "active")) {
+    throw new Error("Solo puedes editar detalles de una rutina en borrador o activa.");
   }
 
   const { error } = await adminClient

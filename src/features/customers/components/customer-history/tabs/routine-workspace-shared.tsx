@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   IconBarbell,
   IconBolt,
@@ -95,31 +95,36 @@ function getBlockTone(blockType: RoutineDetailRecord["block_type"]) {
       return {
         rail: "bg-amber-400",
         glow: "from-amber-500/18 via-amber-500/6",
-        badge: "border-amber-500/35 bg-amber-500/10 text-amber-200",
+        badge:
+          "border-amber-500/45 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-100",
       };
     case "strength":
       return {
         rail: "bg-red-500",
         glow: "from-red-500/18 via-red-500/6",
-        badge: "border-red-500/35 bg-red-500/10 text-red-200",
+        badge:
+          "border-red-500/45 bg-red-50 text-red-800 dark:border-red-400/30 dark:bg-red-500/10 dark:text-red-100",
       };
     case "accessory":
       return {
         rail: "bg-sky-400",
         glow: "from-sky-500/18 via-sky-500/6",
-        badge: "border-sky-500/35 bg-sky-500/10 text-sky-200",
+        badge:
+          "border-sky-500/45 bg-sky-50 text-sky-800 dark:border-sky-400/30 dark:bg-sky-500/10 dark:text-sky-100",
       };
     case "cardio":
       return {
         rail: "bg-emerald-400",
         glow: "from-emerald-500/18 via-emerald-500/6",
-        badge: "border-emerald-500/35 bg-emerald-500/10 text-emerald-200",
+        badge:
+          "border-emerald-500/45 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-100",
       };
     case "mobility":
       return {
         rail: "bg-violet-400",
         glow: "from-violet-500/18 via-violet-500/6",
-        badge: "border-violet-500/35 bg-violet-500/10 text-violet-200",
+        badge:
+          "border-violet-500/45 bg-violet-50 text-violet-800 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-100",
       };
     default:
       return {
@@ -127,6 +132,55 @@ function getBlockTone(blockType: RoutineDetailRecord["block_type"]) {
         glow: "from-primary/16 via-primary/5",
         badge: "border-primary/35 bg-primary/10 text-primary",
       };
+  }
+}
+
+const WORKOUTX_API_KEY = "wx_6caf560e0d5e686d09bc51046f268764d0937fb5a4d51fa50f8526f0";
+
+function normalizeMediaSearchText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function fetchExerciseMediaFallback(query: string): Promise<string | null> {
+  const normalized = normalizeMediaSearchText(query);
+  if (!normalized) return null;
+
+  try {
+    const url = new URL("https://api.workoutxapp.com/v1/exercises");
+    url.searchParams.set("limit", "10");
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        "X-WorkoutX-Key": WORKOUTX_API_KEY,
+      },
+      cache: "force-cache",
+    });
+
+    if (!response.ok) return null;
+
+    const exercises = (await response.json()) as Array<{
+      id?: string;
+      name?: string;
+      gifUrl?: string;
+    }>;
+
+    const exactMatch = exercises.find(
+      (e) => normalizeMediaSearchText(e.name || "") === normalized && e.gifUrl,
+    );
+    const partialMatch = exercises.find(
+      (e) => normalizeMediaSearchText(e.name || "").includes(normalized) && e.gifUrl,
+    );
+    const anyWithGif = exercises.find((e) => e.gifUrl);
+
+    return exactMatch?.gifUrl || partialMatch?.gifUrl || anyWithGif?.gifUrl || null;
+  } catch {
+    return null;
   }
 }
 
@@ -193,6 +247,7 @@ export function RoutineViewer({
   routine,
   details,
   editable,
+  canReplace = editable,
   editors,
   onEditorChange,
   onSave,
@@ -203,6 +258,7 @@ export function RoutineViewer({
   routine: RoutineRecord;
   details: RoutineDetailRecord[];
   editable: boolean;
+  canReplace?: boolean;
   editors: Record<number, DetailEditorState>;
   onEditorChange: (detailId: number, patch: Partial<DetailEditorState>) => void;
   onSave: (detailId: number) => Promise<void>;
@@ -301,6 +357,7 @@ export function RoutineViewer({
                           key={detail.id}
                           detail={detail}
                           editable={editable}
+                          canReplace={canReplace}
                           editor={editor}
                           isBusy={isBusy}
                           onEditorChange={onEditorChange}
@@ -323,6 +380,7 @@ export function RoutineViewer({
 function ExerciseCard({
   detail,
   editable,
+  canReplace,
   editor,
   isBusy,
   onEditorChange,
@@ -331,6 +389,7 @@ function ExerciseCard({
 }: {
   detail: RoutineDetailRecord;
   editable: boolean;
+  canReplace: boolean;
   editor: DetailEditorState;
   isBusy: boolean;
   onEditorChange: (detailId: number, patch: Partial<DetailEditorState>) => void;
@@ -391,7 +450,7 @@ function ExerciseCard({
                   </a>
                 </Button>
               ) : null}
-              {editable ? (
+              {editable && canReplace ? (
                 <Button
                   variant="outline"
                   size="sm"
@@ -418,8 +477,12 @@ function ExerciseCard({
             <div className="rounded-3xl border border-border/70 bg-background/45 p-4 shadow-inner shadow-black/5">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold">Ajustes del borrador</p>
-                  <p className="text-xs text-muted-foreground">Edita prescripción, descanso y notas antes de aprobar.</p>
+                  <p className="text-sm font-semibold">Ajustes de la rutina</p>
+                  <p className="text-xs text-muted-foreground">
+                    {canReplace
+                      ? "Edita prescripción, descanso, notas o reemplaza ejercicios cuando haga falta."
+                      : "Edita prescripción, descanso y notas directamente sobre la rutina activa."}
+                  </p>
                 </div>
                 <Button size="sm" onClick={() => onSave(detail.id)} disabled={isBusy} className="rounded-full">
                   <IconDeviceFloppy className="h-4 w-4" />
@@ -479,8 +542,65 @@ function ExerciseCard({
 function ExerciseMediaPreview({ detail }: { detail: RoutineDetailRecord }) {
   const title = detail.exercise_name_snapshot || "Ejercicio por definir";
   const [hasMediaError, setHasMediaError] = useState(false);
-  const mediaUrl = detail.exercise_image_url;
+  const [mediaUrl, setMediaUrl] = useState(detail.exercise_image_url);
+  const [hasAttemptedFallback, setHasAttemptedFallback] = useState(false);
+  const [isResolvingFallback, setIsResolvingFallback] = useState(false);
+
+  useEffect(() => {
+    setMediaUrl(detail.exercise_image_url);
+    setHasMediaError(false);
+    setHasAttemptedFallback(false);
+    setIsResolvingFallback(false);
+  }, [detail.exercise_image_url, title]);
+
+  useEffect(() => {
+    if (mediaUrl || hasAttemptedFallback || isResolvingFallback || !title) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const resolveFallback = async () => {
+      try {
+        setIsResolvingFallback(true);
+        const fallbackUrl = await fetchExerciseMediaFallback(title);
+        if (!cancelled && fallbackUrl) {
+          setMediaUrl(fallbackUrl);
+          setHasMediaError(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setHasAttemptedFallback(true);
+          setIsResolvingFallback(false);
+        }
+      }
+    };
+
+    void resolveFallback();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasAttemptedFallback, isResolvingFallback, mediaUrl, title]);
+
   const canRenderMedia = Boolean(mediaUrl) && !hasMediaError;
+
+  const handleMediaError = async () => {
+    if (!hasAttemptedFallback && title) {
+      setIsResolvingFallback(true);
+      const fallbackUrl = await fetchExerciseMediaFallback(title);
+      setHasAttemptedFallback(true);
+      setIsResolvingFallback(false);
+
+      if (fallbackUrl && fallbackUrl !== mediaUrl) {
+        setMediaUrl(fallbackUrl);
+        setHasMediaError(false);
+        return;
+      }
+    }
+
+    setHasMediaError(true);
+  };
 
   return (
     <div className="w-full">
@@ -495,21 +615,17 @@ function ExerciseMediaPreview({ detail }: { detail: RoutineDetailRecord }) {
               alt={`Demostración visual de ${title}`}
               loading="lazy"
               className="relative h-full w-full object-contain p-4 transition-transform duration-300 group-hover:scale-[1.03]"
-              onError={() => setHasMediaError(true)}
+              onError={() => void handleMediaError()}
             />
           </div>
         </div>
       ) : (
-        <div className="flex aspect-[4/3] flex-col items-center justify-center rounded-3xl border border-dashed border-border/80 bg-muted/10 px-4 text-center">
-          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
+        <div className="flex aspect-[4/3] flex-col items-center justify-center rounded-3xl border border-dashed border-border/80 bg-muted/10 px-4 py-3 text-center">
+          <div className="mb-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
             <IconBarbell className="h-5 w-5" />
           </div>
-          <p className="text-sm font-medium">Demo visual no disponible</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {hasMediaError
-              ? "No pudimos cargar la imagen de este ejercicio con la fuente actual."
-              : "Este ejercicio aún no tiene imagen o gif asociado en el catálogo."}
-          </p>
+          <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Sin imagen</p>
+          <p className="line-clamp-3 text-sm font-semibold leading-snug text-foreground/90">{title}</p>
         </div>
       )}
     </div>

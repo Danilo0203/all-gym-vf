@@ -5,26 +5,34 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import {
-  AlertCircle,
-  ArrowRight,
-  CheckCircle2,
-  ClipboardList,
-  Dumbbell,
-  RefreshCw,
-  Sparkles,
-} from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, Dumbbell, RefreshCw, Sparkles } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Card, CardContent } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TRAINING_LOCATION_OPTIONS } from "@/lib/training/options";
 import { formatSessionDuration } from "@/lib/training/profile-defaults";
-import type { CustomerRoutineWorkspace, RoutineDetailRecord, RoutineRecord } from "@/lib/training/types";
+import type { CustomerRoutineWorkspace, RoutineRecord } from "@/lib/training/types";
 import {
   approveRoutineDraft,
   archiveRoutine,
   generateRoutineProposal,
 } from "@/features/customers/actions/customer-routine-actions";
+import {
+  assignRoutineBlueprint,
+  getAllRoutineBlueprints,
+  type BlueprintWithStats,
+} from "@/features/routines/actions/blueprint-actions";
 import {
   buildTrainingContextHelper,
   getPrimaryGoalLabel,
@@ -38,6 +46,118 @@ import { cn } from "@/lib/utils";
 interface RoutineWorkspaceTabProps {
   customerId: string;
   workspace: CustomerRoutineWorkspace;
+}
+
+function RoutineBlueprintPickerDialog({
+  open,
+  onOpenChange,
+  customerId,
+  onAssigned,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  customerId: string;
+  onAssigned: () => void;
+}) {
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+
+  const blueprintsQuery = useQuery({
+    queryKey: ["routine-blueprints", "available"],
+    queryFn: async () => getAllRoutineBlueprints(),
+    enabled: open,
+    staleTime: 30 * 1000,
+  });
+
+  const handleAssign = async (blueprintId: string) => {
+    try {
+      setAssigningId(blueprintId);
+      const result = await assignRoutineBlueprint({ blueprintId, userId: customerId });
+
+      if (!result.success) {
+        toast.error("No se pudo asignar la plantilla.");
+        return;
+      }
+
+      toast.success("Plantilla asignada.");
+      onOpenChange(false);
+      onAssigned();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo asignar la plantilla.");
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
+  const blueprints = blueprintsQuery.data ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Elegir plantilla</DialogTitle>
+          <DialogDescription>
+            Selecciona una plantilla para generar la rutina de este cliente a partir de una versión reutilizable.
+          </DialogDescription>
+        </DialogHeader>
+
+        {blueprintsQuery.isLoading ? (
+          <div className="grid gap-3">
+            {[1, 2, 3].map((item) => (
+              <Skeleton key={item} className="h-24 w-full" />
+            ))}
+          </div>
+        ) : blueprints.length > 0 ? (
+          <ScrollArea className="max-h-[60vh] pr-3">
+            <div className="grid gap-3">
+              {blueprints.map((blueprint) => (
+                <BlueprintOptionCard
+                  key={blueprint.id}
+                  blueprint={blueprint}
+                  assigning={assigningId === blueprint.id}
+                  onAssign={() => void handleAssign(blueprint.id)}
+                />
+              ))}
+            </div>
+          </ScrollArea>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-border/60 bg-muted/5 p-8 text-center text-sm text-muted-foreground">
+            Todavía no hay plantillas disponibles.
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BlueprintOptionCard({
+  blueprint,
+  assigning,
+  onAssign,
+}: {
+  blueprint: BlueprintWithStats;
+  assigning: boolean;
+  onAssign: () => void;
+}) {
+  const goalLabel = getPrimaryGoalLabel(blueprint.primary_goal);
+
+  return (
+    <Card className="border-border/60 bg-card/80">
+      <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-foreground">{blueprint.name}</p>
+            {goalLabel ? <Badge variant="outline">{goalLabel}</Badge> : null}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {blueprint.day_count} días · {blueprint.exercise_count} ejercicios · {blueprint.assignment_count} asignaciones
+          </p>
+        </div>
+        <Button onClick={onAssign} disabled={assigning} className="sm:min-w-36">
+          {assigning ? "Asignando..." : "Asignar plantilla"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
 }
 
 function formatRoutineTimestamp(value: string | undefined) {
@@ -111,58 +231,38 @@ function getGenerateLabel(workspace: CustomerRoutineWorkspace) {
 }
 
 function RoutineCard({
-  tone,
   eyebrow,
   title,
   routine,
-  details,
-  description,
   timestampLabel,
   href,
   actionLabel,
 }: {
-  tone: "draft" | "active";
   eyebrow: string;
   title: string;
   routine: RoutineRecord;
-  details: RoutineDetailRecord[];
-  description: string;
   timestampLabel: string;
-  href: string;
+  href?: string;
   actionLabel: string;
 }) {
-  const timestamp = formatRoutineTimestamp(
-    tone === "active" ? routine.reviewed_at || routine.created_at : routine.created_at,
-  );
-  const primaryGoalLabel = getPrimaryGoalLabel(routine.primary_goal);
-
-  const isDraft = tone === "draft";
-  const accentClasses = isDraft
-    ? "before:bg-amber-500"
-    : "before:bg-emerald-500";
-  const iconClasses = isDraft
-    ? "bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20"
-    : "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20";
-  const eyebrowClasses = isDraft ? "text-amber-400" : "text-emerald-400";
+  const timestamp = formatRoutineTimestamp(routine.reviewed_at || routine.created_at);
 
   return (
     <div
       className={cn(
         "group relative overflow-hidden rounded-2xl border border-border/60 bg-card/60 p-5 transition-all hover:border-border hover:bg-card/80",
         "before:absolute before:left-0 before:top-0 before:h-full before:w-1",
-        accentClasses,
+        "before:bg-emerald-500",
       )}
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex gap-4 min-w-0 flex-1">
-          <div className={cn("flex size-11 shrink-0 items-center justify-center rounded-xl", iconClasses)}>
-            {isDraft ? <ClipboardList className="size-5" /> : <CheckCircle2 className="size-5" />}
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20">
+            <CheckCircle2 className="size-5" />
           </div>
           <div className="min-w-0 flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <span className={cn("text-[10px] font-bold uppercase tracking-[0.18em]", eyebrowClasses)}>
-                {eyebrow}
-              </span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-400">{eyebrow}</span>
               <span className="text-muted-foreground/50">•</span>
               <Badge variant={getStatusBadgeVariant(routine.status)} className="h-5 text-[10px] uppercase tracking-wider">
                 {getStatusLabel(routine.status)}
@@ -172,27 +272,9 @@ function RoutineCard({
               <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
               <p className="mt-0.5 text-sm font-medium text-muted-foreground">{routine.name}</p>
             </div>
-            <p className="text-sm leading-relaxed text-muted-foreground/80 max-w-xl">{description}</p>
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-1 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="font-semibold text-foreground">{getRoutineDayCount(details)}</span>
-                <span>días</span>
-              </span>
-              <span className="h-3 w-px bg-border/60" />
-              <span className="inline-flex items-center gap-1.5">
-                <span className="font-semibold text-foreground">{getRoutineExerciseCount(details)}</span>
-                <span>ejercicios</span>
-              </span>
-              {primaryGoalLabel ? (
-                <>
-                  <span className="h-3 w-px bg-border/60" />
-                  <span className="inline-flex items-center gap-1.5">
-                    <span>Objetivo:</span>
-                    <span className="font-semibold text-foreground">{primaryGoalLabel}</span>
-                  </span>
-                </>
-              ) : null}
+              <span className="inline-flex items-center gap-1.5 font-medium text-foreground/85">Versión visible para el cliente</span>
               {timestamp ? (
                 <>
                   <span className="h-3 w-px bg-border/60" />
@@ -205,14 +287,16 @@ function RoutineCard({
           </div>
         </div>
 
-        <div className="flex shrink-0 lg:self-center">
-          <Button asChild variant="outline" size="sm" className="gap-1.5 group/btn">
-            <Link href={href}>
-              {actionLabel}
-              <ArrowRight className="size-3.5 transition-transform group-hover/btn:translate-x-0.5" />
-            </Link>
-          </Button>
-        </div>
+        {href ? (
+          <div className="flex shrink-0 lg:self-center">
+            <Button asChild variant="outline" size="sm" className="gap-1.5 group/btn">
+              <Link href={href}>
+                {actionLabel}
+                <ArrowRight className="size-3.5 transition-transform group-hover/btn:translate-x-0.5" />
+              </Link>
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -223,6 +307,7 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
   const [isGenerating, setIsGenerating] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [isBlueprintPickerOpen, setIsBlueprintPickerOpen] = useState(false);
 
   const handleGenerate = async () => {
     try {
@@ -265,13 +350,17 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
     try {
       setIsArchiving(true);
       await archiveRoutine(workspace.activeRoutine.id);
-      toast.success("Rutina archivada.");
+      toast.success("Plantilla guardada.");
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo archivar la rutina.");
+      toast.error(error instanceof Error ? error.message : "No se pudo guardar la plantilla.");
     } finally {
       setIsArchiving(false);
     }
+  };
+
+  const handleAssigned = () => {
+    router.refresh();
   };
 
   const trainingContextHelper = buildTrainingContextHelper(workspace.trainingProfile);
@@ -280,7 +369,10 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
   const activeHref = `/panel/clientes/${customerId}/rutina/activa`;
   const canGenerate = workspace.missingRequirements.length === 0;
   const generateLabel = getGenerateLabel(workspace);
-  const hasRoutines = Boolean(workspace.draftRoutine || workspace.activeRoutine);
+  const showVersionCard = Boolean(workspace.activeRoutine && !workspace.draftRoutine);
+  const activeDayCount = getRoutineDayCount(workspace.activeDetails);
+  const activeExerciseCount = getRoutineExerciseCount(workspace.activeDetails);
+  const canChooseTemplate = !workspace.activeRoutine && !workspace.draftRoutine && !workspace.pendingRoutine;
 
   return (
     <div className="space-y-4">
@@ -366,6 +458,15 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
               <p className="text-sm leading-relaxed text-muted-foreground">
                 {getNextStepDescription(workspace)}
               </p>
+              {workspace.activeRoutine ? (
+                <div className="flex flex-wrap gap-2 pt-1 text-xs text-muted-foreground">
+                  <Badge variant="secondary">{activeDayCount} días</Badge>
+                  <Badge variant="secondary">{activeExerciseCount} ejercicios</Badge>
+                  {workspace.activeRoutine.primary_goal ? (
+                    <Badge variant="outline">{getPrimaryGoalLabel(workspace.activeRoutine.primary_goal)}</Badge>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
             <div className="flex flex-col gap-2 pt-1">
@@ -407,7 +508,7 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Button asChild size="sm" variant="secondary" className="flex-1 gap-1.5">
                       <Link href={activeHref}>
-                        Abrir activa
+                        Editar activa
                         <ArrowRight className="size-3.5" />
                       </Link>
                     </Button>
@@ -428,19 +529,31 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
                     disabled={isArchiving}
                     className="h-8 justify-center text-xs text-muted-foreground hover:text-foreground"
                   >
-                    {isArchiving ? "Archivando..." : "Archivar rutina"}
+                    {isArchiving ? "Guardando..." : "Guardar como plantilla"}
                   </Button>
                 </>
               ) : (
-                <Button
-                  size="sm"
-                  onClick={handleGenerate}
-                  disabled={!canGenerate || isGenerating}
-                  className="gap-1.5"
-                >
-                  <RefreshCw className={cn("size-3.5", isGenerating && "animate-spin")} />
-                  {isGenerating ? "Generando..." : generateLabel}
-                </Button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    size="sm"
+                    onClick={handleGenerate}
+                    disabled={!canGenerate || isGenerating}
+                    className="gap-1.5 sm:flex-1"
+                  >
+                    <RefreshCw className={cn("size-3.5", isGenerating && "animate-spin")} />
+                    {isGenerating ? "Generando..." : generateLabel}
+                  </Button>
+                  {canChooseTemplate ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsBlueprintPickerOpen(true)}
+                      className="sm:flex-1"
+                    >
+                      Elegir plantilla
+                    </Button>
+                  ) : null}
+                </div>
               )}
             </div>
           </div>
@@ -448,41 +561,22 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
       </div>
 
       {/* Routines Section */}
-      {hasRoutines ? (
+      {showVersionCard ? (
         <div className="space-y-3">
-          {workspace.draftRoutine ? (
-            <RoutineCard
-              tone="draft"
-              eyebrow="Borrador"
-              title="Listo para revisión"
-              routine={workspace.draftRoutine}
-              details={workspace.draftDetails}
-              description={
-                workspace.activeRoutine
-                  ? "Revísalo antes de reemplazar la rutina que hoy sigue activa para el cliente."
-                  : "Revísalo y actívalo cuando quieras publicarlo para el cliente."
-              }
-              timestampLabel="Generado"
-              href={draftHref}
-              actionLabel="Ver borrador"
-            />
-          ) : null}
-
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Versiones</p>
+              <p className="text-sm text-muted-foreground">Solo se muestra la versión vigente cuando ya no hay un borrador pendiente.</p>
+            </div>
+          </div>
           {workspace.activeRoutine ? (
             <RoutineCard
-              tone="active"
               eyebrow="Rutina activa"
               title="Versión visible para el cliente"
               routine={workspace.activeRoutine}
-              details={workspace.activeDetails}
-              description={
-                workspace.draftRoutine
-                  ? "Sigue siendo la versión publicada hasta que apruebes el borrador."
-                  : "Es la versión vigente y se mantiene en solo lectura para preservar trazabilidad."
-              }
               timestampLabel="Activa"
               href={activeHref}
-              actionLabel="Ver rutina"
+              actionLabel="Editar rutina"
             />
           ) : null}
         </div>
@@ -503,6 +597,13 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
           </p>
         </div>
       )}
+
+      <RoutineBlueprintPickerDialog
+        open={isBlueprintPickerOpen}
+        onOpenChange={setIsBlueprintPickerOpen}
+        customerId={customerId}
+        onAssigned={handleAssigned}
+      />
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { deleteCustomer, permanentlyDeleteCustomer, reactivateCustomer } from ".
 import { toast } from "sonner";
 import { useCustomer } from "../../hooks/use-customers";
 import { CustomerStatusActionSummary } from "../customer-status-action-summary";
+import { useCurrentUser } from "@/features/profile/hooks/use-profile";
 
 interface CellActionProps {
   data: Customer;
@@ -32,8 +33,10 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [disableOpen, setDisableOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false); // Sheet de edición
+  const [editOpen, setEditOpen] = useState(false);
   const router = useRouter();
+  const { data: currentUser } = useCurrentUser();
+  const canUpdate = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("customers.update"));
 
   // Fetch automático cuando se abre el modal
   const { data: customerDetails, isPending: isPendingDetails } = useCustomer(editOpen ? data.id : null);
@@ -156,6 +159,7 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
       />
 
       <div className="flex items-center gap-2">
+        {canUpdate && (
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -182,7 +186,9 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+        )}
 
+        {canUpdate && (
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -208,7 +214,9 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+        )}
 
+        {canUpdate && (
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -230,6 +238,7 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+        )}
       </div>
     </div>
   );

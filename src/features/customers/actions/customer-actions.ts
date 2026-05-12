@@ -7,7 +7,7 @@ import { createClient as createClientAdmin } from "@supabase/supabase-js";
 import { getUserEmail } from "@/lib/supabase/admin";
 import { computeFitnessPlan } from "@/lib/fitness/excel-calculator";
 import type { ActivityLevel, BodyType, DietType } from "@/lib/fitness/types";
-import { getUserAccessContext } from "@/lib/auth/authorization";
+import { getUserAccessContext, hasPermission } from "@/lib/auth/authorization";
 import { runPaymentsPostedQueryCompat } from "@/lib/payments/schema-compat";
 import { isCashModuleNotReadyError } from "@/features/cash/lib/cash-module-errors";
 import {
@@ -808,8 +808,8 @@ export async function createCustomer(data: CreateCustomerData) {
       return { success: false, error: "No autenticado" };
     }
     const isCashOrigin = origin === "cash";
-    const canCreateFromCustomers = access.isAdmin;
-    const canCreateFromCash = access.role === "admin" || access.role === "employee";
+    const canCreateFromCustomers = hasPermission(access, "customers.create");
+    const canCreateFromCash = hasPermission(access, "cash.operate");
 
     if ((!isCashOrigin && !canCreateFromCustomers) || (isCashOrigin && !canCreateFromCash)) {
       return {
@@ -1608,7 +1608,7 @@ export async function renewSubscription(customerId: string, data: RenewSubscript
   try {
     const access = await getUserAccessContext();
     if (!access.isAuthenticated) return { success: false, error: "No autenticado" };
-    if (!access.userId || (access.role !== "admin" && access.role !== "employee")) {
+    if (!access.userId || !hasPermission(access, "customers.manage_membership")) {
       return { success: false, error: "No autorizado para renovar suscripciones" };
     }
 

@@ -5,10 +5,43 @@ import { CellAction } from "./cell-action";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { format, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
-import Link from "next/link";
 import { IconBrandWhatsapp } from "@tabler/icons-react";
 import { SubscriptionStatusBadge } from "@/components/subscription-status-badge";
 import { DataTableColumnHeader } from "@/components/ui/table/data-table-column-header";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { CustomerWhatsAppDialog } from "./customer-whatsapp-dialog";
+import { useState } from "react";
+
+function WhatsAppCell({ customer }: { customer: Customer }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setOpen(true);
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-600"
+              title="Mandar mensaje"
+            >
+              <IconBrandWhatsapp className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Mandar mensaje</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <CustomerWhatsAppDialog open={open} onOpenChange={setOpen} customer={customer} />
+    </>
+  );
+}
 
 export type Customer = {
   id: string;
@@ -56,7 +89,7 @@ export function getColumns(
         variant: "text" as const,
       },
       cell: ({ row }) => {
-        const { full_name, avatar_url } = row.original;
+        const { full_name, avatar_url, phone } = row.original;
         const initials = full_name
           ? full_name
               .split(" ")
@@ -76,6 +109,11 @@ export function getColumns(
               <span className="truncate font-medium text-sm" title={full_name || ""}>
                 {full_name}
               </span>
+              {phone && (
+                <span className="truncate text-[11px] text-muted-foreground">
+                  {phone}
+                </span>
+              )}
             </div>
           </div>
         );
@@ -213,24 +251,13 @@ export function getColumns(
       header: ({ column }) => <DataTableColumnHeader column={column} title="TELÉFONO" />,
       meta: {
         label: "Teléfono",
+        disableRowClick: true,
       },
       cell: ({ row }) => {
         const phone = row.original.phone;
         if (!phone) return <span className="text-muted-foreground">-</span>;
 
-        const cleanPhone = phone.replace(/\D/g, "");
-
-        return (
-          <Link
-            href={`https://wa.me/${cleanPhone}`}
-            target="_blank"
-            className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <IconBrandWhatsapp className="h-4 w-4" />
-            {phone}
-          </Link>
-        );
+        return <WhatsAppCell customer={row.original} />;
       },
     },
     {
