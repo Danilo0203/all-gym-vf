@@ -72,12 +72,24 @@ export function DataTable<TData>({
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() && "selected"}
-                    onClick={() => onRowClick?.(row.original)}
+                    onClick={(event) => {
+                      const target = event.target as HTMLElement;
+                      if (target.closest('td[data-disable-row-click="true"]')) {
+                        return;
+                      }
+                      onRowClick?.(row.original);
+                    }}
                     className={`${onRowClick ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""} ${getRowClassName ? getRowClassName(row.original) : ""}`}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell
                         key={cell.id}
+                        data-disable-row-click={
+                          (cell.column.columnDef.meta as { disableRowClick?: boolean } | undefined)
+                            ?.disableRowClick
+                            ? "true"
+                            : undefined
+                        }
                         className={cn(
                           cell.column.getIsPinned() &&
                             "bg-background relative"
