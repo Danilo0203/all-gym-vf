@@ -9,32 +9,20 @@ values (
 )
 on conflict (key) do nothing;
 
--- Replace close_cash_session with a service-role-only RPC that can record
+-- Replace close_cash_session with an RPC that records
 -- which admin/owner authorized the closure.
-create or replace function public.close_cash_session(
-  p_session_id uuid,
-  p_counted_amount numeric(12,2),
-  p_notes text default null,
-  p_requested_by_user_id uuid default null,
-  p_closed_by_user_id uuid default null
-)
-returns public.cash_sessions
-language plpgsql
-security definer
-set search_path = public
-as $$
+CREATE OR REPLACE FUNCTION public.close_cash_session(p_session_id uuid, p_counted_amount numeric, p_notes text DEFAULT NULL::text, p_requested_by_user_id uuid DEFAULT NULL::uuid, p_closed_by_user_id uuid DEFAULT NULL::uuid)
+ RETURNS public.cash_sessions
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
-  v_request_role text;
   v_session public.cash_sessions%rowtype;
   v_expected_amount numeric(12,2);
   v_difference_amount numeric(12,2);
   v_closed_role text;
 begin
-  v_request_role := coalesce(current_setting('request.jwt.claim.role', true), '');
-  if v_request_role <> 'service_role' then
-    raise exception 'No autorizado para cerrar caja';
-  end if;
-
   if p_counted_amount is null or p_counted_amount < 0 then
     raise exception 'Debe ingresar el monto contado';
   end if;
@@ -120,4 +108,5 @@ begin
 
   return v_session;
 end;
-$$;
+$function$
+;

@@ -1,6 +1,7 @@
 CREATE SCHEMA IF NOT EXISTS "extensions";
 
-CREATE EXTENSION IF NOT EXISTS "pg_trgm" WITH SCHEMA "extensions";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm" WITH SCHEMA "public";
+CREATE EXTENSION IF NOT EXISTS "unaccent" WITH SCHEMA "public";
 
 
 SET statement_timeout = 0;
@@ -2619,11 +2620,11 @@ CREATE INDEX "exercises_body_parts_gin_idx" ON "public"."exercises" USING "gin" 
 
 
 
-CREATE INDEX "exercises_display_name_es_trgm_idx" ON "public"."exercises" USING "gin" ("lower"(COALESCE("display_name_es", ''::"text")) "extensions"."gin_trgm_ops");
+CREATE INDEX "exercises_display_name_es_trgm_idx" ON "public"."exercises" USING "gin" ("lower"(COALESCE("display_name_es", ''::"text")) "public"."gin_trgm_ops");
 
 
 
-CREATE INDEX "exercises_display_name_trgm_idx" ON "public"."exercises" USING "gin" ("lower"(COALESCE("display_name", "name")) "extensions"."gin_trgm_ops");
+CREATE INDEX "exercises_display_name_trgm_idx" ON "public"."exercises" USING "gin" ("lower"(COALESCE("display_name", "name")) "public"."gin_trgm_ops");
 
 
 
@@ -2759,7 +2760,7 @@ CREATE INDEX "products_created_by_user_idx" ON "public"."products" USING "btree"
 
 
 
-CREATE INDEX "products_name_trgm_idx" ON "public"."products" USING "gin" ("name" "extensions"."gin_trgm_ops");
+CREATE INDEX "products_name_trgm_idx" ON "public"."products" USING "gin" ("name" "public"."gin_trgm_ops");
 
 
 
