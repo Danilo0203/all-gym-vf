@@ -35,6 +35,7 @@ import {
   IconCrown,
   IconStar,
   IconBox,
+  IconPackages,
   IconCash,
   IconBarbell,
   IconMessage
@@ -48,6 +49,7 @@ export const Icons = {
   login: IconLogin,
   close: IconX,
   product: IconBox,
+  inventory: IconPackages,
   spinner: IconLoader2,
   kanban: IconLayoutKanban,
   chevronLeft: IconChevronLeft,

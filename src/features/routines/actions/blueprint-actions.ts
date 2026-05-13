@@ -494,6 +494,89 @@ export async function updateRoutineBlueprintName(params: {
   return { success: true };
 }
 
+export interface CreateBlueprintDayInput {
+  exercises: Array<{
+    exercise_id: number;
+    block_type: RoutineBlockType;
+    sets: number | null;
+    reps: string | null;
+    rest_seconds: number | null;
+    duration_minutes: number | null;
+    target_rir: number | null;
+  }>;
+}
+
+export interface CreateBlueprintInput {
+  title: string;
+  primary_goal: string;
+  secondary_goal: string | null;
+  days: Array<CreateBlueprintDayInput>;
+}
+
+export async function createRoutineBlueprintFromScratch(input: CreateBlueprintInput) {
+  const { adminClient, access } = await requireAdminAccess();
+  const userId = access.userId;
+
+  if (!userId) throw new Error("Usuario no identificado.");
+
+  const title = input.title.trim();
+  if (!title) throw new Error("El título es obligatorio.");
+  if (!input.primary_goal.trim()) throw new Error("El objetivo principal es obligatorio.");
+  if (!input.days || input.days.length === 0) throw new Error("Debe tener al menos un día.");
+  const totalExercises = input.days.reduce((sum, d) => sum + d.exercises.length, 0);
+  if (totalExercises === 0) throw new Error("Debe tener al menos un ejercicio.");
+
+  for (let i = 0; i < input.days.length; i++) {
+    const day = input.days[i];
+    for (let j = 0; j < day.exercises.length; j++) {
+      const ex = day.exercises[j];
+      if (!ex.exercise_id) throw new Error(`El ejercicio ${j + 1} del día ${i + 1} no tiene un ejercicio seleccionado.`);
+    }
+  }
+
+  const { data: blueprint, error: bpError } = await adminClient
+    .from("routine_blueprints")
+    .insert({
+      name: title,
+      primary_goal: input.primary_goal,
+      secondary_goal: input.secondary_goal,
+      source_routine_id: null,
+      created_by: userId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (bpError || !blueprint) throw bpError || new Error("No se pudo crear la plantilla.");
+
+  const blueprintId = String(blueprint.id);
+  const detailRows = input.days.flatMap((day, dayIndex) =>
+    day.exercises.map((ex, exIndex) => ({
+      blueprint_id: blueprintId,
+      day_of_week: dayIndex + 1,
+      exercise_id: ex.exercise_id,
+      exercise_order: exIndex + 1,
+      block_type: ex.block_type,
+      sets: ex.sets ?? null,
+      reps: ex.reps ?? null,
+      rest_seconds: ex.rest_seconds ?? null,
+      duration_minutes: ex.duration_minutes ?? null,
+      target_rir: ex.target_rir ?? null,
+    })),
+  );
+
+  if (detailRows.length > 0) {
+    const { error: detailError } = await adminClient.from("routine_blueprint_details").insert(detailRows);
+    if (detailError) throw detailError;
+  }
+
+  revalidatePath("/panel/rutinas");
+  revalidatePath(`/panel/rutinas/${blueprintId}`);
+
+  return { success: true, blueprintId };
+}
+
 export async function searchActiveClients(query: string) {
   const { adminClient } = await requireAdminAccess();
 

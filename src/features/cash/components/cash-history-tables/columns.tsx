@@ -107,16 +107,27 @@ export function getColumns(
       accessorKey: "opened_by_user_id",
       size: 190,
       minSize: 170,
-      header: ({ column }) => <DataTableColumnHeader column={column} title="RESPONSABLE" />,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="ABRIÓ" />,
       enableColumnFilter: true,
       enableSorting: false,
       meta: {
-        label: "Responsable",
+        label: "Abrió",
         variant: "select" as const,
         options: userOptions,
       },
       cell: ({ row }) => (
         <span className="text-sm">{row.original.opened_by_name || "Usuario"}</span>
+      ),
+    },
+    {
+      id: "closed_by_user_id",
+      accessorKey: "closed_by_user_id",
+      size: 190,
+      minSize: 170,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="CERRÓ" />,
+      enableSorting: false,
+      cell: ({ row }) => (
+        <span className="text-sm">{row.original.closed_by_name || "Pendiente"}</span>
       ),
     },
     {

@@ -1,5 +1,12 @@
-import type { Customer } from "@/features/customers/components/customer-tables/columns";
 import { differenceInDays } from "date-fns";
+
+export interface CustomerWhatsApp {
+  full_name: string | null;
+  phone: string | null;
+  subscription_start_date: string | null;
+  subscription_end_date: string | null;
+  last_check_in: string | null;
+}
 
 export interface WhatsAppContext {
   customerName: string;
@@ -10,7 +17,7 @@ export interface WhatsAppContext {
   isSubscriptionExpired: boolean;
 }
 
-export function buildWhatsAppContext(customer: Customer): WhatsAppContext | null {
+export function buildWhatsAppContext(customer: CustomerWhatsApp): WhatsAppContext | null {
   const phone = customer.phone;
   if (!phone) return null;
 

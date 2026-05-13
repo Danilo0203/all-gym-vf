@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import PageContainer from "@/components/layout/page-container";
-import { getUserAccessContext } from "@/lib/auth/authorization";
+import { getUserAccessContext, hasPermission } from "@/lib/auth/authorization";
 import { getCashSessionDetail } from "@/features/cash/actions/cash-actions";
 import { CashModuleSetupState } from "@/features/cash/components/cash-module-setup-state";
 import { CashSessionDetailView } from "@/features/cash/components/cash-session-detail-view";
@@ -20,7 +20,7 @@ export default async function CashSessionDetailPage({ params }: CashSessionDetai
     redirect("/iniciar-sesion");
   }
 
-  if (access.role !== "admin" && access.role !== "employee") {
+  if (!hasPermission(access, "cash.view")) {
     redirect("/panel");
   }
 

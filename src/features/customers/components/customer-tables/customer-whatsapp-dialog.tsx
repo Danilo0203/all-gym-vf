@@ -10,8 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getMessageTemplates } from "@/features/messages/actions/message-actions";
-import { buildWhatsAppContext, interpolateMessage, buildWhatsAppUrl } from "@/features/messages/whatsapp-helper";
-import type { Customer } from "@/features/customers/components/customer-tables/columns";
+import { buildWhatsAppContext, interpolateMessage, buildWhatsAppUrl, type CustomerWhatsApp } from "@/features/messages/whatsapp-helper";
 
 const PLACEHOLDERS = [
   { token: "@cliente", label: "Cliente" },
@@ -25,7 +24,7 @@ const PLACEHOLDERS = [
 interface CustomerWhatsAppDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  customer: Customer;
+  customer: CustomerWhatsApp;
 }
 
 export function CustomerWhatsAppDialog({ open, onOpenChange, customer }: CustomerWhatsAppDialogProps) {

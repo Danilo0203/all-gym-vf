@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserAccessContext, hasPermission } from "@/lib/auth/authorization";
 import { createClient } from "@/lib/supabase/server";
@@ -8,6 +9,7 @@ import { toCashActionError } from "@/features/cash/lib/cash-module-errors";
 import type { TrainingProfileInput } from "@/lib/training/types";
 
 const GUATEMALA_UTC_OFFSET = "-06:00";
+const CASH_CLOSE_WITHOUT_PASSWORD_PERMISSION = "cash.close_without_admin_password";
 
 type SessionStatus = "open" | "closed" | "closed_with_difference" | "cancelled";
 export type PaymentMethod = "cash" | "card" | "transfer";
@@ -56,12 +58,37 @@ interface CashMovementRow {
   origin: "system" | "manual";
   source_payment_id: string | null;
   source_subscription_id: string | null;
+  source_product_sale_id: string | null;
   customer_id: string | null;
   created_by_user_id: string;
   note: string | null;
   created_at: string;
   voided_at: string | null;
   voided_by_user_id: string | null;
+}
+
+interface ProductSaleRow {
+  id: string;
+  sale_number: string;
+  total_amount: number | string;
+}
+
+interface ProductSaleItemRow {
+  product_sale_id: string;
+  product_name: string;
+  quantity: number | string;
+  line_total: number | string;
+}
+
+interface ProductInventoryRow {
+  id: string;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  image_url: string | null;
+  sale_price: number | string;
+  stock_quantity: number | string;
+  is_active: boolean;
 }
 
 interface ProfileNameRow {
@@ -163,6 +190,9 @@ export interface CashMovementView {
   origin: "system" | "manual";
   source_payment_id: string | null;
   source_subscription_id: string | null;
+  source_product_sale_id: string | null;
+  product_sale_number: string | null;
+  product_sale_items_summary: string | null;
   customer_id: string | null;
   customer_name: string | null;
   created_by_user_id: string;
@@ -171,6 +201,29 @@ export interface CashMovementView {
   created_at: string;
   voided_at: string | null;
   source_payment_status: string | null;
+}
+
+export interface CashProductSearchResult {
+  id: string;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  image_url: string | null;
+  sale_price: number;
+  stock_quantity: number;
+  is_active: boolean;
+}
+
+export interface CashProductSaleItemInput {
+  productId: string;
+  quantity: number;
+}
+
+export interface CashProductSaleResult {
+  product_sale_id: string;
+  sale_number: string;
+  cash_movement_id: string;
+  total_amount: number;
 }
 
 export interface CashCustomerSearchResult {
@@ -242,6 +295,7 @@ export interface CashDashboardData {
   access: { role: string | null; userId: string };
   register: { id: string; name: string } | null;
   currentSession: CashSessionView | null;
+  supervisedOpenSessions: CashSessionView[];
   summary: CashDashboardSummary | null;
   sessionMovements: CashMovementView[];
   outOfSessionMovements: CashMovementView[];
@@ -342,12 +396,116 @@ async function requireCashAccess() {
   };
 }
 
+type CashCloseAccess = {
+  role: string | null;
+  userId: string;
+  isOwner: boolean;
+  permissions: string[];
+};
+
+function createPasswordAuthClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error("Missing Supabase auth credentials.");
+  }
+
+  return createSupabaseJsClient(supabaseUrl, supabaseKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+async function listAuthUsersByIds(adminClient: ReturnType<typeof createAdminClient>, userIds: string[]) {
+  if (userIds.length === 0) return [] as Array<{ id: string; email: string | null }>;
+
+  const normalizedIds = new Set(userIds);
+  const users: Array<{ id: string; email: string | null }> = [];
+  const perPage = 1000;
+  let page = 1;
+
+  while (true) {
+    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+
+    for (const user of data.users || []) {
+      if (normalizedIds.has(user.id)) {
+        users.push({ id: user.id, email: user.email || null });
+      }
+    }
+
+    if ((data.users || []).length < perPage) break;
+    page += 1;
+  }
+
+  return users;
+}
+
+async function resolveCashCloseAuthorizer(params: {
+  access: CashCloseAccess;
+  adminPassword?: string;
+}) {
+  const { access, adminPassword } = params;
+  const canCloseWithoutPassword = Boolean(
+    access.isOwner || access.role === "admin" || access.permissions.includes(CASH_CLOSE_WITHOUT_PASSWORD_PERMISSION),
+  );
+
+  if (canCloseWithoutPassword) {
+    return {
+      requestedByUserId: access.userId,
+      closedByUserId: access.userId,
+    };
+  }
+
+  const password = adminPassword?.trim();
+  if (!password) {
+    throw new Error("Debes ingresar la contraseña de un administrador u owner para cerrar la caja.");
+  }
+
+  const adminClient = createAdminClient();
+  const { data: privilegedProfiles, error: profileError } = await adminClient
+    .from("profiles")
+    .select("id, role")
+    .in("role", ["owner", "admin"]);
+
+  if (profileError) {
+    throw profileError;
+  }
+
+  const privilegedIds = (privilegedProfiles || []).map((row) => String(row.id));
+  const privilegedUsers = await listAuthUsersByIds(adminClient, privilegedIds);
+  const authClient = createPasswordAuthClient();
+
+  for (const user of privilegedUsers) {
+    if (!user.email) continue;
+
+    const { data, error } = await authClient.auth.signInWithPassword({
+      email: user.email,
+      password,
+    });
+
+    if (!error && data.session) {
+      return {
+        requestedByUserId: access.userId,
+        closedByUserId: user.id,
+      };
+    }
+  }
+
+  throw new Error("La contraseña no coincide con ningún administrador u owner.");
+}
+
 async function requireOperableOpenCashSession(accessArg?: Awaited<ReturnType<typeof requireCashAccess>>) {
   const access = accessArg ?? (await requireCashAccess());
   const adminClient = createAdminClient();
   const { data: sessionRows, error } = await adminClient
     .from("cash_sessions")
     .select("*")
+    .eq("opened_by_user_id", access.userId)
     .eq("status", "open")
     .order("opened_at", { ascending: false })
     .limit(1);
@@ -359,10 +517,6 @@ async function requireOperableOpenCashSession(accessArg?: Awaited<ReturnType<typ
   const session = (sessionRows as CashSessionRow[] | null)?.[0] || null;
   if (!session) {
     throw new Error("Abre una caja antes de registrar cobros desde este modulo.");
-  }
-
-  if (!access.isOwner && !access.permissions.includes("cash.reverse_payment") && session.opened_by_user_id !== access.userId) {
-    throw new Error("La caja abierta pertenece a otro usuario.");
   }
 
   return session;
@@ -414,6 +568,34 @@ function buildLatestPaymentMap(rows: PaymentSummaryRow[] | null | undefined) {
   return latestPaymentMap;
 }
 
+function formatProductQuantity(value: number | string | null | undefined) {
+  const quantity = toNumber(value) || 0;
+  return Number.isInteger(quantity) ? String(quantity) : quantity.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function buildProductSaleSummaryMap(
+  sales: ProductSaleRow[] | null | undefined,
+  items: ProductSaleItemRow[] | null | undefined,
+) {
+  const itemMap = new Map<string, string[]>();
+
+  for (const item of items || []) {
+    const existing = itemMap.get(item.product_sale_id) || [];
+    existing.push(`${item.product_name} x${formatProductQuantity(item.quantity)}`);
+    itemMap.set(item.product_sale_id, existing);
+  }
+
+  return new Map(
+    (sales || []).map((sale) => [
+      sale.id,
+      {
+        saleNumber: sale.sale_number,
+        itemsSummary: itemMap.get(sale.id)?.join(", ") || null,
+      },
+    ]),
+  );
+}
+
 function mapSessionRow(
   row: CashSessionRow,
   registerMap: Map<string, string>,
@@ -443,6 +625,7 @@ function mapMovementRows(
   rows: CashMovementRow[],
   profileMap: Map<string, string>,
   paymentStatusMap: Map<string, string | null> = new Map(),
+  productSaleSummaryMap: Map<string, { saleNumber: string; itemsSummary: string | null }> = new Map(),
 ): CashMovementView[] {
   return rows.map((row) => ({
     id: row.id,
@@ -456,6 +639,13 @@ function mapMovementRows(
     origin: row.origin,
     source_payment_id: row.source_payment_id,
     source_subscription_id: row.source_subscription_id,
+    source_product_sale_id: row.source_product_sale_id,
+    product_sale_number: row.source_product_sale_id
+      ? productSaleSummaryMap.get(row.source_product_sale_id)?.saleNumber || null
+      : null,
+    product_sale_items_summary: row.source_product_sale_id
+      ? productSaleSummaryMap.get(row.source_product_sale_id)?.itemsSummary || null
+      : null,
     customer_id: row.customer_id,
     customer_name: row.customer_id ? profileMap.get(row.customer_id) || "Cliente" : null,
     created_by_user_id: row.created_by_user_id,
@@ -569,6 +759,31 @@ async function getPaymentStatusMap(paymentIds: string[]) {
 
   return new Map(
     ((data as PaymentStatusRow[] | null | undefined) || []).map((payment) => [payment.id, payment.status || null]),
+  );
+}
+
+async function getProductSaleSummaryMap(productSaleIds: string[]) {
+  const adminClient = createAdminClient();
+  if (productSaleIds.length === 0) {
+    return new Map<string, { saleNumber: string; itemsSummary: string | null }>();
+  }
+
+  const [{ data: sales, error: salesError }, { data: items, error: itemsError }] = await Promise.all([
+    adminClient.from("product_sales").select("id, sale_number, total_amount").in("id", productSaleIds),
+    adminClient
+      .from("product_sale_items")
+      .select("product_sale_id, product_name, quantity, line_total")
+      .in("product_sale_id", productSaleIds)
+      .order("created_at", { ascending: true }),
+  ]);
+
+  if (salesError || itemsError) {
+    throw toCashActionError(salesError || itemsError, "Error al cargar ventas de productos vinculadas");
+  }
+
+  return buildProductSaleSummaryMap(
+    sales as ProductSaleRow[] | null | undefined,
+    items as ProductSaleItemRow[] | null | undefined,
   );
 }
 
@@ -809,6 +1024,7 @@ export async function getCashDashboardData(): Promise<CashDashboardData> {
   const register = registers?.[0] || null;
 
   let currentSession: CashSessionView | null = null;
+  let supervisedOpenSessions: CashSessionView[] = [];
   let sessionMovements: CashMovementView[] = [];
   let summary: CashDashboardSummary | null = null;
 
@@ -816,7 +1032,7 @@ export async function getCashDashboardData(): Promise<CashDashboardData> {
     const { data: sessionRows, error: sessionError } = await adminClient
       .from("cash_sessions")
       .select("*")
-      .eq("cash_register_id", register.id)
+      .eq("opened_by_user_id", access.userId)
       .eq("status", "open")
       .order("opened_at", { ascending: false })
       .limit(1);
@@ -855,25 +1071,51 @@ export async function getCashDashboardData(): Promise<CashDashboardData> {
             .filter((value): value is string => Boolean(value)),
         ),
       );
+      const productSaleIds = Array.from(
+        new Set(
+          ((movementRows as CashMovementRow[] | null) || [])
+            .map((movement) => movement.source_product_sale_id)
+            .filter((value): value is string => Boolean(value)),
+        ),
+      );
       const profileMap = await getProfileMap(profileIds);
       const paymentStatusMap = await getPaymentStatusMap(paymentIds);
-      sessionMovements = mapMovementRows((movementRows as CashMovementRow[] | null) || [], profileMap, paymentStatusMap);
+      const productSaleSummaryMap = await getProductSaleSummaryMap(productSaleIds);
+      sessionMovements = mapMovementRows(
+        (movementRows as CashMovementRow[] | null) || [],
+        profileMap,
+        paymentStatusMap,
+        productSaleSummaryMap,
+      );
       summary = buildCashSummary(sessionMovements, currentSession.opening_amount);
+    }
+
+    if (access.isOwner) {
+      const { data: openSessionRows, error: openSessionError } = await adminClient
+        .from("cash_sessions")
+        .select("*")
+        .eq("cash_register_id", register.id)
+        .eq("status", "open")
+        .neq("opened_by_user_id", access.userId)
+        .order("opened_at", { ascending: false });
+
+      if (openSessionError) {
+        throw toCashActionError(openSessionError, "Error al cargar sesiones abiertas supervisadas");
+      }
+
+      supervisedOpenSessions = await hydrateSessions((openSessionRows as CashSessionRow[] | null) || []);
     }
   }
 
   const todayRange = getGuatemalaDateRange();
-  let outOfSessionQuery = adminClient
+  const outOfSessionQuery = adminClient
     .from("cash_movements")
     .select("*")
     .eq("session_link_status", "out_of_session")
+    .eq("created_by_user_id", access.userId)
     .gte("created_at", todayRange.start)
     .lte("created_at", todayRange.end)
     .order("created_at", { ascending: false });
-
-  if (!access.isOwner && !access.permissions.includes("cash.reverse_payment")) {
-    outOfSessionQuery = outOfSessionQuery.eq("created_by_user_id", access.userId);
-  }
 
   const { data: outOfSessionRows, error: outOfSessionError } = await outOfSessionQuery;
   if (outOfSessionError) {
@@ -895,17 +1137,24 @@ export async function getCashDashboardData(): Promise<CashDashboardData> {
         .filter((value): value is string => Boolean(value)),
     ),
   );
+  const outOfSessionProductSaleIds = Array.from(
+    new Set(
+      ((outOfSessionRows as CashMovementRow[] | null) || [])
+        .map((movement) => movement.source_product_sale_id)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
   const outOfSessionProfileMap = await getProfileMap(outOfSessionProfileIds);
   const outOfSessionPaymentStatusMap = await getPaymentStatusMap(outOfSessionPaymentIds);
+  const outOfSessionProductSaleSummaryMap = await getProductSaleSummaryMap(outOfSessionProductSaleIds);
   const outOfSessionMovements = mapMovementRows(
     (outOfSessionRows as CashMovementRow[] | null) || [],
     outOfSessionProfileMap,
     outOfSessionPaymentStatusMap,
+    outOfSessionProductSaleSummaryMap,
   );
 
-  const canOperateSession = Boolean(
-    currentSession && (access.isOwner || access.permissions.includes("cash.reverse_payment") || currentSession.opened_by_user_id === access.userId),
-  );
+  const canOperateSession = Boolean(currentSession);
   const canOpenSession = !currentSession;
   const activityMovements = [...sessionMovements, ...outOfSessionMovements].sort(
     (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
@@ -915,6 +1164,7 @@ export async function getCashDashboardData(): Promise<CashDashboardData> {
     access,
     register: register ? { id: register.id, name: register.name } : null,
     currentSession,
+    supervisedOpenSessions,
     summary,
     sessionMovements,
     outOfSessionMovements,
@@ -1127,7 +1377,7 @@ export async function getCashHistoryData(filters: CashHistoryFilters = {}): Prom
     query = query.lte("opened_at", `${filters.dateTo}T23:59:59.999${GUATEMALA_UTC_OFFSET}`);
   }
 
-  if (access.isOwner || access.permissions.includes("cash.reverse_payment")) {
+  if (access.isOwner) {
     if (filters.openedByUserId) {
       query = query.eq("opened_by_user_id", filters.openedByUserId);
     }
@@ -1170,7 +1420,7 @@ export async function getCashHistoryData(filters: CashHistoryFilters = {}): Prom
   const sessions = await hydrateSessions((sessionRows as CashSessionRow[] | null) || []);
   let availableUsers: Array<{ id: string; name: string }> = [];
 
-  if (access.isOwner || access.permissions.includes("cash.reverse_payment")) {
+  if (access.isOwner) {
     let userQuery = adminClient.from("cash_sessions").select("opened_by_user_id");
 
     if (status !== "all") {
@@ -1214,7 +1464,7 @@ export async function getCashHistoryData(filters: CashHistoryFilters = {}): Prom
       dateFrom: filters.dateFrom || "",
       dateTo: filters.dateTo || "",
       status,
-      openedByUserId: access.isOwner || access.permissions.includes("cash.reverse_payment") ? filters.openedByUserId || "" : access.userId,
+      openedByUserId: access.isOwner ? filters.openedByUserId || "" : access.userId,
     },
   };
 }
@@ -1238,7 +1488,7 @@ export async function getCashSessionDetail(sessionId: string): Promise<CashSessi
     throw new Error("Sesión de caja no encontrada");
   }
 
-  if (!access.isOwner && !access.permissions.includes("cash.reverse_payment") && sessionRow.opened_by_user_id !== access.userId) {
+  if (!access.isOwner && sessionRow.opened_by_user_id !== access.userId) {
     throw new Error("No autorizado para ver esta sesión");
   }
 
@@ -1262,7 +1512,30 @@ export async function getCashSessionDetail(sessionId: string): Promise<CashSessi
     ),
   );
   const profileMap = await getProfileMap(profileIds);
-  const movements = mapMovementRows((movementRows as CashMovementRow[] | null) || [], profileMap);
+  const paymentIds = Array.from(
+    new Set(
+      ((movementRows as CashMovementRow[] | null) || [])
+        .map((movement) => movement.source_payment_id)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+  const productSaleIds = Array.from(
+    new Set(
+      ((movementRows as CashMovementRow[] | null) || [])
+        .map((movement) => movement.source_product_sale_id)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+  const [paymentStatusMap, productSaleSummaryMap] = await Promise.all([
+    getPaymentStatusMap(paymentIds),
+    getProductSaleSummaryMap(productSaleIds),
+  ]);
+  const movements = mapMovementRows(
+    (movementRows as CashMovementRow[] | null) || [],
+    profileMap,
+    paymentStatusMap,
+    productSaleSummaryMap,
+  );
   const summary = buildCashSummary(movements, session.opening_amount);
   summary.countedAmount = session.counted_amount;
   summary.differenceAmount = session.difference_amount;
@@ -1296,14 +1569,22 @@ export async function openCashSession(registerId: string, openingAmount: number,
   revalidatePath("/panel/caja/historial");
 }
 
-export async function closeCashSession(sessionId: string, countedAmount: number, notes?: string) {
-  await requireCashAccess();
-  const supabase = await createClient();
+export async function closeCashSession(
+  sessionId: string,
+  countedAmount: number,
+  notes?: string,
+  adminPassword?: string,
+) {
+  const access = await requireCashAccess();
+  const authorization = await resolveCashCloseAuthorizer({ access, adminPassword });
+  const supabase = createAdminClient();
 
   const { error } = await supabase.rpc("close_cash_session", {
     p_session_id: sessionId,
     p_counted_amount: countedAmount,
     p_notes: notes?.trim() || null,
+    p_requested_by_user_id: authorization.requestedByUserId,
+    p_closed_by_user_id: authorization.closedByUserId,
   });
 
   if (error) {
@@ -1312,6 +1593,7 @@ export async function closeCashSession(sessionId: string, countedAmount: number,
 
   revalidatePath("/panel/caja");
   revalidatePath("/panel/caja/historial");
+  revalidatePath(`/panel/caja/historial/${sessionId}`);
   revalidatePath("/panel/pagos");
   revalidatePath("/panel/resumen");
 }
@@ -1553,4 +1835,84 @@ export async function reverseAndRecreatePayment(input: ReversePaymentInput) {
   revalidatePath("/panel/resumen");
 
   return data;
+}
+
+export async function searchCashProducts(search: string): Promise<CashProductSearchResult[]> {
+  await requireOperableOpenCashSession();
+  const access = await requireCashAccess();
+  if (!access.isOwner && !access.permissions.includes("inventory.sell")) {
+    throw new Error("No autorizado para vender productos");
+  }
+
+  const adminClient = createAdminClient();
+  const normalizedSearch = search.trim();
+  let query = adminClient
+    .from("product_inventory_overview")
+    .select("id, name, sku, barcode, image_url, sale_price, stock_quantity, is_active")
+    .eq("is_active", true);
+
+  if (normalizedSearch.length > 0) {
+    const escapedSearch = normalizedSearch.replace(/[,%]/g, " ").trim();
+    query = query.or(`name.ilike.%${escapedSearch}%,sku.ilike.%${escapedSearch}%,barcode.ilike.%${escapedSearch}%`);
+  }
+
+  const { data, error } = await query.order("name", { ascending: true }).limit(12);
+
+  if (error) {
+    throw toCashActionError(error, "No se pudieron buscar productos");
+  }
+
+  return ((data as ProductInventoryRow[] | null) || []).map((product) => ({
+    id: product.id,
+    name: product.name,
+    sku: product.sku,
+    barcode: product.barcode,
+    image_url: product.image_url,
+    sale_price: toNumber(product.sale_price) || 0,
+    stock_quantity: toNumber(product.stock_quantity) || 0,
+    is_active: product.is_active,
+  }));
+}
+
+export async function sellProductsFromCashSession(params: {
+  items: CashProductSaleItemInput[];
+  paymentMethod: PaymentMethod;
+  note?: string | null;
+}): Promise<CashProductSaleResult> {
+  const access = await requireCashAccess();
+  if (!access.isOwner && !access.permissions.includes("inventory.sell")) {
+    throw new Error("No autorizado para vender productos");
+  }
+
+  await requireOperableOpenCashSession(access);
+
+  const rpcItems = params.items.map((item) => ({
+    product_id: item.productId,
+    quantity: item.quantity,
+  }));
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("sell_products_from_cash_session", {
+    p_items: rpcItems,
+    p_payment_method: params.paymentMethod,
+    p_note: params.note?.trim() || null,
+  });
+
+  if (error) {
+    throw toCashActionError(error, "No se pudo vender productos");
+  }
+
+  revalidatePath("/panel/caja");
+  revalidatePath("/panel/caja/historial");
+  revalidatePath("/panel/inventario/productos");
+  revalidatePath("/panel/inventario/movimientos");
+  revalidatePath("/panel/resumen");
+
+  const result = (data || {}) as Partial<CashProductSaleResult>;
+  return {
+    product_sale_id: String(result.product_sale_id || ""),
+    sale_number: String(result.sale_number || ""),
+    cash_movement_id: String(result.cash_movement_id || ""),
+    total_amount: Number(result.total_amount || 0),
+  };
 }

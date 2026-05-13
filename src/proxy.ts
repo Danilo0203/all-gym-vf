@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
-import { isClientScope } from "@/lib/auth/role-utils";
+import { parseUserRole, resolvePostLoginRoute } from "@/lib/auth/role-utils";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
@@ -53,6 +53,7 @@ export async function proxy(request: NextRequest) {
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
   const roleSlug = (profile?.role || user.user_metadata?.role || null) as string | null;
+  const role = parseUserRole(roleSlug);
 
   // Fetch role scope from DB
   let scope: string | null = null;
@@ -65,7 +66,16 @@ export async function proxy(request: NextRequest) {
     scope = roleData?.scope || null;
   }
 
-  const defaultRoute = isClientScope(scope) ? "/mi/rutina" : "/panel/resumen";
+  const defaultRoute = resolvePostLoginRoute({
+    role,
+    roleScope: scope,
+  });
+  const requestedPath = `${pathname}${request.nextUrl.search}`;
+  const resolvedRequestedPath = resolvePostLoginRoute({
+    role,
+    roleScope: scope,
+    requestedPath,
+  });
 
   if (pathname.startsWith("/iniciar-sesion")) {
     const url = request.nextUrl.clone();
@@ -79,17 +89,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Gate by scope: clients → /mi, panel users → /panel
-  if (pathname.startsWith("/panel") && isClientScope(scope)) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/mi/rutina";
-    return NextResponse.redirect(url);
-  }
-
-  if (pathname.startsWith("/mi") && !isClientScope(scope)) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/panel/resumen";
-    return NextResponse.redirect(url);
+  if (resolvedRequestedPath !== requestedPath) {
+    return NextResponse.redirect(new URL(resolvedRequestedPath, request.url));
   }
 
   return response;

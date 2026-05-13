@@ -1,6 +1,6 @@
 import PageContainer from "@/components/layout/page-container";
 import { DataTableSkeleton } from "@/components/ui/table/data-table-skeleton";
-import { getUserAccessContext } from "@/lib/auth/authorization";
+import { getUserAccessContext, hasPermission } from "@/lib/auth/authorization";
 import { CashHistoryListingPage } from "@/features/cash/components/cash-history-listing";
 import { searchParamsCache } from "@/lib/searchparams";
 import { redirect } from "next/navigation";
@@ -21,7 +21,7 @@ export default async function CashHistoryPage({ searchParams }: CashHistoryPageP
     redirect("/iniciar-sesion");
   }
 
-  if (access.role !== "admin" && access.role !== "employee") {
+  if (!hasPermission(access, "cash.view")) {
     redirect("/panel");
   }
 

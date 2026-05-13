@@ -57,6 +57,27 @@ export const navItems: NavItem[] = [
     ],
   },
   {
+    title: "Inventario",
+    url: "#",
+    icon: "inventory",
+    isActive: false,
+    access: { permissions: ["products.view", "inventory.view"] },
+    items: [
+      {
+        title: "Productos",
+        url: "/panel/inventario/productos",
+        icon: "product",
+        access: { permissions: ["products.view"] },
+      },
+      {
+        title: "Movimientos",
+        url: "/panel/inventario/movimientos",
+        icon: "inventory",
+        access: { permissions: ["inventory.view"] },
+      },
+    ],
+  },
+  {
     title: "Administración",
     url: "#",
     icon: "settings",

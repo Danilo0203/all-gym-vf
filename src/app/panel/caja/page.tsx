@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import PageContainer from "@/components/layout/page-container";
-import { getUserAccessContext } from "@/lib/auth/authorization";
+import { getUserAccessContext, hasPermission } from "@/lib/auth/authorization";
 import { getCashDashboardData } from "@/features/cash/actions/cash-actions";
 import { CashDashboardClient } from "@/features/cash/components/cash-dashboard-client";
 import { CashModuleSetupState } from "@/features/cash/components/cash-module-setup-state";
@@ -16,7 +16,7 @@ export default async function CashPage() {
     redirect("/iniciar-sesion");
   }
 
-  if (access.role !== "admin" && access.role !== "employee") {
+  if (!hasPermission(access, "cash.view")) {
     redirect("/panel");
   }
 
@@ -37,7 +37,7 @@ export default async function CashPage() {
     <PageContainer
       scrollable
       pageTitle="Caja actual"
-      pageDescription="Control operativo del turno, efectivo esperado y movimientos de caja."
+      pageDescription="Venta rápida de productos y acciones operativas del turno."
     >
       {setupRequired || !data ? <CashModuleSetupState /> : <CashDashboardClient data={data} />}
     </PageContainer>

@@ -3,6 +3,7 @@ import {
   IconBarbell,
   IconCalendar,
   IconListDetails,
+  IconPlus,
   IconTargetArrow,
   IconUsers,
 } from "@tabler/icons-react";
@@ -183,6 +184,12 @@ function EmptyState() {
           Cuando generes o guardes plantillas de rutina, aparecerán aquí.
         </p>
       </div>
+      <Button asChild>
+        <Link href="/panel/rutinas/nueva">
+          <IconPlus className="size-4" />
+          Crear plantilla personalizada
+        </Link>
+      </Button>
     </div>
   );
 }

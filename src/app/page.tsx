@@ -1,18 +1,18 @@
-import { createClient } from "@/lib/supabase/server";
-import { getDefaultRouteForRole, parseUserRole } from "@/lib/auth/role-utils";
+import { getUserAccessContext } from "@/lib/auth/authorization";
+import { resolvePostLoginRoute } from "@/lib/auth/role-utils";
 import { redirect } from "next/navigation";
 
 export default async function Home() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const access = await getUserAccessContext();
 
-  if (user) {
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-    const role = parseUserRole(profile?.role) ?? parseUserRole(user.user_metadata?.role);
-    redirect(getDefaultRouteForRole(role));
-  } else {
+  if (!access.isAuthenticated) {
     redirect("/iniciar-sesion");
   }
+
+  redirect(
+    resolvePostLoginRoute({
+      role: access.role,
+      roleScope: access.roleScope,
+    }),
+  );
 }

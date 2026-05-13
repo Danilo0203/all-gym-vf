@@ -187,6 +187,14 @@ function getMovementNarrative(movement: CashMovementView, meta: MovementStoryMet
 
   switch (movement.movement_type) {
     case "sale":
+      if (movement.category === "product") {
+        return {
+          title: movement.product_sale_number ? `Venta de productos ${movement.product_sale_number}` : "Venta de productos",
+          description: movement.product_sale_items_summary || movement.note || "Venta registrada desde caja.",
+          reference: movement.source_product_sale_id ? `Venta ${shortId(movement.source_product_sale_id)}` : null,
+        };
+      }
+
       return {
         title: "Cobro registrado",
         description: "Cobro válido registrado dentro de la sesión.",
@@ -363,7 +371,7 @@ export function CashSessionDetailView({ data }: { data: CashSessionDetailData })
         <div>
           <h2 className="text-2xl font-bold tracking-tight">{session.session_number}</h2>
           <p className="text-sm text-muted-foreground">
-            {session.cash_register_name} · {session.opened_by_name}
+            {session.cash_register_name} · Abrió {session.opened_by_name} · Cerró {session.closed_by_name || "Pendiente"}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -374,7 +382,7 @@ export function CashSessionDetailView({ data }: { data: CashSessionDetailData })
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Apertura</CardTitle>
@@ -399,9 +407,18 @@ export function CashSessionDetailView({ data }: { data: CashSessionDetailData })
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Diferencia</CardTitle>
-            <CardDescription>{session.closed_by_name || "Sin cierre"}</CardDescription>
+            <CardDescription>
+              {session.closed_at ? formatDateTime(session.closed_at) : "Pendiente"}
+            </CardDescription>
           </CardHeader>
           <CardContent>{formatMoney(summary.differenceAmount)}</CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Autorizó cierre</CardTitle>
+            <CardDescription>{session.closed_at ? "Bitácora de cierre" : "Pendiente"}</CardDescription>
+          </CardHeader>
+          <CardContent>{session.closed_by_name || "Pendiente"}</CardContent>
         </Card>
       </div>
 
@@ -477,7 +494,12 @@ export function CashSessionDetailView({ data }: { data: CashSessionDetailData })
                               {narrative.reference ? (
                                 <span
                                   className="text-xs text-muted-foreground"
-                                  title={movement.source_payment_id || extractReferencedPaymentId(movement.note) || ""}
+                                  title={
+                                    movement.source_payment_id ||
+                                    movement.source_product_sale_id ||
+                                    extractReferencedPaymentId(movement.note) ||
+                                    ""
+                                  }
                                 >
                                   {narrative.reference}
                                 </span>

@@ -421,9 +421,9 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
             )}
 
             {workspace.missingRequirements.length > 0 ? (
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5">
+              <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3.5">
                 <div className="flex gap-2.5">
-                  <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-400" />
+                  <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
                   <div className="space-y-2 min-w-0">
                     <p className="text-sm font-semibold text-foreground">
                       Faltan datos para personalizar la rutina
@@ -433,7 +433,7 @@ export function RoutineWorkspaceTab({ customerId, workspace }: RoutineWorkspaceT
                         <Badge
                           key={item}
                           variant="outline"
-                          className="h-5 border-amber-500/30 bg-background/50 text-[10px] font-medium text-amber-300"
+                          className="h-5 border-amber-500/45 bg-background/70 text-[10px] font-medium text-amber-700 dark:text-amber-300"
                         >
                           {item}
                         </Badge>

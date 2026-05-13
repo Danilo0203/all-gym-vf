@@ -4,10 +4,10 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PASSWORD_RECOVERY_ENABLED, OAUTH_LOGIN_ENABLED } from "@/lib/auth/feature-flags";
-import { getDefaultRouteForRole, parseUserRole } from "@/lib/auth/role-utils";
+import { parseUserRole, resolvePostLoginRoute } from "@/lib/auth/role-utils";
 import { createBrowserClient } from "@supabase/ssr";
 import { toast } from "sonner";
 import { IconLoader2 } from "@tabler/icons-react";
@@ -40,7 +40,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
             ? data.user.user_metadata.full_name.trim()
             : "usuario";
 
-        let role = parseUserRole(data.user.user_metadata?.role);
+        let roleSlug = typeof data.user.user_metadata?.role === "string" ? data.user.user_metadata.role : null;
+        let role = parseUserRole(roleSlug);
+        let roleScope: string | null = null;
 
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) {
@@ -61,7 +63,24 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
           if (profileError) {
             console.error("[login] profile lookup failed", profileError);
           } else {
-            role = parseUserRole(profile?.role) ?? role;
+            if (typeof profile?.role === "string" && profile.role.trim().length > 0) {
+              roleSlug = profile.role;
+            }
+            role = parseUserRole(roleSlug) ?? role;
+
+            if (roleSlug) {
+              const { data: roleData, error: roleError } = await supabase
+                .from("roles")
+                .select("scope")
+                .eq("slug", roleSlug)
+                .maybeSingle();
+
+              if (roleError) {
+                console.error("[login] role scope lookup failed", roleError);
+              } else {
+                roleScope = roleData?.scope ?? null;
+              }
+            }
           }
 
           toast.success(`¡Bienvenido de nuevo ${profile?.full_name || displayName}!`);
@@ -70,7 +89,12 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
           toast.success(`¡Bienvenido de nuevo ${displayName}!`);
         }
 
-        window.location.assign(getDefaultRouteForRole(role));
+        window.location.assign(
+          resolvePostLoginRoute({
+            role,
+            roleScope,
+          }),
+        );
       }
     } catch (error) {
       console.error("[login] sign-in failure", error);
@@ -183,27 +207,10 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                   Iniciar sesión
                 </Button>
               </Field>
-              {!OAUTH_LOGIN_ENABLED || !PASSWORD_RECOVERY_ENABLED ? (
-                <FieldDescription className="text-center text-xs">
-                  Este despliegue piloto usa acceso por correo y contraseña. Google y recuperación por correo quedan deshabilitados
-                  mientras se utilice una URL temporal.
-                </FieldDescription>
-              ) : null}
             </FieldGroup>
           </form>
         </CardContent>
       </Card>
-      <FieldDescription className="px-6 text-center text-xs">
-        Al continuar, aceptas nuestros{" "}
-        <a href="#" className="underline underline-offset-4 hover:text-primary">
-          Términos de Servicio
-        </a>{" "}
-        y{" "}
-        <a href="#" className="underline underline-offset-4 hover:text-primary">
-          Política de Privacidad
-        </a>
-        .
-      </FieldDescription>
     </div>
   );
 }

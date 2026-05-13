@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { IconBrandWhatsapp, IconUserOff, IconRefresh } from '@tabler/icons-react';
 import type { InactiveCustomer } from '../actions/panel-actions';
+import { CustomerWhatsAppDialog } from '@/features/customers/components/customer-tables/customer-whatsapp-dialog';
+import type { CustomerWhatsApp } from '@/features/messages/whatsapp-helper';
 import Link from 'next/link';
 
 interface InactiveCustomersTableProps {
@@ -14,6 +17,8 @@ interface InactiveCustomersTableProps {
 }
 
 export function InactiveCustomersTable({ data }: InactiveCustomersTableProps) {
+  const [whatsAppCustomer, setWhatsAppCustomer] = useState<CustomerWhatsApp | null>(null);
+
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -45,15 +50,6 @@ export function InactiveCustomersTable({ data }: InactiveCustomersTableProps) {
     );
   };
 
-  const getWhatsAppLink = (phone: string | null, userName: string) => {
-    if (!phone) return null;
-    const cleanPhone = phone.replace(/\D/g, '');
-    const message = encodeURIComponent(
-      `¡Hola ${userName}! 👋 Te extrañamos en el gimnasio. ¿Te gustaría regresar? Tenemos promociones especiales para ti.`
-    );
-    return `https://wa.me/${cleanPhone}?text=${message}`;
-  };
-
   if (data.length === 0) {
     return (
       <Card>
@@ -73,6 +69,7 @@ export function InactiveCustomersTable({ data }: InactiveCustomersTableProps) {
   }
 
   return (
+    <>
     <Card className='border-red-500/20'>
       <CardHeader className='pb-3'>
         <div className='flex items-center gap-2'>
@@ -112,20 +109,25 @@ export function InactiveCustomersTable({ data }: InactiveCustomersTableProps) {
                 </div>
                 <div className='flex items-center gap-2'>
                   {getDaysInactiveBadge(customer.days_inactive)}
-                  {customer.phone && getWhatsAppLink(customer.phone, customer.user_name) && (
-                    <Link
-                      href={getWhatsAppLink(customer.phone, customer.user_name)!}
-                      target='_blank'
-                      onClick={(e) => e.stopPropagation()}
+                  {customer.phone && (
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      className='h-8 w-8 p-0 border-emerald-500/50 hover:bg-emerald-500/10'
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setWhatsAppCustomer({
+                          full_name: customer.user_name,
+                          phone: customer.phone,
+                          subscription_start_date: null,
+                          subscription_end_date: customer.expired_date,
+                          last_check_in: null,
+                        });
+                      }}
                     >
-                      <Button 
-                        size='sm' 
-                        variant='outline'
-                        className='h-8 w-8 p-0 border-emerald-500/50 hover:bg-emerald-500/10'
-                      >
-                        <IconBrandWhatsapp className='h-4 w-4 text-emerald-500' />
-                      </Button>
-                    </Link>
+                      <IconBrandWhatsapp className='h-4 w-4 text-emerald-500' />
+                    </Button>
                   )}
                   <Link href={`/panel/clientes?search=${encodeURIComponent(customer.user_name)}`}>
                     <Button 
@@ -144,5 +146,15 @@ export function InactiveCustomersTable({ data }: InactiveCustomersTableProps) {
         </ScrollArea>
       </CardContent>
     </Card>
+      {whatsAppCustomer && (
+        <CustomerWhatsAppDialog
+          open={whatsAppCustomer !== null}
+          onOpenChange={(open) => {
+            if (!open) setWhatsAppCustomer(null);
+          }}
+          customer={whatsAppCustomer}
+        />
+      )}
+    </>
   );
 }

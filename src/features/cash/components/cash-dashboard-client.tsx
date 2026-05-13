@@ -1,22 +1,17 @@
 "use client";
 
 import { gsap } from "gsap";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   IconAlertCircle,
-  IconArrowsExchange,
-  IconCash,
   IconClock,
-  IconCreditCard,
   IconDoorExit,
   IconLogin2,
   IconRefresh,
-  IconTransfer,
-  IconTrendingUp,
   IconUserPlus,
-  IconWallet,
 } from "@tabler/icons-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -24,14 +19,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { ReversePaymentDialog } from "@/features/cash/components/reverse-payment-dialog";
 import { CustomerFormSheet } from "@/features/customers/components/customer-form-sheet";
 import { closeCashSession, type CashDashboardData, openCashSession } from "@/features/cash/actions/cash-actions";
 import { CashCustomerPaymentDialog } from "@/features/cash/components/cash-customer-payment-dialog";
-import { cn } from "@/lib/utils";
 import { useCurrentUser } from "@/features/profile/hooks/use-profile";
+import { QuickProductSalePanel } from "@/features/cash/components/quick-product-sale-panel";
 
 function formatMoney(amount: number | null | undefined) {
   const safeAmount = typeof amount === "number" ? amount : 0;
@@ -77,110 +70,6 @@ function getSessionStatusLabel(status: string) {
     default:
       return status;
   }
-}
-
-function getMovementTypeLabel(type: string) {
-  switch (type) {
-    case "sale":
-      return "Cobro";
-    case "manual_income":
-      return "Ingreso manual";
-    case "withdrawal":
-      return "Retiro";
-    case "refund":
-      return "Reembolso";
-    case "adjustment":
-      return "Ajuste";
-    case "void":
-      return "Anulación";
-    default:
-      return type.replaceAll("_", " ");
-  }
-}
-
-function getPaymentMethodLabel(method: string | null | undefined) {
-  switch (method) {
-    case "cash":
-      return "Efectivo";
-    case "card":
-      return "Tarjeta";
-    case "transfer":
-      return "Transferencia";
-    default:
-      return "No aplica";
-  }
-}
-
-function getMovementConceptLabel(category: string, note: string | null | undefined, type: string) {
-  if (note?.trim()) {
-    return note.trim();
-  }
-
-  if (type === "manual_income") {
-    return "Ingreso operativo";
-  }
-
-  if (type === "withdrawal") {
-    return "Salida de efectivo";
-  }
-
-  switch (category) {
-    case "membership":
-      return "Membresía";
-    case "product":
-      return "Producto";
-    case "enrollment":
-      return "Inscripción";
-    case "service":
-      return "Servicio";
-    default:
-      return "Movimiento de caja";
-  }
-}
-
-function getActivityStatusVariant(movement: CashDashboardData["activityMovements"][number]) {
-  if (movement.voided_at || movement.movement_type === "void") {
-    return "destructive";
-  }
-
-  if (movement.source_payment_status === "reversed") {
-    return "warning";
-  }
-
-  if (movement.session_link_status === "out_of_session") {
-    return "warning";
-  }
-
-  return "success";
-}
-
-function getActivityStatusLabel(movement: CashDashboardData["activityMovements"][number]) {
-  if (movement.voided_at || movement.movement_type === "void") {
-    return "Anulado";
-  }
-
-  if (movement.source_payment_status === "reversed") {
-    return "Revertido";
-  }
-
-  if (movement.session_link_status === "out_of_session") {
-    return "Fuera de sesión";
-  }
-
-  return "Registrado";
-}
-
-function canReverseMovement(
-  movement: CashDashboardData["activityMovements"][number],
-  role: CashDashboardData["access"]["role"],
-) {
-  return (
-    role === "admin" &&
-    movement.movement_type === "sale" &&
-    Boolean(movement.source_payment_id) &&
-    !movement.voided_at &&
-    movement.source_payment_status !== "reversed"
-  );
 }
 
 function SummarySessionCard({
@@ -232,64 +121,6 @@ function SummarySessionCard({
   );
 }
 
-function KpiTile({
-  label,
-  value,
-  helper,
-  icon,
-  className,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  helper?: string;
-  icon?: ReactNode;
-  className?: string;
-  tone?: "default" | "success" | "accent";
-}) {
-  const toneClassName =
-    tone === "success"
-      ? "border-emerald-500/20 bg-[linear-gradient(180deg,hsl(var(--background)),rgba(16,185,129,0.04))]"
-      : tone === "accent"
-        ? "border-primary/20 bg-[linear-gradient(180deg,hsl(var(--background)),hsl(var(--primary)/0.04))]"
-        : "border-border/70 bg-background/80";
-
-  return (
-    <div
-      data-summary-card
-      className={cn(
-        "group rounded-[22px] border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md sm:p-5",
-        toneClassName,
-        className,
-      )}
-    >
-      <div className="flex h-full flex-col gap-4">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          {icon ? <span className="shrink-0">{icon}</span> : null}
-          <p className="text-[0.68rem] uppercase tracking-[0.28em]">{label}</p>
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-3xl font-bold tracking-tight text-foreground">{value}</p>
-          {helper ? <p className="max-w-[26ch] text-sm leading-6 text-muted-foreground">{helper}</p> : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FinancialRow({ label, amount, icon }: { label: string; amount: number | null | undefined; icon: ReactNode }) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border px-3 py-3 text-sm">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        {icon}
-        <span>{label}</span>
-      </div>
-      <strong>{formatMoney(amount)}</strong>
-    </div>
-  );
-}
-
 function QuickActionCard({
   title,
   description,
@@ -319,19 +150,58 @@ function QuickActionCard({
   );
 }
 
+function OpenSessionSupervisorCard({ sessions }: { sessions: CashDashboardData["supervisedOpenSessions"] }) {
+  if (sessions.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Sesiones abiertas de otros usuarios</CardTitle>
+        <CardDescription>
+          Supervisión rápida de turnos activos. Desde aquí puedes revisar su detalle sin mezclarlo con tu caja actual.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {sessions.map((session) => (
+          <div
+            key={session.id}
+            className="flex flex-col gap-3 rounded-xl border border-border/70 bg-background/50 p-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="space-y-1">
+              <p className="text-sm font-semibold">{session.opened_by_name || "Usuario"}</p>
+              <p className="text-xs text-muted-foreground">
+                {session.session_number} · abierta {formatDateTime(session.opened_at)}
+              </p>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/panel/caja/historial/${session.id}`}>Ver detalle</Link>
+            </Button>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function CashDashboardClient({ data }: { data: CashDashboardData }) {
   const router = useRouter();
   const { data: currentUser } = useCurrentUser();
   const canOperateCash = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("cash.operate"));
   const canManageMembership = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("customers.manage_membership"));
-  const canReversePayment = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("cash.reverse_payment"));
   const summaryCardsRef = useRef<HTMLDivElement | null>(null);
   const [isPending, startTransition] = useTransition();
   const [openingAmount, setOpeningAmount] = useState("0.00");
   const [openingNotes, setOpeningNotes] = useState("");
   const [countedAmount, setCountedAmount] = useState("");
   const [closingNote, setClosingNote] = useState("");
+  const [closePassword, setClosePassword] = useState("");
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const canCloseWithoutPassword = Boolean(
+    currentUser?.isOwner || currentUser?.role === "admin" || currentUser?.permissions?.includes("cash.close_without_admin_password"),
+  );
+  const requiresClosePassword = Boolean(currentUser) && !canCloseWithoutPassword;
 
   const handleAction = (task: () => Promise<void>, successMessage: string) => {
     startTransition(async () => {
@@ -397,11 +267,22 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
       return;
     }
 
+    if (requiresClosePassword && !closePassword.trim()) {
+      toast.error("Debes ingresar la contraseña de un administrador u owner.");
+      return;
+    }
+
     handleAction(async () => {
-      await closeCashSession(data.currentSession!.id, Number(countedAmount || 0), closingNote);
+      await closeCashSession(
+        data.currentSession!.id,
+        Number(countedAmount || 0),
+        closingNote,
+        requiresClosePassword ? closePassword : undefined,
+      );
       setCloseDialogOpen(false);
       setCountedAmount("");
       setClosingNote("");
+      setClosePassword("");
     }, "Caja cerrada correctamente");
   };
 
@@ -450,8 +331,8 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
                 <div className="flex items-start gap-3">
                   <IconAlertCircle className="mt-0.5 h-4 w-4" />
                   <p>
-                    La pantalla operativa completa aparecerá después de abrir la caja. Ahí se mostrarán acciones rápidas
-                    de cobro, actividad del turno y cierre.
+                    La pantalla operativa completa aparecerá después de abrir la caja. Ahí se mostrará la venta rápida
+                    de productos y las acciones que requieren confirmación.
                   </p>
                 </div>
               </div>
@@ -478,19 +359,21 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
                 onChange={(event) => setOpeningNotes(event.target.value)}
                 placeholder="Observación opcional de apertura"
               />
-              {canOperateCash && (
-              <Button
-                className="w-full"
-                disabled={isPending || !data.canOpenSession || !data.register}
-                onClick={onOpenSession}
-              >
-                <IconLogin2 className="h-4 w-4" />
-                Abrir caja
-              </Button>
-              )}
+              {canOperateCash ? (
+                <Button
+                  className="w-full"
+                  disabled={isPending || !data.canOpenSession || !data.register}
+                  onClick={onOpenSession}
+                >
+                  <IconLogin2 className="h-4 w-4" />
+                  Abrir caja
+                </Button>
+              ) : null}
             </div>
           </CardContent>
         </Card>
+
+        <OpenSessionSupervisorCard sessions={data.supervisedOpenSessions} />
       </div>
     );
   }
@@ -507,35 +390,6 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
               openedAt={data.currentSession.opened_at}
               openedByName={data.currentSession.opened_by_name || "Usuario"}
             />
-
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <KpiTile
-                label="Fondo inicial"
-                value={formatMoney(data.summary?.openingAmount)}
-                helper="Monto base de la sesión."
-                icon={<IconCash className="h-4 w-4" />}
-              />
-              <KpiTile
-                label="Efectivo esperado"
-                value={formatMoney(data.summary?.expectedAmount)}
-                helper="Disponible estimado antes del cierre."
-                icon={<IconWallet className="h-4 w-4" />}
-                tone="accent"
-              />
-              <KpiTile
-                label="Ventas"
-                value={`${data.summary?.salesCount || 0}`}
-                helper={`${formatMoney(data.summary?.totalsByMethod.cash)} efectivo y ${formatMoney((data.summary?.totalsByMethod.card || 0) + (data.summary?.totalsByMethod.transfer || 0))} en otros métodos.`}
-                icon={<IconTrendingUp className="h-4 w-4" />}
-                tone="success"
-              />
-              <KpiTile
-                label="Movimientos"
-                value={`${data.sessionMovements.length}`}
-                helper={`${data.outOfSessionMovements.length} fuera de sesión hoy.`}
-                icon={<IconTransfer className="h-4 w-4" />}
-              />
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -545,34 +399,23 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
           <IconAlertCircle className="h-4 w-4" />
           <AlertTitle>Hay pagos fuera de sesión</AlertTitle>
           <AlertDescription>
-            Se detectaron {data.outOfSessionMovements.length} movimientos registrados sin caja abierta. Ya aparecen en
-            la actividad del turno para seguimiento manual.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {!data.canOperateSession ? (
-        <Alert variant="destructive">
-          <IconAlertCircle className="h-4 w-4" />
-          <AlertTitle>Sesión abierta por otro usuario</AlertTitle>
-          <AlertDescription>
-            Esta caja está siendo operada por {data.currentSession.opened_by_name}. Solo un administrador puede
-            intervenir en esta sesión.
+            Se detectaron {data.outOfSessionMovements.length} movimientos registrados sin caja abierta. Revísalos en el
+            historial de caja para seguimiento manual.
           </AlertDescription>
         </Alert>
       ) : null}
 
       {data.canOperateSession ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Acciones rápidas de caja</CardTitle>
-            <CardDescription>
-              La sesión está abierta. Usa estos accesos para cobrar, renovar y registrar movimientos operativos del
-              turno.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {canOperateCash && (
+        <QuickProductSalePanel canSell={Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("inventory.sell"))} />
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Acciones rápidas de caja</CardTitle>
+          <CardDescription>Accesos operativos que requieren modal o confirmación.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {canOperateCash && (
             <QuickActionCard
               title="Registro de nuevo cliente"
               description="Registra una alta nueva, asigna plan y cobra dentro de la sesión actual."
@@ -588,9 +431,9 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
                 }
               />
             </QuickActionCard>
-            )}
+          )}
 
-            {canManageMembership && (
+          {canManageMembership && (
             <QuickActionCard
               title="Renovar suscripción"
               description="Busca al cliente, revisa su contexto y continúa con la renovación rápida."
@@ -605,9 +448,9 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
                 }
               />
             </QuickActionCard>
-            )}
+          )}
 
-            {canOperateCash && (
+          {canOperateCash && (
             <QuickActionCard
               title="Cerrar caja"
               description="Confirma el contado real y registra la diferencia si existe."
@@ -618,140 +461,11 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
                 Cerrar caja
               </Button>
             </QuickActionCard>
-            )}
+          )}
+        </CardContent>
+      </Card>
 
-            <QuickActionCard
-              title="Renovar suscripción"
-              description="Busca al cliente, revisa su contexto y continúa con la renovación rápida."
-            >
-              <CashCustomerPaymentDialog
-                mode="renewal"
-                trigger={
-                  <Button className="w-full" variant="outline">
-                    <IconRefresh className="h-4 w-4" />
-                    Renovar suscripción
-                  </Button>
-                }
-              />
-            </QuickActionCard>
-
-            <QuickActionCard
-              title="Cerrar caja"
-              description="Confirma el contado real y registra la diferencia si existe."
-              tone="danger"
-            >
-              <Button className="w-full" variant="destructive" onClick={() => setCloseDialogOpen(true)}>
-                <IconDoorExit className="h-4 w-4" />
-                Cerrar caja
-              </Button>
-            </QuickActionCard>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <div className="grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
-        <Card className="min-w-0">
-          <CardHeader>
-            <CardTitle>Actividad del turno</CardTitle>
-            <CardDescription>
-              Incluye cobros, renovaciones, movimientos manuales y registros fuera de sesión del día.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="min-w-0">
-            {data.activityMovements.length === 0 ? (
-              <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-                Aún no hay actividad registrada en este turno.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Hora</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Concepto</TableHead>
-                      <TableHead>Método</TableHead>
-                      <TableHead>Monto</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead>Usuario</TableHead>
-                      {canReversePayment ? <TableHead className="text-right">Acciones</TableHead> : null}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.activityMovements.map((movement) => (
-                      <TableRow key={movement.id}>
-                        <TableCell className="whitespace-nowrap">{formatDateTime(movement.created_at)}</TableCell>
-                        <TableCell>{getMovementTypeLabel(movement.movement_type)}</TableCell>
-                        <TableCell>{movement.customer_name || "Operación de caja"}</TableCell>
-                        <TableCell>
-                          {getMovementConceptLabel(movement.category, movement.note, movement.movement_type)}
-                        </TableCell>
-                        <TableCell>{getPaymentMethodLabel(movement.payment_method)}</TableCell>
-                        <TableCell className="whitespace-nowrap font-medium">{formatMoney(movement.amount)}</TableCell>
-                        <TableCell>
-                          <Badge variant={getActivityStatusVariant(movement)}>{getActivityStatusLabel(movement)}</Badge>
-                        </TableCell>
-                        <TableCell>{movement.created_by_name || "Usuario"}</TableCell>
-                        {canReversePayment ? (
-                          <TableCell className="text-right">
-                            {canReverseMovement(movement, data.access.role) && movement.source_payment_id ? (
-                              <ReversePaymentDialog
-                                paymentId={movement.source_payment_id}
-                                sourceCategory={movement.category}
-                                conceptLabel={getMovementConceptLabel(movement.category, movement.note, movement.movement_type)}
-                                trigger={
-                                  <Button variant="outline" size="sm">
-                                    <IconArrowsExchange className="h-4 w-4" />
-                                    Reversar cobro
-                                  </Button>
-                                }
-                              />
-                            ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            )}
-                          </TableCell>
-                        ) : null}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Control financiero</CardTitle>
-              <CardDescription>Resumen por método y referencia del esperado antes del cierre.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <FinancialRow
-                label="Efectivo"
-                amount={data.summary?.totalsByMethod.cash}
-                icon={<IconCash className="h-4 w-4" />}
-              />
-              <FinancialRow
-                label="Tarjeta"
-                amount={data.summary?.totalsByMethod.card}
-                icon={<IconCreditCard className="h-4 w-4" />}
-              />
-              <FinancialRow
-                label="Transferencia"
-                amount={data.summary?.totalsByMethod.transfer}
-                icon={<IconTransfer className="h-4 w-4" />}
-              />
-              <FinancialRow
-                label="Efectivo esperado"
-                amount={data.summary?.expectedAmount}
-                icon={<IconWallet className="h-4 w-4" />}
-              />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      <OpenSessionSupervisorCard sessions={data.supervisedOpenSessions} />
 
       <Dialog
         open={closeDialogOpen}
@@ -760,6 +474,7 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
           if (!nextOpen && !isPending) {
             setCountedAmount("");
             setClosingNote("");
+            setClosePassword("");
           }
         }}
       >
@@ -767,12 +482,24 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
           <DialogHeader>
             <DialogTitle>Cierre de caja</DialogTitle>
             <DialogDescription>
-              Ingresa el efectivo contado real. Si hay diferencia, la observación será obligatoria.
+              Revisa el detalle del cierre y confirma la autorización correspondiente antes de finalizar la sesión.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Sesión / caja</p>
+                <p className="mt-2 text-sm font-semibold">{data.currentSession?.session_number || "-"}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{data.register?.name || "Caja"}</p>
+              </div>
+              <div className="rounded-xl border p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Abrió</p>
+                <p className="mt-2 text-sm font-semibold">{data.currentSession?.opened_by_name || "Usuario"}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {data.currentSession?.opened_at ? formatDateTime(data.currentSession.opened_at) : "Sin fecha"}
+                </p>
+              </div>
               <div className="rounded-xl border p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Esperado</p>
                 <p className="mt-2 text-xl font-semibold">{formatMoney(expectedAmount)}</p>
@@ -787,20 +514,49 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
               </div>
             </div>
 
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              value={countedAmount}
-              onChange={(event) => setCountedAmount(event.target.value)}
-              placeholder="Efectivo contado"
-            />
-            <Textarea
-              rows={4}
-              value={closingNote}
-              onChange={(event) => setClosingNote(event.target.value)}
-              placeholder="Observación de cierre. Será obligatoria si existe diferencia."
-            />
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Efectivo contado</p>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={countedAmount}
+                  onChange={(event) => setCountedAmount(event.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Autorización</p>
+                <Input
+                  value={requiresClosePassword ? closePassword : (currentUser?.full_name || currentUser?.email || "Tu usuario")}
+                  readOnly={!requiresClosePassword}
+                  type={requiresClosePassword ? "password" : "text"}
+                  onChange={(event) => setClosePassword(event.target.value)}
+                  placeholder={requiresClosePassword ? "Contraseña de admin u owner" : "Cierre sin contraseña"}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Observación de cierre</p>
+              <Textarea
+                rows={4}
+                value={closingNote}
+                onChange={(event) => setClosingNote(event.target.value)}
+                placeholder="Será obligatoria si existe diferencia."
+              />
+            </div>
+
+            <Alert>
+              <IconClock className="h-4 w-4" />
+              <AlertTitle>{requiresClosePassword ? "Se registrará la autorización" : "No se requiere contraseña"}</AlertTitle>
+              <AlertDescription>
+                {requiresClosePassword
+                  ? "La contraseña de un admin u owner se usará para registrar quién autorizó el cierre."
+                  : "El cierre se registrará con tu usuario y quedará en la bitácora de caja."}
+              </AlertDescription>
+            </Alert>
 
             {requiresClosingNote ? (
               <Alert variant="destructive">
@@ -834,7 +590,7 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
               <Button
                 className="min-w-40"
                 variant="destructive"
-                disabled={isPending || !countedAmount}
+                disabled={isPending || !countedAmount || (requiresClosePassword && !closePassword.trim())}
                 onClick={onCloseSession}
               >
                 <IconDoorExit className="h-4 w-4" />
