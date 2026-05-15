@@ -1,14 +1,16 @@
 "use client";
 
 import { useTransition } from "react";
+import { IconTrash } from "@tabler/icons-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { deactivateProduct } from "@/features/inventory/actions/inventory-actions";
-
 export function ProductDeactivateButton({
   productId,
+  size = "sm",
 }: {
   productId: string;
+  size?: "sm" | "default" | "icon";
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -16,7 +18,7 @@ export function ProductDeactivateButton({
     <Button
       type="button"
       variant="outline"
-      size="sm"
+      size={size === "icon" ? "icon" : size}
       disabled={isPending}
       onClick={() => {
         startTransition(async () => {
@@ -30,7 +32,7 @@ export function ProductDeactivateButton({
         });
       }}
     >
-      Desactivar
+      {size === "icon" ? <IconTrash className="h-4 w-4" /> : "Desactivar"}
     </Button>
   );
 }

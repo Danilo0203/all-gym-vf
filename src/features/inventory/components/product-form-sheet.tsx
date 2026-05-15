@@ -13,14 +13,38 @@ import { saveProduct, type ProductInventoryItem } from "@/features/inventory/act
 interface ProductFormSheetProps {
   product?: ProductInventoryItem | null;
   trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function ProductFormSheet({ product = null, trigger }: ProductFormSheetProps) {
-  const [open, setOpen] = useState(false);
+export function ProductFormSheet({
+  product = null,
+  trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+}: ProductFormSheetProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isActive, setIsActive] = useState(product?.is_active ?? true);
+  const [costPrice, setCostPrice] = useState(product?.cost_price ?? 0);
+  const [salePrice, setSalePrice] = useState(product?.sale_price ?? 0);
   const formRef = useRef<HTMLFormElement | null>(null);
   const isEditing = Boolean(product);
+
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = isControlled ? controlledOnOpenChange || setInternalOpen : setInternalOpen;
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      setIsActive(product?.is_active ?? true);
+      setCostPrice(product?.cost_price ?? 0);
+      setSalePrice(product?.sale_price ?? 0);
+    }
+    setOpen(nextOpen);
+  };
+
+  const profit = salePrice - costPrice;
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -48,12 +72,22 @@ export function ProductFormSheet({ product = null, trigger }: ProductFormSheetPr
   );
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>{trigger || defaultTrigger}</SheetTrigger>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      {trigger !== undefined ? (
+        trigger ? (
+          <SheetTrigger asChild>{trigger}</SheetTrigger>
+        ) : null
+      ) : (
+        <SheetTrigger asChild>{defaultTrigger}</SheetTrigger>
+      )}
       <SheetContent className="flex h-full w-full flex-col gap-0 p-0 sm:max-w-xl">
         <SheetHeader className="border-b px-6 py-4">
           <SheetTitle>{isEditing ? "Editar producto" : "Nuevo producto"}</SheetTitle>
-          <SheetDescription>Registra imagen, código, costo y precio de venta en GTQ.</SheetDescription>
+          <SheetDescription>
+            {isEditing
+              ? "Modifica los datos del producto."
+              : "Registra imagen, código, costo y precio de venta en GTQ."}
+          </SheetDescription>
         </SheetHeader>
 
         <form ref={formRef} onSubmit={onSubmit} className="flex flex-1 flex-col overflow-hidden">
@@ -72,7 +106,12 @@ export function ProductFormSheet({ product = null, trigger }: ProductFormSheetPr
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="product-barcode">Código de barras</Label>
-                <Input id="product-barcode" name="barcode" defaultValue={product?.barcode || ""} placeholder="Escaneable" />
+                <Input
+                  id="product-barcode"
+                  name="barcode"
+                  defaultValue={product?.barcode || ""}
+                  placeholder="Escaneable"
+                />
               </div>
             </div>
 
@@ -85,7 +124,8 @@ export function ProductFormSheet({ product = null, trigger }: ProductFormSheetPr
                   type="number"
                   min="0"
                   step="0.01"
-                  defaultValue={product?.cost_price ?? 0}
+                  value={costPrice || ""}
+                  onChange={(e) => setCostPrice(Number(e.target.value) || 0)}
                   required
                 />
               </div>
@@ -97,11 +137,45 @@ export function ProductFormSheet({ product = null, trigger }: ProductFormSheetPr
                   type="number"
                   min="0"
                   step="0.01"
-                  defaultValue={product?.sale_price ?? 0}
+                  value={salePrice || ""}
+                  onChange={(e) => setSalePrice(Number(e.target.value) || 0)}
                   required
                 />
               </div>
             </div>
+
+            <div className="flex flex-col gap-2">
+              <Label>Ganancia unitaria</Label>
+              <Input
+                type="text"
+                value={new Intl.NumberFormat("es-GT", { style: "currency", currency: "GTQ" }).format(profit)}
+                disabled
+                className={profit >= 0 ? "text-emerald-600" : "text-red-500"}
+              />
+            </div>
+
+            {isEditing ? (
+              <div className="flex flex-col gap-2">
+                <Label>Stock actual</Label>
+                <Input type="text" value={product?.stock_quantity ?? 0} disabled />
+                <p className="text-xs text-muted-foreground">El stock se ajusta desde el panel de Inventario.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="product-quantity">Cantidad inicial</Label>
+                <Input
+                  id="product-quantity"
+                  name="initial_quantity"
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  defaultValue={0}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Stock con el que arranca el producto. Déjalo en 0 si aún no tienes unidades.
+                </p>
+              </div>
+            )}
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="product-image">Imagen</Label>

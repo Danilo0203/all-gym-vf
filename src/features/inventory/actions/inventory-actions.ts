@@ -203,6 +203,7 @@ export async function saveProduct(formData: FormData) {
   const salePrice = Number(formData.get("sale_price") || 0);
   const isActive = formData.get("is_active") !== "false";
   const imageFile = formData.get("image");
+  const isEditing = Boolean(productId);
 
   if (!name || name.length < 2) {
     return { success: false, error: "Ingresa el nombre del producto." };
@@ -250,6 +251,21 @@ export async function saveProduct(formData: FormData) {
 
     if (imageError) {
       return { success: false, error: "El producto se guardó, pero no se pudo asociar la imagen." };
+    }
+  }
+
+  if (!isEditing) {
+    const initialQuantity = Number(formData.get("initial_quantity") || 0);
+    if (Number.isFinite(initialQuantity) && initialQuantity > 0) {
+      const { success: movementOk, error: movementError } = await recordInventoryMovement({
+        productId: savedProduct.id,
+        movementType: "entry",
+        quantity: initialQuantity,
+        note: "Stock inicial",
+      });
+      if (!movementOk) {
+        console.warn("No se pudo registrar el stock inicial:", movementError);
+      }
     }
   }
 

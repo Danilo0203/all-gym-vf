@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { IconLoader2, IconPlus, IconRefresh, IconTransferOut } from "@tabler/icons-react";
+import { IconLoader2, IconRefresh, IconTransferOut } from "@tabler/icons-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -19,11 +19,11 @@ interface InventoryActionDialogProps {
   product: ProductInventoryItem;
 }
 
-type Mode = "entry" | "manual_exit" | "adjustment";
+type Mode = "manual_exit" | "adjustment";
 
 export function InventoryActionDialog({ product }: InventoryActionDialogProps) {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<Mode>("entry");
+  const [mode, setMode] = useState<Mode>("manual_exit");
   const [quantity, setQuantity] = useState("");
   const [unitCost, setUnitCost] = useState(product.cost_price.toFixed(2));
   const [note, setNote] = useState("");
@@ -32,10 +32,14 @@ export function InventoryActionDialog({ product }: InventoryActionDialogProps) {
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsedQuantity = Number(quantity);
-    const parsedUnitCost = Number(unitCost);
 
     if (!Number.isFinite(parsedQuantity) || parsedQuantity < 0) {
       toast.error("Ingresa una cantidad válida.");
+      return;
+    }
+
+    if (mode === "manual_exit" && parsedQuantity === 0) {
+      toast.error("La cantidad debe ser mayor a 0.");
       return;
     }
 
@@ -47,7 +51,7 @@ export function InventoryActionDialog({ product }: InventoryActionDialogProps) {
               productId: product.id,
               movementType: mode,
               quantity: parsedQuantity,
-              unitCost: Number.isFinite(parsedUnitCost) ? parsedUnitCost : null,
+              unitCost: Number.isFinite(Number(unitCost)) ? Number(unitCost) : null,
               note,
             });
 
@@ -56,7 +60,7 @@ export function InventoryActionDialog({ product }: InventoryActionDialogProps) {
         return;
       }
 
-      toast.success("Inventario actualizado");
+      toast.success(mode === "adjustment" ? "Stock ajustado" : "Salida registrada");
       setOpen(false);
       setQuantity("");
       setNote("");
@@ -66,14 +70,14 @@ export function InventoryActionDialog({ product }: InventoryActionDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <IconRefresh data-icon="inline-start" />
-          Inventario
+        <Button variant="ghost" size="icon" className="h-8 w-8">
+          <IconRefresh className="h-4 w-4" />
+          <span className="sr-only">Inventario</span>
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Ajustar inventario</DialogTitle>
+          <DialogTitle>Inventario</DialogTitle>
           <DialogDescription>{product.name}</DialogDescription>
         </DialogHeader>
 
@@ -86,12 +90,6 @@ export function InventoryActionDialog({ product }: InventoryActionDialogProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="entry">
-                    <span className="inline-flex items-center gap-2">
-                      <IconPlus data-icon="inline-start" />
-                      Entrada
-                    </span>
-                  </SelectItem>
                   <SelectItem value="manual_exit">
                     <span className="inline-flex items-center gap-2">
                       <IconTransferOut data-icon="inline-start" />

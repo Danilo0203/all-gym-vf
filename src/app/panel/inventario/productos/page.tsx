@@ -22,10 +22,6 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
 
   const resolvedSearchParams = await searchParams;
   searchParamsCache.parse(resolvedSearchParams);
-  const page = searchParamsCache.get("page");
-  const perPage = searchParamsCache.get("perPage");
-  const name = searchParamsCache.get("name");
-  const isActive = searchParamsCache.get("is_active");
 
   return (
     <PageContainer
@@ -34,7 +30,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       pageDescription="Catálogo, precios y stock actual de productos."
     >
       <Suspense fallback={<DataTableSkeleton columnCount={7} rowCount={8} filterCount={2} />}>
-        <ProductsListing page={page} perPage={perPage} name={name} isActive={isActive} />
+        <ProductsListing />
       </Suspense>
     </PageContainer>
   );
