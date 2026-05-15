@@ -9,7 +9,6 @@ import {
   IconSparkles,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
-import { createBrowserClient } from "@supabase/ssr";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,7 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { useCurrentUser } from "@/features/profile/hooks/use-profile";
-import { clearPwaCaches } from "@/lib/pwa/client-cache";
+import { signOutCurrentUser } from "@/lib/auth/client-sign-out";
 import { toast } from "sonner";
 
 export function NavUser() {
@@ -34,14 +33,10 @@ export function NavUser() {
 
   const handleSignOut = async () => {
     try {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
-      );
-      await clearPwaCaches();
-      await supabase.auth.signOut();
+      await signOutCurrentUser();
       toast.success("Sesión cerrada correctamente");
-      router.push("/iniciar-sesion");
+      router.replace("/iniciar-sesion");
+      router.refresh();
     } catch (error) {
       toast.error("Error al cerrar sesión");
       console.error("Error signing out:", error);

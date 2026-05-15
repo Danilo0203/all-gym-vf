@@ -12,23 +12,18 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter } from 'next/navigation';
-import { createBrowserClient } from '@supabase/ssr';
 import { useCurrentUser } from '@/features/profile/hooks/use-profile';
-import { clearPwaCaches } from "@/lib/pwa/client-cache";
 import { IconUser, IconSettings, IconLogout } from '@tabler/icons-react';
+import { signOutCurrentUser } from '@/lib/auth/client-sign-out';
 
 export function UserNav() {
   const router = useRouter();
   const { data: user, isPending } = useCurrentUser();
 
   const handleSignOut = async () => {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!
-    );
-    await clearPwaCaches();
-    await supabase.auth.signOut();
-    router.push('/iniciar-sesion');
+    await signOutCurrentUser();
+    router.replace('/iniciar-sesion');
+    router.refresh();
   };
 
   // Loading state

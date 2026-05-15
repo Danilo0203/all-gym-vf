@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { IconLogout } from "@tabler/icons-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { clearPwaCaches } from "@/lib/pwa/client-cache";
-import { createClient } from "@/lib/supabase/client";
+import { signOutCurrentUser } from "@/lib/auth/client-sign-out";
 
 export function ClientSignOutButton() {
   const router = useRouter();
@@ -18,16 +17,7 @@ export function ClientSignOutButton() {
     setIsSigningOut(true);
 
     try {
-      const supabase = createClient();
-
-      void clearPwaCaches().catch((cacheError) => {
-        console.warn("No fue posible limpiar los caches PWA durante el logout:", cacheError);
-      });
-
-      const { error } = await supabase.auth.signOut({ scope: "local" });
-      if (error) {
-        throw error;
-      }
+      await signOutCurrentUser();
 
       router.replace("/iniciar-sesion");
       router.refresh();
