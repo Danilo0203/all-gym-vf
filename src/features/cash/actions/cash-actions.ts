@@ -71,6 +71,7 @@ interface ProductSaleRow {
   id: string;
   sale_number: string;
   total_amount: number | string;
+  status: string | null;
 }
 
 interface ProductSaleItemRow {
@@ -191,6 +192,7 @@ export interface CashMovementView {
   source_payment_id: string | null;
   source_subscription_id: string | null;
   source_product_sale_id: string | null;
+  source_product_sale_status: string | null;
   product_sale_number: string | null;
   product_sale_items_summary: string | null;
   customer_id: string | null;
@@ -224,6 +226,12 @@ export interface CashProductSaleResult {
   sale_number: string;
   cash_movement_id: string;
   total_amount: number;
+}
+
+export interface CashProductSaleVoidResult {
+  product_sale_id: string;
+  cash_movement_id: string;
+  inventory_movement_count: number;
 }
 
 export interface CashCustomerSearchResult {
@@ -590,6 +598,7 @@ function buildProductSaleSummaryMap(
       sale.id,
       {
         saleNumber: sale.sale_number,
+        status: sale.status || null,
         itemsSummary: itemMap.get(sale.id)?.join(", ") || null,
       },
     ]),
@@ -625,7 +634,7 @@ function mapMovementRows(
   rows: CashMovementRow[],
   profileMap: Map<string, string>,
   paymentStatusMap: Map<string, string | null> = new Map(),
-  productSaleSummaryMap: Map<string, { saleNumber: string; itemsSummary: string | null }> = new Map(),
+  productSaleSummaryMap: Map<string, { saleNumber: string; status: string | null; itemsSummary: string | null }> = new Map(),
 ): CashMovementView[] {
   return rows.map((row) => ({
     id: row.id,
@@ -640,6 +649,9 @@ function mapMovementRows(
     source_payment_id: row.source_payment_id,
     source_subscription_id: row.source_subscription_id,
     source_product_sale_id: row.source_product_sale_id,
+    source_product_sale_status: row.source_product_sale_id
+      ? productSaleSummaryMap.get(row.source_product_sale_id)?.status || null
+      : null,
     product_sale_number: row.source_product_sale_id
       ? productSaleSummaryMap.get(row.source_product_sale_id)?.saleNumber || null
       : null,
@@ -765,11 +777,11 @@ async function getPaymentStatusMap(paymentIds: string[]) {
 async function getProductSaleSummaryMap(productSaleIds: string[]) {
   const adminClient = createAdminClient();
   if (productSaleIds.length === 0) {
-    return new Map<string, { saleNumber: string; itemsSummary: string | null }>();
+    return new Map<string, { saleNumber: string; status: string | null; itemsSummary: string | null }>();
   }
 
   const [{ data: sales, error: salesError }, { data: items, error: itemsError }] = await Promise.all([
-    adminClient.from("product_sales").select("id, sale_number, total_amount").in("id", productSaleIds),
+    adminClient.from("product_sales").select("id, sale_number, total_amount, status").in("id", productSaleIds),
     adminClient
       .from("product_sale_items")
       .select("product_sale_id, product_name, quantity, line_total")
@@ -1723,10 +1735,7 @@ export async function runRenewSubscriptionWithPayment(params: {
 }
 
 export async function getPaymentReversalContext(paymentId: string): Promise<CashPaymentReversalContext | null> {
-  const access = await requireCashAccess();
-  if (!access.isOwner && !access.permissions.includes("cash.reverse_payment")) {
-    throw new Error("Solo administradores pueden revertir pagos");
-  }
+  await requireCashAccess();
 
   const adminClient = createAdminClient();
   const { data: paymentRow, error: paymentError } = await adminClient
@@ -1794,9 +1803,6 @@ export async function getPaymentReversalContext(paymentId: string): Promise<Cash
 
 export async function reverseAndRecreatePayment(input: ReversePaymentInput) {
   const access = await requireCashAccess();
-  if (!access.isOwner && !access.permissions.includes("cash.reverse_payment")) {
-    throw new Error("Solo administradores pueden revertir pagos");
-  }
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("reverse_and_recreate_payment", {
@@ -1914,5 +1920,36 @@ export async function sellProductsFromCashSession(params: {
     sale_number: String(result.sale_number || ""),
     cash_movement_id: String(result.cash_movement_id || ""),
     total_amount: Number(result.total_amount || 0),
+  };
+}
+
+export async function voidProductSaleFromCashSession(params: {
+  productSaleId: string;
+  note?: string | null;
+}): Promise<CashProductSaleVoidResult> {
+  const access = await requireCashAccess();
+  await requireOperableOpenCashSession(access);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("void_product_sale_from_cash_session", {
+    p_product_sale_id: params.productSaleId,
+    p_note: params.note?.trim() || null,
+  });
+
+  if (error) {
+    throw toCashActionError(error, "No se pudo anular la venta");
+  }
+
+  revalidatePath("/panel/caja");
+  revalidatePath("/panel/caja/historial");
+  revalidatePath("/panel/inventario/productos");
+  revalidatePath("/panel/inventario/movimientos");
+  revalidatePath("/panel/resumen");
+
+  const result = (data || {}) as Partial<CashProductSaleVoidResult>;
+  return {
+    product_sale_id: String(result.product_sale_id || ""),
+    cash_movement_id: String(result.cash_movement_id || ""),
+    inventory_movement_count: Number(result.inventory_movement_count || 0),
   };
 }

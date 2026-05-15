@@ -5,26 +5,22 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { toast } from "sonner";
-import {
-  IconAlertCircle,
-  IconClock,
-  IconDoorExit,
-  IconLogin2,
-  IconRefresh,
-  IconUserPlus,
-} from "@tabler/icons-react";
+import { IconAlertCircle, IconArrowsExchange, IconClock, IconDoorExit, IconLogin2, IconRefresh, IconUserPlus } from "@tabler/icons-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { CustomerFormSheet } from "@/features/customers/components/customer-form-sheet";
 import { closeCashSession, type CashDashboardData, openCashSession } from "@/features/cash/actions/cash-actions";
 import { CashCustomerPaymentDialog } from "@/features/cash/components/cash-customer-payment-dialog";
 import { useCurrentUser } from "@/features/profile/hooks/use-profile";
 import { QuickProductSalePanel } from "@/features/cash/components/quick-product-sale-panel";
+import { ReversePaymentDialog } from "@/features/cash/components/reverse-payment-dialog";
+import { ReverseProductSaleDialog } from "@/features/cash/components/reverse-product-sale-dialog";
 
 function formatMoney(amount: number | null | undefined) {
   const safeAmount = typeof amount === "number" ? amount : 0;
@@ -86,38 +82,202 @@ function SummarySessionCard({
   openedByName: string;
 }) {
   return (
-    <div data-summary-card className="rounded-[24px] border border-border/70 bg-muted/20 p-4 sm:p-5">
-      <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={getSessionStatusBadgeVariant(status)}>{getSessionStatusLabel(status)}</Badge>
-            <span className="inline-flex items-center rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground">
-              Caja {registerName}
-            </span>
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-[0.68rem] uppercase tracking-[0.28em] text-muted-foreground">Sesión activa</p>
-            <h3 className="text-2xl font-bold tracking-tight sm:text-3xl">{sessionNumber}</h3>
-          </div>
+    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <div className="min-w-0 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={getSessionStatusBadgeVariant(status)} className="h-6 px-2 text-[11px]">
+            {getSessionStatusLabel(status)}
+          </Badge>
+          <span className="inline-flex items-center rounded-full border border-border/70 bg-background/70 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+            Caja {registerName}
+          </span>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[540px]">
-          <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
-            <p className="text-[0.68rem] uppercase tracking-[0.28em] text-muted-foreground">Cajero</p>
-            <p className="mt-2 text-sm font-semibold tracking-tight sm:text-base">{openedByName}</p>
-          </div>
-          <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
-            <p className="text-[0.68rem] uppercase tracking-[0.28em] text-muted-foreground">Apertura</p>
-            <p className="mt-2 text-sm font-semibold tracking-tight sm:text-base">{formatDateTime(openedAt)}</p>
-          </div>
-          <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
-            <p className="text-[0.68rem] uppercase tracking-[0.28em] text-muted-foreground">Estado</p>
-            <p className="mt-2 text-sm font-semibold tracking-tight sm:text-base">{getSessionStatusLabel(status)}</p>
-          </div>
+        <div className="space-y-0.5">
+          <p className="text-[0.62rem] uppercase tracking-[0.26em] text-muted-foreground">Sesión activa</p>
+          <h3 className="truncate text-xl font-bold tracking-tight sm:text-2xl">{sessionNumber}</h3>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 xl:min-w-[480px] xl:max-w-[560px]">
+        <div className="rounded-xl border border-border/60 bg-background/60 px-3 py-2.5">
+          <p className="text-[0.62rem] uppercase tracking-[0.26em] text-muted-foreground">Cajero</p>
+          <p className="mt-1 truncate text-sm font-semibold leading-tight">{openedByName}</p>
+        </div>
+        <div className="rounded-xl border border-border/60 bg-background/60 px-3 py-2.5">
+          <p className="text-[0.62rem] uppercase tracking-[0.26em] text-muted-foreground">Apertura</p>
+          <p className="mt-1 truncate text-sm font-semibold leading-tight">{formatDateTime(openedAt)}</p>
+        </div>
+        <div className="rounded-xl border border-border/60 bg-background/60 px-3 py-2.5">
+          <p className="text-[0.62rem] uppercase tracking-[0.26em] text-muted-foreground">Estado</p>
+          <p className="mt-1 truncate text-sm font-semibold leading-tight">{getSessionStatusLabel(status)}</p>
         </div>
       </div>
     </div>
+  );
+}
+
+function getMovementTypeLabel(movementType: CashDashboardData["activityMovements"][number]["movement_type"]) {
+  switch (movementType) {
+    case "sale":
+      return "Cobro";
+    case "manual_income":
+      return "Ingreso manual";
+    case "withdrawal":
+      return "Retiro";
+    case "refund":
+      return "Reembolso";
+    case "adjustment":
+      return "Ajuste";
+    case "void":
+      return "Reverso";
+    default:
+      return movementType;
+  }
+}
+
+function getMovementTitle(movement: CashDashboardData["activityMovements"][number]) {
+  if (movement.movement_type === "sale" && movement.source_product_sale_id) {
+    return movement.product_sale_number ? `Venta de productos ${movement.product_sale_number}` : "Venta de productos";
+  }
+
+  if (movement.movement_type === "sale") {
+    return movement.customer_name ? `Cobro de ${movement.customer_name}` : "Cobro registrado";
+  }
+
+  if (movement.movement_type === "manual_income") {
+    return "Ingreso manual";
+  }
+
+  if (movement.movement_type === "withdrawal") {
+    return "Retiro de caja";
+  }
+
+  if (movement.movement_type === "refund") {
+    return "Reembolso";
+  }
+
+  if (movement.movement_type === "adjustment") {
+    return "Ajuste";
+  }
+
+  return "Movimiento";
+}
+
+function getMovementDescription(movement: CashDashboardData["activityMovements"][number]) {
+  if (movement.movement_type === "sale" && movement.source_product_sale_id) {
+    return movement.product_sale_items_summary || movement.note || "Venta registrada desde caja.";
+  }
+
+  return movement.note || movement.created_by_name || "Movimiento operativo.";
+}
+
+function RecentMovementsCard({
+  movements,
+  canReverseCash,
+}: {
+  movements: CashDashboardData["activityMovements"];
+  canReverseCash: boolean;
+}) {
+  const recentMovements = movements.slice(0, 8);
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <CardTitle>Movimientos recientes</CardTitle>
+          <CardDescription>Resumen compacto de la sesión actual y movimientos fuera de sesión.</CardDescription>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/panel/caja/historial">Ver historial</Link>
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {recentMovements.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No hay movimientos recientes para mostrar.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Hora</TableHead>
+                <TableHead>Movimiento</TableHead>
+                <TableHead>Monto</TableHead>
+                <TableHead>Impacto</TableHead>
+                <TableHead className="text-right">Acción</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {recentMovements.map((movement) => {
+                const canReversePayment =
+                  canReverseCash &&
+                  movement.movement_type === "sale" &&
+                  movement.source_payment_id &&
+                  movement.source_payment_status === "posted";
+                const canReverseProductSale =
+                  canReverseCash &&
+                  movement.movement_type === "sale" &&
+                  movement.source_product_sale_id &&
+                  movement.source_product_sale_status === "posted";
+
+                return (
+                  <TableRow key={movement.id} className={movement.session_link_status === "out_of_session" ? "bg-muted/20" : undefined}>
+                    <TableCell className="align-top text-sm font-medium">{formatDateTime(movement.created_at)}</TableCell>
+                    <TableCell className="min-w-[18rem] align-top">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={movement.movement_type === "void" ? "destructive" : "secondary"} className="h-6 px-2 text-[11px]">
+                            {getMovementTypeLabel(movement.movement_type)}
+                          </Badge>
+                          {movement.session_link_status === "out_of_session" ? (
+                            <Badge variant="outline" className="h-6 px-2 text-[11px]">
+                              Fuera de sesión
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="font-medium">{getMovementTitle(movement)}</p>
+                        <p className="text-xs text-muted-foreground">{getMovementDescription(movement)}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell className="align-top font-medium">{formatMoney(movement.amount)}</TableCell>
+                    <TableCell className="align-top font-medium">{formatMoney(movement.cash_effect_amount)}</TableCell>
+                    <TableCell className="align-top text-right">
+                      {canReversePayment ? (
+                        <ReversePaymentDialog
+                          paymentId={movement.source_payment_id!}
+                          sourceCategory={movement.category}
+                          conceptLabel={movement.source_product_sale_id ? "Venta" : "Cobro"}
+                          trigger={
+                            <Button variant="outline" size="sm" className="gap-2">
+                              <IconArrowsExchange className="h-4 w-4" />
+                              Revertir
+                            </Button>
+                          }
+                        />
+                      ) : canReverseProductSale ? (
+                        <ReverseProductSaleDialog
+                          productSaleId={movement.source_product_sale_id!}
+                          saleNumber={movement.product_sale_number}
+                          totalAmount={movement.amount}
+                          paymentMethod={movement.payment_method}
+                          trigger={
+                            <Button variant="outline" size="sm" className="gap-2">
+                              <IconArrowsExchange className="h-4 w-4" />
+                              Revertir
+                            </Button>
+                          }
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -189,7 +349,10 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
   const router = useRouter();
   const { data: currentUser } = useCurrentUser();
   const canOperateCash = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("cash.operate"));
-  const canManageMembership = Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("customers.manage_membership"));
+  const canReverseCash = canOperateCash;
+  const canManageMembership = Boolean(
+    currentUser?.isOwner || currentUser?.permissions?.includes("customers.manage_membership"),
+  );
   const summaryCardsRef = useRef<HTMLDivElement | null>(null);
   const [isPending, startTransition] = useTransition();
   const [openingAmount, setOpeningAmount] = useState("0.00");
@@ -199,7 +362,9 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
   const [closePassword, setClosePassword] = useState("");
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const canCloseWithoutPassword = Boolean(
-    currentUser?.isOwner || currentUser?.role === "admin" || currentUser?.permissions?.includes("cash.close_without_admin_password"),
+    currentUser?.isOwner ||
+    currentUser?.role === "admin" ||
+    currentUser?.permissions?.includes("cash.close_without_admin_password"),
   );
   const requiresClosePassword = Boolean(currentUser) && !canCloseWithoutPassword;
 
@@ -381,7 +546,7 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
   return (
     <div className="space-y-6">
       <Card className="overflow-hidden border-border/70 bg-card shadow-sm">
-        <CardContent className="py-6">
+        <CardContent>
           <div ref={summaryCardsRef} className="space-y-4">
             <SummarySessionCard
               sessionNumber={data.currentSession.session_number}
@@ -405,8 +570,12 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
         </Alert>
       ) : null}
 
+      <RecentMovementsCard movements={data.activityMovements} canReverseCash={canReverseCash} />
+
       {data.canOperateSession ? (
-        <QuickProductSalePanel canSell={Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("inventory.sell"))} />
+        <QuickProductSalePanel
+          canSell={Boolean(currentUser?.isOwner || currentUser?.permissions?.includes("inventory.sell"))}
+        />
       ) : null}
 
       <Card>
@@ -529,7 +698,9 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
               <div className="space-y-2">
                 <p className="text-sm font-medium">Autorización</p>
                 <Input
-                  value={requiresClosePassword ? closePassword : (currentUser?.full_name || currentUser?.email || "Tu usuario")}
+                  value={
+                    requiresClosePassword ? closePassword : currentUser?.full_name || currentUser?.email || "Tu usuario"
+                  }
                   readOnly={!requiresClosePassword}
                   type={requiresClosePassword ? "password" : "text"}
                   onChange={(event) => setClosePassword(event.target.value)}
@@ -550,7 +721,9 @@ export function CashDashboardClient({ data }: { data: CashDashboardData }) {
 
             <Alert>
               <IconClock className="h-4 w-4" />
-              <AlertTitle>{requiresClosePassword ? "Se registrará la autorización" : "No se requiere contraseña"}</AlertTitle>
+              <AlertTitle>
+                {requiresClosePassword ? "Se registrará la autorización" : "No se requiere contraseña"}
+              </AlertTitle>
               <AlertDescription>
                 {requiresClosePassword
                   ? "La contraseña de un admin u owner se usará para registrar quién autorizó el cierre."

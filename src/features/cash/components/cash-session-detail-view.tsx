@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { IconArrowsExchange } from "@tabler/icons-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { CashMovementView, CashSessionDetailData, PaymentMethod } from "@/features/cash/actions/cash-actions";
+import { ReversePaymentDialog } from "@/features/cash/components/reverse-payment-dialog";
+import { ReverseProductSaleDialog } from "@/features/cash/components/reverse-product-sale-dialog";
 
 type MovementStoryRole = "original" | "void" | "corrected";
 
@@ -119,6 +122,10 @@ function getStateBadge(movement: CashMovementView, meta: MovementStoryMeta | nul
     return { label: "Revertido", variant: "warning" as const };
   }
 
+  if (movement.movement_type === "sale" && movement.source_product_sale_status === "voided") {
+    return { label: "Anulada", variant: "warning" as const };
+  }
+
   if (meta?.role === "corrected") {
     return { label: "Activo", variant: "success" as const };
   }
@@ -188,6 +195,14 @@ function getMovementNarrative(movement: CashMovementView, meta: MovementStoryMet
   switch (movement.movement_type) {
     case "sale":
       if (movement.category === "product") {
+        if (movement.source_product_sale_status === "voided") {
+          return {
+            title: movement.product_sale_number ? `Venta anulada ${movement.product_sale_number}` : "Venta anulada",
+            description: movement.product_sale_items_summary || movement.note || "Esta venta fue anulada y el inventario fue restaurado.",
+            reference: movement.source_product_sale_id ? `Venta ${shortId(movement.source_product_sale_id)}` : null,
+          };
+        }
+
         return {
           title: movement.product_sale_number ? `Venta de productos ${movement.product_sale_number}` : "Venta de productos",
           description: movement.product_sale_items_summary || movement.note || "Venta registrada desde caja.",
@@ -358,10 +373,17 @@ function getRowTone(meta: MovementStoryMeta | null, movement: CashMovementView) 
   if (meta?.role === "corrected") return "bg-emerald-500/5";
   if (meta?.role === "void" || movement.movement_type === "void") return "bg-destructive/5";
   if (movement.movement_type === "sale" && movement.source_payment_status === "reversed") return "bg-amber-500/5";
+  if (movement.movement_type === "sale" && movement.source_product_sale_status === "voided") return "bg-amber-500/5";
   return "";
 }
 
-export function CashSessionDetailView({ data }: { data: CashSessionDetailData }) {
+export function CashSessionDetailView({
+  data,
+  canReverseMovements,
+}: {
+  data: CashSessionDetailData;
+  canReverseMovements: boolean;
+}) {
   const { session, summary, movements } = data;
   const movementGroups = buildMovementDisplayGroups(movements);
 
@@ -469,6 +491,7 @@ export function CashSessionDetailView({ data }: { data: CashSessionDetailData })
                   <TableHead>Impacto en caja</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Usuario</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -477,6 +500,39 @@ export function CashSessionDetailView({ data }: { data: CashSessionDetailData })
                     const movementBadge = getMovementTypeBadge(movement, meta);
                     const stateBadge = getStateBadge(movement, meta);
                     const narrative = getMovementNarrative(movement, meta);
+                    const reverseAction =
+                      canReverseMovements && movement.movement_type === "sale" ? (
+                        movement.source_payment_id && movement.source_payment_status === "posted" ? (
+                          <ReversePaymentDialog
+                            paymentId={movement.source_payment_id!}
+                            sourceCategory={movement.category}
+                            conceptLabel={movement.category === "product" ? "Venta" : "Cobro"}
+                            trigger={
+                              <Button variant="outline" size="sm" className="gap-2">
+                                <IconArrowsExchange className="h-4 w-4" />
+                                Revertir
+                              </Button>
+                            }
+                          />
+                        ) : movement.source_product_sale_id && movement.source_product_sale_status === "posted" ? (
+                          <ReverseProductSaleDialog
+                            productSaleId={movement.source_product_sale_id!}
+                            saleNumber={movement.product_sale_number}
+                            totalAmount={movement.amount}
+                            paymentMethod={movement.payment_method}
+                            trigger={
+                              <Button variant="outline" size="sm" className="gap-2">
+                                <IconArrowsExchange className="h-4 w-4" />
+                                Revertir
+                              </Button>
+                            }
+                          />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      );
 
                     return (
                       <TableRow
@@ -521,6 +577,7 @@ export function CashSessionDetailView({ data }: { data: CashSessionDetailData })
                           <Badge variant={stateBadge.variant}>{stateBadge.label}</Badge>
                         </TableCell>
                         <TableCell>{movement.created_by_name}</TableCell>
+                        <TableCell className="text-right">{reverseAction}</TableCell>
                       </TableRow>
                     );
                   });
@@ -531,7 +588,7 @@ export function CashSessionDetailView({ data }: { data: CashSessionDetailData })
 
                   return [
                     <TableRow key={`${group.key}:story`} className="hover:bg-transparent">
-                      <TableCell colSpan={8} className="bg-muted/20 py-2">
+                      <TableCell colSpan={9} className="bg-muted/20 py-2">
                         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           <Badge variant="outline">{group.storyLabel}</Badge>
                           <span>Se muestra el cobro original, su reverso y el registro corregido.</span>

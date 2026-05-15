@@ -24,6 +24,8 @@ export default async function CashSessionDetailPage({ params }: CashSessionDetai
     redirect("/panel");
   }
 
+  const canReverseMovements = access.isOwner || hasPermission(access, "cash.operate");
+
   const { sessionId } = await params;
   let data = null;
   let setupRequired = false;
@@ -47,7 +49,7 @@ export default async function CashSessionDetailPage({ params }: CashSessionDetai
       {setupRequired || !data ? (
         <CashModuleSetupState title="Detalle de caja pendiente de inicializacion" />
       ) : (
-        <CashSessionDetailView data={data} />
+        <CashSessionDetailView data={data} canReverseMovements={canReverseMovements} />
       )}
     </PageContainer>
   );
