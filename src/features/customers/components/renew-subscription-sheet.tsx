@@ -10,7 +10,8 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Form, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Controller } from "react-hook-form";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { FormCheckboxGroup } from "@/components/forms/form-checkbox-group";
 import { FormSelect } from "@/components/forms/form-select";
 import { FormInputGroup } from "@/components/forms/form-input-group";
@@ -192,8 +193,7 @@ export function RenewSubscriptionSheet({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-6 font-sans">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pb-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pb-4">
               {/* SECCIÓN 1: MEMBRESÍA */}
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-primary flex items-center gap-2">
@@ -216,10 +216,10 @@ export function RenewSubscriptionSheet({
                   />
 
                   {/* CALENDARIO DE RANGO */}
-                  <FormField
+                  <Controller
                     control={form.control}
                     name="subscription_period"
-                    render={({ field }) => {
+                    render={({ field, fieldState }) => {
                       const from = field.value?.from;
                       const to = field.value?.to;
                       const daysDiff = from && to ? differenceInDays(to, from) : 0;
@@ -242,8 +242,8 @@ export function RenewSubscriptionSheet({
                       };
 
                       return (
-                        <FormItem className="flex flex-col">
-                          <FormLabel>Vigencia de Suscripción</FormLabel>
+                        <Field className="flex flex-col" data-invalid={fieldState.invalid}>
+                          <FieldLabel>Vigencia de Suscripción</FieldLabel>
                           <div className="grid grid-cols-[1fr_1fr_auto_80px] gap-2 items-center">
                             {/* Fecha Inicio */}
                             <div className="flex flex-col gap-1">
@@ -264,8 +264,8 @@ export function RenewSubscriptionSheet({
                               </div>
                             </div>
                           </div>
-                          <FormMessage />
-                        </FormItem>
+                          <FieldError errors={[fieldState.error]} />
+                        </Field>
                       );
                     }}
                   />
@@ -603,7 +603,6 @@ export function RenewSubscriptionSheet({
                 </div>
               </div>
             </form>
-          </Form>
         </div>
 
         <div className="px-6 py-4 border-t flex justify-end gap-3 sticky bottom-0 bg-background/80 backdrop-blur-md z-10">

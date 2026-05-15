@@ -3,14 +3,8 @@
 import { FieldPath, FieldValues } from 'react-hook-form';
 import { format } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/components/ui/form';
+import { Controller } from 'react-hook-form';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -48,35 +42,28 @@ function FormDatePicker<
   } = config;
 
   return (
-    <FormField
+    <Controller
       control={control}
       name={name}
-      render={({ field }) => (
-        <FormItem className={`flex flex-col ${className}`}>
+      render={({ field, fieldState }) => (
+        <Field data-invalid={fieldState.invalid} className={`flex flex-col ${className}`}>
           {label && (
-            <FormLabel>
+            <FieldLabel>
               {label}
               {required && <span className='ml-1 text-red-500'>*</span>}
-            </FormLabel>
+            </FieldLabel>
           )}
           <Popover modal={false}>
             <PopoverTrigger asChild>
-              <FormControl>
-                <Button
-                  variant='outline'
-                  className={`w-full pl-3 text-left font-normal ${
-                    !field.value && 'text-muted-foreground'
-                  }`}
-                  disabled={disabled}
-                >
-                  {field.value ? (
-                    format(field.value, 'PPP')
-                  ) : (
-                    <span>{placeholder}</span>
-                  )}
-                  <CalendarIcon className='ml-auto h-4 w-4 opacity-50' />
-                </Button>
-              </FormControl>
+              <Button
+                variant='outline'
+                className={`w-full pl-3 text-left font-normal ${!field.value && 'text-muted-foreground'}`}
+                disabled={disabled}
+                aria-invalid={fieldState.invalid}
+              >
+                {field.value ? format(field.value, 'PPP') : <span>{placeholder}</span>}
+                <CalendarIcon className='ml-auto h-4 w-4 opacity-50' />
+              </Button>
             </PopoverTrigger>
             <PopoverContent className='w-auto p-0' align='start'>
               <Calendar
@@ -94,9 +81,9 @@ function FormDatePicker<
               />
             </PopoverContent>
           </Popover>
-          {description && <FormDescription>{description}</FormDescription>}
-          <FormMessage />
-        </FormItem>
+          {description && <FieldDescription>{description}</FieldDescription>}
+          <FieldError errors={[fieldState.error]} />
+        </Field>
       )}
     />
   );

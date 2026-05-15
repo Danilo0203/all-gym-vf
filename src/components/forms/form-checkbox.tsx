@@ -1,15 +1,8 @@
 'use client';
 
-import { FieldPath, FieldValues } from 'react-hook-form';
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/components/ui/form';
+import { Controller, FieldPath, FieldValues } from 'react-hook-form';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { BaseFormFieldProps } from '@/types/base-form';
 
 interface FormCheckboxProps<
@@ -33,29 +26,27 @@ function FormCheckbox<
   className
 }: FormCheckboxProps<TFieldValues, TName>) {
   return (
-    <FormField
+    <Controller
       control={control}
       name={name}
-      render={({ field }) => (
-        <FormItem
-          className={`flex flex-row items-start space-y-0 space-x-3 ${className}`}
-        >
-          <FormControl>
-            <Checkbox
-              checked={field.value}
-              onCheckedChange={field.onChange}
-              disabled={disabled}
-            />
-          </FormControl>
-          <div className='space-y-1 leading-none'>
-            <FormLabel>
+      render={({ field, fieldState }) => (
+        <Field orientation='horizontal' data-invalid={fieldState.invalid} className={`items-start space-x-3 ${className}`}>
+          <Checkbox
+            id={String(field.name)}
+            checked={field.value}
+            onCheckedChange={field.onChange}
+            disabled={disabled}
+            aria-invalid={fieldState.invalid}
+          />
+          <FieldContent>
+            <FieldLabel htmlFor={String(field.name)}>
               {checkboxLabel || label}
               {required && <span className='ml-1 text-red-500'>*</span>}
-            </FormLabel>
-            {description && <FormDescription>{description}</FormDescription>}
-          </div>
-          <FormMessage />
-        </FormItem>
+            </FieldLabel>
+            {description && <FieldDescription>{description}</FieldDescription>}
+            <FieldError errors={[fieldState.error]} />
+          </FieldContent>
+        </Field>
       )}
     />
   );

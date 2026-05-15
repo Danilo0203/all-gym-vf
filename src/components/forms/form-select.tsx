@@ -1,14 +1,8 @@
 'use client';
 
 import { FieldPath, FieldValues } from 'react-hook-form';
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/components/ui/form';
+import { Controller } from 'react-hook-form';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import {
   Select,
   SelectContent,
@@ -42,42 +36,32 @@ function FormSelect<
   className
 }: FormSelectProps<TFieldValues, TName>) {
   return (
-    <FormField
+    <Controller
       control={control}
       name={name}
-      render={({ field }) => (
-        <FormItem className={className}>
+      render={({ field, fieldState }) => (
+        <Field data-invalid={fieldState.invalid} className={className}>
           {label && (
-            <FormLabel>
+            <FieldLabel htmlFor={String(field.name)}>
               {label}
               {required && <span className='ml-1 text-red-500'>*</span>}
-            </FormLabel>
+            </FieldLabel>
           )}
-          <Select
-            onValueChange={field.onChange}
-            value={field.value ?? undefined}
-            disabled={disabled}
-          >
-            <FormControl>
-              <SelectTrigger>
-                <SelectValue placeholder={placeholder} />
-              </SelectTrigger>
-            </FormControl>
+          <Select onValueChange={field.onChange} value={field.value ?? undefined} disabled={disabled}>
+            <SelectTrigger id={String(field.name)} aria-invalid={fieldState.invalid}>
+              <SelectValue placeholder={placeholder} />
+            </SelectTrigger>
             <SelectContent>
               {options.map((option) => (
-                <SelectItem
-                  key={option.value}
-                  value={option.value}
-                  disabled={option.disabled}
-                >
+                <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
                   {option.label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {description && <FormDescription>{description}</FormDescription>}
-          <FormMessage />
-        </FormItem>
+          {description && <FieldDescription>{description}</FieldDescription>}
+          <FieldError errors={[fieldState.error]} />
+        </Field>
       )}
     />
   );

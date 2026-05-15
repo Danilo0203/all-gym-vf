@@ -1,20 +1,8 @@
 'use client';
 
-import { FieldPath, FieldValues } from 'react-hook-form';
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/components/ui/form';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-  InputGroupText
-} from '@/components/ui/input-group';
+import { Controller, FieldPath, FieldValues } from 'react-hook-form';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group';
 import { BaseFormFieldProps } from '@/types/base-form';
 
 interface FormInputGroupProps<
@@ -28,7 +16,7 @@ interface FormInputGroupProps<
   max?: string | number;
   maxLength?: number;
   pattern?: string;
-  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
   icon?: React.ReactNode;
   iconPosition?: 'start' | 'end';
   addonText?: string;
@@ -60,86 +48,66 @@ function FormInputGroup<
   addonTextPosition = 'start'
 }: FormInputGroupProps<TFieldValues, TName>) {
   return (
-    <FormField
+    <Controller
       control={control}
       name={name}
-      render={({ field }) => (
-        <FormItem className={className}>
+      render={({ field, fieldState }) => (
+        <Field data-invalid={fieldState.invalid} className={className}>
           {label && (
-            <FormLabel>
+            <FieldLabel htmlFor={String(field.name)}>
               {label}
               {required && <span className='ml-1 text-red-500'>*</span>}
-            </FormLabel>
+            </FieldLabel>
           )}
-          <FormControl>
-            <InputGroup data-disabled={disabled}>
-              {/* Icon at start */}
-              {icon && iconPosition === 'start' && (
-                <InputGroupAddon align="inline-start">
-                  {icon}
-                </InputGroupAddon>
-              )}
-              
-              {/* Text addon at start */}
-              {addonText && addonTextPosition === 'start' && (
-                <InputGroupAddon align="inline-start">
-                  <InputGroupText>{addonText}</InputGroupText>
-                </InputGroupAddon>
-              )}
-              
-              <InputGroupInput
-                type={type}
-                placeholder={placeholder}
-                step={step}
-                min={min}
-                max={max}
-                maxLength={maxLength}
-                pattern={pattern}
-                inputMode={inputMode}
-                disabled={disabled}
-                {...field}
-                value={
-                  type === 'number' 
-                    ? (field.value === 0 || field.value === undefined || field.value === null || (typeof field.value === 'number' && isNaN(field.value)) ? '' : field.value)
-                    : (field.value ?? '')
+          <InputGroup data-disabled={disabled}>
+            {icon && iconPosition === 'start' && <InputGroupAddon align='inline-start'>{icon}</InputGroupAddon>}
+            {addonText && addonTextPosition === 'start' && (
+              <InputGroupAddon align='inline-start'>
+                <InputGroupText>{addonText}</InputGroupText>
+              </InputGroupAddon>
+            )}
+            <InputGroupInput
+              id={String(field.name)}
+              type={type}
+              placeholder={placeholder}
+              step={step}
+              min={min}
+              max={max}
+              maxLength={maxLength}
+              pattern={pattern}
+              inputMode={inputMode}
+              disabled={disabled}
+              aria-invalid={fieldState.invalid}
+              {...field}
+              value={
+                type === 'number'
+                  ? field.value === 0 || field.value === undefined || field.value === null || (typeof field.value === 'number' && isNaN(field.value))
+                    ? ''
+                    : field.value
+                  : field.value ?? ''
+              }
+              onChange={(e) => {
+                if (type === 'number') {
+                  const value = e.target.value;
+                  field.onChange(value === '' ? undefined : Number.parseFloat(value));
+                } else if (type === 'tel') {
+                  const numericOnly = e.target.value.replace(/\D/g, '');
+                  field.onChange(maxLength ? numericOnly.slice(0, maxLength) : numericOnly);
+                } else {
+                  field.onChange(e.target.value);
                 }
-                onChange={(e) => {
-                  if (type === 'number') {
-                    const value = e.target.value;
-                    // Allow empty input (will be 0 when submitted via schema default)
-                    if (value === '') {
-                      field.onChange(0);
-                    } else {
-                      const num = parseFloat(value);
-                      field.onChange(isNaN(num) ? 0 : num);
-                    }
-                  } else if (type === "tel") {
-                    const numericOnly = e.target.value.replace(/\D/g, "");
-                    field.onChange(maxLength ? numericOnly.slice(0, maxLength) : numericOnly);
-                  } else {
-                    field.onChange(e.target.value);
-                  }
-                }}
-              />
-              
-              {/* Icon at end */}
-              {icon && iconPosition === 'end' && (
-                <InputGroupAddon align="inline-end">
-                  {icon}
-                </InputGroupAddon>
-              )}
-              
-              {/* Text addon at end */}
-              {addonText && addonTextPosition === 'end' && (
-                <InputGroupAddon align="inline-end">
-                  <InputGroupText>{addonText}</InputGroupText>
-                </InputGroupAddon>
-              )}
-            </InputGroup>
-          </FormControl>
-          {description && <FormDescription>{description}</FormDescription>}
-          <FormMessage />
-        </FormItem>
+              }}
+            />
+            {icon && iconPosition === 'end' && <InputGroupAddon align='inline-end'>{icon}</InputGroupAddon>}
+            {addonText && addonTextPosition === 'end' && (
+              <InputGroupAddon align='inline-end'>
+                <InputGroupText>{addonText}</InputGroupText>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
+          {description && <FieldDescription>{description}</FieldDescription>}
+          <FieldError errors={[fieldState.error]} />
+        </Field>
       )}
     />
   );

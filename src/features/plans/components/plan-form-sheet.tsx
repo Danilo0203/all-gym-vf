@@ -9,10 +9,9 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { FormInput } from "@/components/forms/form-input";
 import { FormTextarea } from "@/components/forms/form-textarea";
-import { Switch } from "@/components/ui/switch";
+import { FormSwitch } from "@/components/forms/form-switch";
 import { IconPlus, IconLoader2 } from "@tabler/icons-react";
 import { useState } from "react";
 import type { SubmitHandler } from "react-hook-form";
@@ -72,77 +71,64 @@ export function PlanFormSheet({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handlePlanSubmit)} className="space-y-6 pb-4">
-              <div className="space-y-4">
-                <h4 className="text-sm font-semibold text-primary flex items-center gap-2">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs">
-                    1
-                  </span>
-                  Información Básica
-                </h4>
-                <div className="space-y-4 pl-4">
+          <form onSubmit={form.handleSubmit(handlePlanSubmit)} className="space-y-6 pb-4">
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-primary flex items-center gap-2">
+                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs">
+                  1
+                </span>
+                Información Básica
+              </h4>
+              <div className="space-y-4 pl-4">
+                <FormInput
+                  control={form.control}
+                  name="name"
+                  label="Nombre del Plan"
+                  placeholder="Ej. Mensual VIP"
+                />
+                <div className="grid grid-cols-2 gap-4">
                   <FormInput
                     control={form.control}
-                    name="name"
-                    label="Nombre del Plan"
-                    placeholder="Ej. Mensual VIP"
+                    name="price"
+                    label="Precio (Q)"
+                    type="number"
+                    placeholder="0.00"
                   />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormInput
-                      control={form.control}
-                      name="price"
-                      label="Precio (Q)"
-                      type="number"
-                      placeholder="0.00"
-                    />
-                    <FormInput
-                      control={form.control}
-                      name="duration_days"
-                      label="Duración (Días)"
-                      type="number"
-                      placeholder="30"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h4 className="text-sm font-semibold text-primary flex items-center gap-2">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs">
-                    2
-                  </span>
-                  Detalles Adicionales
-                </h4>
-                <div className="space-y-4 pl-4">
-                  <FormTextarea
+                  <FormInput
                     control={form.control}
-                    name="description"
-                    label="Descripción"
-                    placeholder="Detalles opcionales del plan..."
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="is_active"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 bg-muted/30">
-                        <div className="space-y-0.5">
-                          <FormLabel className="text-base text-foreground font-semibold">Plan Activo</FormLabel>
-                          <p className="text-xs text-muted-foreground">
-                            Si está desactivado, no aparecerá para nuevos clientes.
-                          </p>
-                        </div>
-                        <FormControl>
-                          <Switch checked={field.value} onCheckedChange={field.onChange} />
-                        </FormControl>
-                      </FormItem>
-                    )}
+                    name="duration_days"
+                    label="Duración (Días)"
+                    type="number"
+                    placeholder="30"
                   />
                 </div>
               </div>
-            </form>
-          </Form>
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-primary flex items-center gap-2">
+                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs">
+                  2
+                </span>
+                Detalles Adicionales
+              </h4>
+              <div className="space-y-4 pl-4">
+                <FormTextarea
+                  control={form.control}
+                  name="description"
+                  label="Descripción"
+                  placeholder="Detalles opcionales del plan..."
+                />
+
+                <FormSwitch
+                  control={form.control}
+                  name="is_active"
+                  label="Plan Activo"
+                  description="Si está desactivado, no aparecerá para nuevos clientes."
+                />
+              </div>
+            </div>
+          </form>
         </div>
 
         <div className="px-6 py-4 border-t flex justify-end gap-3 sticky bottom-0 bg-background/80 backdrop-blur-md z-10">

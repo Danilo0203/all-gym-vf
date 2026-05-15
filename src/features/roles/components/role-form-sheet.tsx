@@ -14,16 +14,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FormInput } from "@/components/forms/form-input";
+import { FieldLabel } from "@/components/ui/field";
 import {
   createRole,
   updateRole,
@@ -249,44 +243,14 @@ export function RoleFormSheet({ open, onOpenChange, role, onSuccess }: RoleFormS
           </div>
         </div>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5 pb-28">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-medium">Nombre del rol</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ej: Supervisor" {...field} className="h-10" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            {!isEditing && (
-              <FormField
-                control={form.control}
-                name="slug"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm font-medium">Slug</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ej: supervisor" {...field} className="h-10" />
-                    </FormControl>
-                    <p className="text-xs text-muted-foreground">
-                      Identificador único. No se puede cambiar después.
-                    </p>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
+        <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5 pb-28">
+            <FormInput control={form.control} name="name" label="Nombre del rol" placeholder="Ej: Supervisor" />
+            {!isEditing && <FormInput control={form.control} name="slug" label="Slug" placeholder="Ej: supervisor" />}
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <FormLabel className="text-sm font-semibold">Permisos</FormLabel>
+                <FieldLabel className="text-sm font-semibold">Permisos</FieldLabel>
                 <Button
                   type="button"
                   variant="ghost"
@@ -316,6 +280,7 @@ export function RoleFormSheet({ open, onOpenChange, role, onSuccess }: RoleFormS
               {moduleEntries.map(([module, modulePerms]) => {
                 const allSelected = modulePerms.every((p) => selectedPermIds.has(p.id));
                 const someSelected = modulePerms.some((p) => selectedPermIds.has(p.id));
+
                 return (
                   <section
                     key={module}
@@ -323,23 +288,21 @@ export function RoleFormSheet({ open, onOpenChange, role, onSuccess }: RoleFormS
                   >
                     <div className="mb-3 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={allSelected}
-                        className={someSelected && !allSelected ? "border-primary" : undefined}
-                        ref={(el) => {
-                          if (el) {
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            (el as any).indeterminate = !allSelected && someSelected;
-                          }
-                        }}
-                        onCheckedChange={() => toggleModule(module, modulePerms)}
-                      />
-                      <span className="text-sm font-semibold capitalize">
-                        {moduleLabels[module] || module}
-                      </span>
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                        {modulePerms.length}
-                      </span>
+                        <Checkbox
+                          checked={allSelected}
+                          className={someSelected && !allSelected ? "border-primary" : undefined}
+                          ref={(el) => {
+                            if (el) {
+                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                              (el as any).indeterminate = !allSelected && someSelected;
+                            }
+                          }}
+                          onCheckedChange={() => toggleModule(module, modulePerms)}
+                        />
+                        <span className="text-sm font-semibold capitalize">{moduleLabels[module] || module}</span>
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                          {modulePerms.length}
+                        </span>
                       </div>
                       <Button
                         type="button"
@@ -379,31 +342,25 @@ export function RoleFormSheet({ open, onOpenChange, role, onSuccess }: RoleFormS
                 </div>
               )}
             </div>
-            </div>
+          </div>
 
-            <div className="sticky bottom-0 z-20 mt-auto border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="sticky bottom-0 z-20 mt-auto border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">{selectedCount}</span> permisos seleccionados
-                de <span className="font-medium text-foreground">{totalPermissions}</span>
+                <span className="font-medium text-foreground">{selectedCount}</span> permisos seleccionados de{" "}
+                <span className="font-medium text-foreground">{totalPermissions}</span>
               </div>
               <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={submitting}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={submitting} className="min-w-36">
-                {submitting ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear rol"}
-              </Button>
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={submitting} className="min-w-36">
+                  {submitting ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear rol"}
+                </Button>
+              </div>
             </div>
-            </div>
-            </div>
-          </form>
-        </Form>
+          </div>
+        </form>
       </SheetContent>
     </Sheet>
   );

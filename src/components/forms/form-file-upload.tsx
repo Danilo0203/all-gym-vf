@@ -1,14 +1,8 @@
 'use client';
 
 import { FieldPath, FieldValues } from 'react-hook-form';
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/components/ui/form';
+import { Controller } from 'react-hook-form';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { BaseFormFieldProps, FileUploadConfig } from '@/types/base-form';
 import { FileUploader } from '@/components/file-uploader';
 
@@ -43,39 +37,34 @@ function FormFileUpload<
   } = config || {};
 
   return (
-    <FormField
+    <Controller
       control={control}
       name={name}
-      render={({ field }) => (
-        <FormItem className={className}>
+      render={({ field, fieldState }) => (
+        <Field data-invalid={fieldState.invalid} className={className}>
           {label && (
-            <FormLabel>
+            <FieldLabel>
               {label}
               {required && <span className='ml-1 text-red-500'>*</span>}
-            </FormLabel>
+            </FieldLabel>
           )}
 
-          <FormControl>
-            <FileUploader
-              value={field.value}
-              onValueChange={field.onChange}
-              onUpload={onUpload}
-              progresses={progresses}
-              accept={acceptedTypes?.reduce(
-                (acc, type) => ({ ...acc, [type]: [] }),
-                {}
-              )}
-              maxSize={maxSize}
-              maxFiles={maxFiles}
-              multiple={multiple}
-              disabled={disabled}
-              {...restConfig}
-            />
-          </FormControl>
+          <FileUploader
+            value={field.value}
+            onValueChange={field.onChange}
+            onUpload={onUpload}
+            progresses={progresses}
+            accept={acceptedTypes?.reduce((acc, type) => ({ ...acc, [type]: [] }), {})}
+            maxSize={maxSize}
+            maxFiles={maxFiles}
+            multiple={multiple}
+            disabled={disabled}
+            {...restConfig}
+          />
 
-          {description && <FormDescription>{description}</FormDescription>}
-          <FormMessage />
-        </FormItem>
+          {description && <FieldDescription>{description}</FieldDescription>}
+          <FieldError errors={[fieldState.error]} />
+        </Field>
       )}
     />
   );

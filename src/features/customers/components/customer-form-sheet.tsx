@@ -11,7 +11,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Controller } from "react-hook-form";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { FormInputGroup } from "@/components/forms/form-input-group";
 import { FormCheckboxGroup } from "@/components/forms/form-checkbox-group";
 import { FormRadioGroup } from "@/components/forms/form-radio-group";
@@ -203,8 +204,7 @@ export function CustomerFormSheet({
         )}
 
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pb-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pb-4">
               {/* 1. LOGIN */}
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-primary flex items-center gap-2">
@@ -252,17 +252,15 @@ export function CustomerFormSheet({
                     placeholder="Nombre Apellido"
                     icon={<IconUser className="h-4 w-4" />}
                   />
-                  <FormField
+                  <Controller
                     control={form.control}
                     name="birth_date"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col w-full">
-                        <FormLabel>Nacimiento</FormLabel>
-                        <FormControl>
-                          <DatePickerInput value={field.value} onChange={field.onChange} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+                    render={({ field, fieldState }) => (
+                      <Field className="flex w-full flex-col" data-invalid={fieldState.invalid}>
+                        <FieldLabel htmlFor={String(field.name)}>Nacimiento</FieldLabel>
+                        <DatePickerInput value={field.value} onChange={field.onChange} />
+                        <FieldError errors={[fieldState.error]} />
+                      </Field>
                     )}
                   />
                   <FormSelect
@@ -316,10 +314,10 @@ export function CustomerFormSheet({
                       />
 
                       {/* CALENDARIO DE RANGO */}
-                      <FormField
+                      <Controller
                         control={form.control}
                         name="subscription_period"
-                        render={({ field }) => {
+                        render={({ field, fieldState }) => {
                           const from = field.value?.from;
                           const to = field.value?.to;
                           const daysDiff = from && to ? differenceInDays(to, from) : 0;
@@ -353,8 +351,8 @@ export function CustomerFormSheet({
                           };
 
                           return (
-                            <FormItem className="flex flex-col">
-                              <FormLabel>Vigencia de Suscripción</FormLabel>
+                            <Field className="flex flex-col" data-invalid={fieldState.invalid}>
+                              <FieldLabel>Vigencia de Suscripción</FieldLabel>
                               <div className="grid grid-cols-[1fr_1fr_auto_80px] gap-2 items-center">
                                 {/* Fecha Inicio */}
                                 <div className="flex flex-col gap-1">
@@ -463,8 +461,8 @@ export function CustomerFormSheet({
                                   </div>
                                 </div>
                               </div>
-                              <FormMessage />
-                            </FormItem>
+                              <FieldError errors={[fieldState.error]} />
+                            </Field>
                           );
                         }}
                       />
@@ -786,7 +784,6 @@ export function CustomerFormSheet({
                 </div>
               </div>
             </form>
-          </Form>
         </div>
         <div className="px-6 py-4 border-t flex justify-end gap-3 sticky bottom-0 bg-background/80 backdrop-blur-md z-10 font-sans">
           <SheetClose asChild>

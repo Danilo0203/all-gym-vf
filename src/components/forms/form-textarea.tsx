@@ -1,14 +1,8 @@
 'use client';
 
 import { FieldPath, FieldValues } from 'react-hook-form';
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/components/ui/form';
+import { Controller } from 'react-hook-form';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { BaseFormFieldProps, TextareaConfig } from '@/types/base-form';
 
@@ -42,37 +36,35 @@ function FormTextarea<
   } = config;
 
   return (
-    <FormField
+    <Controller
       control={control}
       name={name}
-      render={({ field }) => (
-        <FormItem className={className}>
+      render={({ field, fieldState }) => (
+        <Field data-invalid={fieldState.invalid} className={className}>
           {label && (
-            <FormLabel>
+            <FieldLabel htmlFor={String(field.name)}>
               {label}
               {required && <span className='ml-1 text-red-500'>*</span>}
-            </FormLabel>
+            </FieldLabel>
           )}
-          <FormControl>
-            <div className='space-y-2'>
-              <Textarea
-                placeholder={placeholder}
-                disabled={disabled}
-                rows={rows}
-                style={{ resize }}
-                maxLength={maxLength}
-                {...field}
-              />
-              {showCharCount && maxLength && (
-                <div className='text-muted-foreground text-right text-sm'>
-                  {field.value?.length || 0} / {maxLength}
-                </div>
-              )}
+          <Textarea
+            id={String(field.name)}
+            placeholder={placeholder}
+            disabled={disabled}
+            rows={rows}
+            style={{ resize }}
+            maxLength={maxLength}
+            aria-invalid={fieldState.invalid}
+            {...field}
+          />
+          {showCharCount && maxLength && (
+            <div className='text-muted-foreground text-right text-sm'>
+              {field.value?.length || 0} / {maxLength}
             </div>
-          </FormControl>
-          {description && <FormDescription>{description}</FormDescription>}
-          <FormMessage />
-        </FormItem>
+          )}
+          {description && <FieldDescription>{description}</FieldDescription>}
+          <FieldError errors={[fieldState.error]} />
+        </Field>
       )}
     />
   );

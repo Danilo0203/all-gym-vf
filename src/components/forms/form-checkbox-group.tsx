@@ -1,16 +1,9 @@
 'use client';
 
-import { FieldPath, FieldValues } from 'react-hook-form';
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/components/ui/form';
+import { Controller, FieldPath, FieldValues } from 'react-hook-form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { FieldError, FieldGroup, FieldLabel, FieldSet, FieldLegend, FieldDescription, Field } from '@/components/ui/field';
 import { BaseFormFieldProps, CheckboxGroupOption } from '@/types/base-form';
 
 interface FormCheckboxGroupProps<
@@ -25,18 +18,7 @@ interface FormCheckboxGroupProps<
 function FormCheckboxGroup<
   TFieldValues extends FieldValues = FieldValues,
   TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
->({
-  control,
-  name,
-  label,
-  description,
-  required,
-  options,
-  showBadges = true,
-  columns = 2,
-  disabled,
-  className
-}: FormCheckboxGroupProps<TFieldValues, TName>) {
+>({ control, name, label, description, required, options, showBadges = true, columns = 2, disabled, className }: FormCheckboxGroupProps<TFieldValues, TName>) {
   const gridCols = {
     1: 'grid-cols-1',
     2: 'grid-cols-1 md:grid-cols-2',
@@ -45,49 +27,41 @@ function FormCheckboxGroup<
   };
 
   return (
-    <FormField
+    <Controller
       control={control}
       name={name}
-      render={({ field }) => (
-        <FormItem className={className}>
+      render={({ field, fieldState }) => (
+        <FieldSet className={className}>
           {label && (
-            <FormLabel>
+            <FieldLegend variant='label'>
               {label}
               {required && <span className='ml-1 text-red-500'>*</span>}
-            </FormLabel>
+            </FieldLegend>
           )}
-          {description && <FormDescription>{description}</FormDescription>}
-          <div className={`grid gap-4 ${gridCols[columns]}`}>
+          {description && <FieldDescription>{description}</FieldDescription>}
+          <FieldGroup data-slot='checkbox-group' className={`grid gap-4 ${gridCols[columns]}`}>
             {options.map((option) => (
-              <div key={option.value} className='flex items-center space-x-2'>
-                <FormControl>
-                  <Checkbox
-                    id={`${name}-${option.value}`}
-                    checked={field.value?.includes(option.value) || false}
-                    onCheckedChange={(checked) => {
-                      const currentValues = field.value || [];
-                      if (checked) {
-                        field.onChange([...currentValues, option.value]);
-                      } else {
-                        field.onChange(
-                          currentValues.filter(
-                            (value: string) => value !== option.value
-                          )
-                        );
-                      }
-                    }}
-                    disabled={disabled || option.disabled}
-                  />
-                </FormControl>
-                <label
-                  htmlFor={`${name}-${option.value}`}
-                  className='text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70'
-                >
+              <Field key={option.value} orientation='horizontal' data-invalid={fieldState.invalid}>
+                <Checkbox
+                  id={`${name}-${option.value}`}
+                  checked={field.value?.includes(option.value) || false}
+                  onCheckedChange={(checked) => {
+                    const currentValues = field.value || [];
+                    if (checked) {
+                      field.onChange([...currentValues, option.value]);
+                    } else {
+                      field.onChange(currentValues.filter((value: string) => value !== option.value));
+                    }
+                  }}
+                  disabled={disabled || option.disabled}
+                  aria-invalid={fieldState.invalid}
+                />
+                <FieldLabel htmlFor={`${name}-${option.value}`} className='font-normal'>
                   {option.label}
-                </label>
-              </div>
+                </FieldLabel>
+              </Field>
             ))}
-          </div>
+          </FieldGroup>
           {showBadges && field.value && field.value.length > 0 && (
             <div className='mt-2 flex flex-wrap gap-2'>
               {field.value.map((value: string) => {
@@ -100,8 +74,8 @@ function FormCheckboxGroup<
               })}
             </div>
           )}
-          <FormMessage />
-        </FormItem>
+          <FieldError errors={[fieldState.error]} />
+        </FieldSet>
       )}
     />
   );

@@ -1,13 +1,8 @@
 'use client';
 
 import { FieldPath, FieldValues } from 'react-hook-form';
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel
-} from '@/components/ui/form';
+import { Controller } from 'react-hook-form';
+import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Switch } from '@/components/ui/switch';
 import { BaseFormFieldProps } from '@/types/base-form';
 
@@ -32,30 +27,21 @@ function FormSwitch<
   className
 }: FormSwitchProps<TFieldValues, TName>) {
   return (
-    <FormField
+    <Controller
       control={control}
       name={name}
-      render={({ field }) => (
-        <FormItem
-          className={`flex flex-row items-center justify-between rounded-lg border p-4 ${className}`}
-        >
-          <div className='space-y-0.5'>
-            <FormLabel className='text-base'>
+      render={({ field, fieldState }) => (
+        <Field orientation='horizontal' data-invalid={fieldState.invalid} className={`rounded-lg border p-4 ${className}`}>
+          <FieldContent>
+            <FieldLabel className='text-base'>
               {label}
               {required && <span className='ml-1 text-red-500'>*</span>}
-            </FormLabel>
-            {showDescription && description && (
-              <FormDescription>{description}</FormDescription>
-            )}
-          </div>
-          <FormControl>
-            <Switch
-              checked={field.value}
-              onCheckedChange={field.onChange}
-              disabled={disabled}
-            />
-          </FormControl>
-        </FormItem>
+            </FieldLabel>
+            {showDescription && description && <FieldDescription>{description}</FieldDescription>}
+            <FieldError errors={[fieldState.error]} />
+          </FieldContent>
+          <Switch checked={field.value} onCheckedChange={field.onChange} disabled={disabled} aria-invalid={fieldState.invalid} />
+        </Field>
       )}
     />
   );

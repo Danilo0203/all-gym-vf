@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/features/profile/hooks/use-profile";
-import { useForm, useWatch } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -34,12 +34,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import type { ExerciseCatalogItem, ProviderExerciseSummary } from "@/lib/training/types";
 import {
   createExerciseCatalogItem,
@@ -708,8 +708,7 @@ export function ExerciseCatalogManager({ exercises, totalCount }: ExerciseCatalo
               Crea un ejercicio local subiendo una imagen propia o eligiendo un GIF de ExerciseDB.
             </DialogDescription>
           </DialogHeader>
-          <Form {...createForm}>
-            <form
+          <form
               key={createDialogKey}
               onSubmit={handleCreateExercise}
               className="flex min-h-0 flex-1 flex-col"
@@ -717,29 +716,29 @@ export function ExerciseCatalogManager({ exercises, totalCount }: ExerciseCatalo
               noValidate
             >
               <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
-                <FormField
+                <Controller
                   control={createForm.control}
                   name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nombre</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          placeholder={
-                            createSource === "provider"
-                              ? "Ej. Remo asistido al menton"
-                              : "Ej. Sentadilla frontal con mancuerna"
-                          }
-                        />
-                      </FormControl>
+                  render={({ field, fieldState }) => (
+                    <Field data-invalid={fieldState.invalid}>
+                      <FieldLabel htmlFor={field.name}>Nombre</FieldLabel>
+                      <Input
+                        {...field}
+                        id={field.name}
+                        aria-invalid={fieldState.invalid}
+                        placeholder={
+                          createSource === "provider"
+                            ? "Ej. Remo asistido al menton"
+                            : "Ej. Sentadilla frontal con mancuerna"
+                        }
+                      />
                       {createSource === "provider" ? (
-                        <FormDescription>
+                        <FieldDescription>
                           El GIF viene de ExerciseDB, pero el nombre visible lo defines tú.
-                        </FormDescription>
+                        </FieldDescription>
                       ) : null}
-                      <FormMessage />
-                    </FormItem>
+                      <FieldError errors={[fieldState.error]} />
+                    </Field>
                   )}
                 />
 
@@ -777,25 +776,24 @@ export function ExerciseCatalogManager({ exercises, totalCount }: ExerciseCatalo
 
                   <TabsContent value="upload" className="space-y-4">
                     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.9fr)]">
-                      <FormField
+                      <Controller
                         control={createForm.control}
                         name="image"
-                        render={() => (
-                          <FormItem className="space-y-3">
-                            <FormLabel htmlFor="new-exercise-image">Imagen</FormLabel>
-                            <FormControl>
-                              <Input
-                                id="new-exercise-image"
-                                type="file"
-                                accept="image/png,image/jpeg,image/webp,image/gif"
-                                onChange={(event) => handleCreateImageChange(event.target.files?.[0] ?? null)}
-                              />
-                            </FormControl>
-                            <FormDescription>
+                        render={({ fieldState }) => (
+                          <Field data-invalid={fieldState.invalid} className="space-y-3">
+                            <FieldLabel htmlFor="new-exercise-image">Imagen</FieldLabel>
+                            <Input
+                              id="new-exercise-image"
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/gif"
+                              aria-invalid={fieldState.invalid}
+                              onChange={(event) => handleCreateImageChange(event.target.files?.[0] ?? null)}
+                            />
+                            <FieldDescription>
                               Formatos permitidos: JPG, PNG, WEBP o GIF. Tamaño máximo: 5 MB.
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
+                            </FieldDescription>
+                            <FieldError errors={[fieldState.error]} />
+                          </Field>
                         )}
                       />
 
@@ -958,14 +956,10 @@ export function ExerciseCatalogManager({ exercises, totalCount }: ExerciseCatalo
                               </>
                             )}
                           </div>
-                          <FormField
+                          <Controller
                             control={createForm.control}
                             name="providerExerciseId"
-                            render={() => (
-                              <FormItem>
-                                <FormMessage />
-                              </FormItem>
-                            )}
+                            render={({ fieldState }) => <FieldError errors={[fieldState.error]} />}
                           />
                         </div>
                       </div>
@@ -1000,7 +994,6 @@ export function ExerciseCatalogManager({ exercises, totalCount }: ExerciseCatalo
                 </Button>
               </DialogFooter>
             </form>
-          </Form>
         </DialogContent>
       </Dialog>
 

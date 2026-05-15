@@ -1,6 +1,5 @@
 "use client";
 import { Button } from "@/components/ui/button";
-import { Form } from "@/components/ui/form";
 import { useRouter, useSearchParams } from "next/navigation";
 import GithubSignInButton from "./github-auth-button";
 import { FormInput } from "@/components/forms/form-input";
@@ -18,26 +17,24 @@ export default function UserAuthForm() {
   return (
     <>
       <form onSubmit={form.handleSubmit(onSubmit)} className="w-full space-y-2">
-        <Form {...form}>
-          <FormInput
-            control={form.control}
-            name="email"
-            label="Correo electrónico"
-            placeholder="Introduce tu correo..."
-            disabled={loading}
-          />
-          <FormInput
-            control={form.control}
-            name="password"
-            label="Contraseña"
-            type="password"
-            placeholder="Introduce tu contraseña..."
-            disabled={loading}
-          />
-          <Button disabled={loading} className="mt-2 ml-auto w-full" type="submit">
-            Iniciar sesión con correo
-          </Button>
-        </Form>
+        <FormInput
+          control={form.control}
+          name="email"
+          label="Correo electrónico"
+          placeholder="Introduce tu correo..."
+          disabled={loading}
+        />
+        <FormInput
+          control={form.control}
+          name="password"
+          label="Contraseña"
+          type="password"
+          placeholder="Introduce tu contraseña..."
+          disabled={loading}
+        />
+        <Button disabled={loading} className="mt-2 ml-auto w-full" type="submit">
+          Iniciar sesión con correo
+        </Button>
       </form>
       <div className="relative">
         <div className="absolute inset-0 flex items-center">

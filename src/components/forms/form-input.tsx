@@ -1,14 +1,8 @@
 'use client';
 
 import { FieldPath, FieldValues } from 'react-hook-form';
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/components/ui/form';
+import { Controller } from 'react-hook-form';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { BaseFormFieldProps } from '@/types/base-form';
 
@@ -41,47 +35,46 @@ function FormInput<
   className
 }: FormInputProps<TFieldValues, TName>) {
   return (
-    <FormField
+    <Controller
       control={control}
       name={name}
-      render={({ field }) => (
-        <FormItem className={className}>
+      render={({ field, fieldState }) => (
+        <Field data-invalid={fieldState.invalid} className={className}>
           {label && (
-            <FormLabel>
+            <FieldLabel htmlFor={String(field.name)}>
               {label}
               {required && <span className='ml-1 text-red-500'>*</span>}
-            </FormLabel>
+            </FieldLabel>
           )}
-          <FormControl>
-            <Input
-              type={type}
-              placeholder={placeholder}
-              step={step}
-              min={min}
-              max={max}
-              disabled={disabled}
-              {...field}
-              // Para campos numéricos: mostrar vacío si es 0, undefined o null
-              // Para otros campos: mostrar vacío solo si es undefined o null
-              value={
-                type === 'number' 
-                  ? (field.value === 0 || field.value === undefined || field.value === null ? '' : field.value)
-                  : (field.value ?? '')
+          <Input
+            id={String(field.name)}
+            type={type}
+            placeholder={placeholder}
+            step={step}
+            min={min}
+            max={max}
+            disabled={disabled}
+            aria-invalid={fieldState.invalid}
+            {...field}
+            value={
+              type === 'number'
+                ? field.value === 0 || field.value === undefined || field.value === null
+                  ? ''
+                  : field.value
+                : field.value ?? ''
+            }
+            onChange={(e) => {
+              if (type === 'number') {
+                const value = e.target.value;
+                field.onChange(value === '' ? undefined : parseFloat(value));
+              } else {
+                field.onChange(e.target.value);
               }
-              onChange={(e) => {
-                if (type === 'number') {
-                  const value = e.target.value;
-                  // Permitir campo vacío (será manejado por validación Zod)
-                  field.onChange(value === '' ? undefined : parseFloat(value));
-                } else {
-                  field.onChange(e.target.value);
-                }
-              }}
-            />
-          </FormControl>
-          {description && <FormDescription>{description}</FormDescription>}
-          <FormMessage />
-        </FormItem>
+            }}
+          />
+          {description && <FieldDescription>{description}</FieldDescription>}
+          <FieldError errors={[fieldState.error]} />
+        </Field>
       )}
     />
   );

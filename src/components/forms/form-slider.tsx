@@ -1,15 +1,8 @@
 'use client';
 
-import { FieldPath, FieldValues } from 'react-hook-form';
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/components/ui/form';
+import { Controller, FieldPath, FieldValues } from 'react-hook-form';
 import { Slider } from '@/components/ui/slider';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { BaseFormFieldProps, SliderConfig } from '@/types/base-form';
 
 interface FormSliderProps<
@@ -23,57 +16,42 @@ interface FormSliderProps<
 function FormSlider<
   TFieldValues extends FieldValues = FieldValues,
   TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
->({
-  control,
-  name,
-  label,
-  description,
-  required,
-  config,
-  showValue = true,
-  disabled,
-  className
-}: FormSliderProps<TFieldValues, TName>) {
+>({ control, name, label, description, required, config, showValue = true, disabled, className }: FormSliderProps<TFieldValues, TName>) {
   const { min, max, step = 1, formatValue } = config;
 
   return (
-    <FormField
+    <Controller
       control={control}
       name={name}
-      render={({ field }) => (
-        <FormItem className={className}>
+      render={({ field, fieldState }) => (
+        <Field data-invalid={fieldState.invalid} className={className}>
           {label && (
-            <FormLabel>
+            <FieldLabel>
               {label}
               {required && <span className='ml-1 text-red-500'>*</span>}
-            </FormLabel>
+            </FieldLabel>
           )}
-          <FormControl>
-            <div className='px-3'>
-              <Slider
-                min={min}
-                max={max}
-                step={step}
-                value={[field.value || min]}
-                onValueChange={(value) => field.onChange(value[0])}
-                disabled={disabled}
-              />
-              {showValue && (
-                <div className='text-muted-foreground mt-1 flex justify-between text-sm'>
-                  <span>{formatValue ? formatValue(min) : min}</span>
-                  <span>
-                    {formatValue
-                      ? formatValue(field.value || min)
-                      : field.value || min}
-                  </span>
-                  <span>{formatValue ? formatValue(max) : max}</span>
-                </div>
-              )}
-            </div>
-          </FormControl>
-          {description && <FormDescription>{description}</FormDescription>}
-          <FormMessage />
-        </FormItem>
+          <div className='px-3'>
+            <Slider
+              min={min}
+              max={max}
+              step={step}
+              value={[field.value || min]}
+              onValueChange={(value) => field.onChange(value[0])}
+              disabled={disabled}
+              aria-invalid={fieldState.invalid}
+            />
+            {showValue && (
+              <div className='text-muted-foreground mt-1 flex justify-between text-sm'>
+                <span>{formatValue ? formatValue(min) : min}</span>
+                <span>{formatValue ? formatValue(field.value || min) : field.value || min}</span>
+                <span>{formatValue ? formatValue(max) : max}</span>
+              </div>
+            )}
+          </div>
+          {description && <FieldDescription>{description}</FieldDescription>}
+          <FieldError errors={[fieldState.error]} />
+        </Field>
       )}
     />
   );
